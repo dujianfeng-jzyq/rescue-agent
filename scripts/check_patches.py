@@ -6,7 +6,9 @@
 - 每个 `!!js` 表达式在 Node 中语法正确，并能用示例环境变量求值；
 - 预设：id 唯一、带 persona、技能目录存在、MCP serverName 合法且在预设内唯一、
   只有总指挥协调预设挂载 actions 服务、MCP 地址来自 RESCUE_MCP_* 环境变量；
-- package.json 的 dsh.bundle.patch 列出了全部 patch 文件。
+- package.json 的 dsh.bundle.patch 列出了全部 patch 文件；
+- 本机装了 dsh 时，额外用 DSH 自带的插件包校验预设里每个插件的 config
+  （scripts/check_plugin_configs.mjs）。没装 dsh 时跳过并提示。
 
 用法：python3 scripts/check_patches.py
 """
@@ -15,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -76,6 +79,60 @@ def eval_js(exprs: list[tuple[str, str]]) -> list:
     return json.loads(res.stdout)
 
 
+def flatten_plugins(rows: list, where: str) -> list[dict]:
+    """展开预设插件列表（含 cordis:group），JsExpr 编码为 {"$js": 表达式}。"""
+
+    def enc(v):
+        if isinstance(v, JsExpr):
+            return {"$js": str(v)}
+        if isinstance(v, dict):
+            return {k: enc(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [enc(x) for x in v]
+        return v
+
+    out: list[dict] = []
+    for r in rows:
+        if r.get("group"):
+            out += flatten_plugins(r.get("config") or [], f"{where}/{r['id']}")
+        else:
+            out.append({"where": where, "id": r["id"], "name": r["name"], "config": enc(r.get("config"))})
+    return out
+
+
+def dsh_package_dir() -> Path | None:
+    exe = shutil.which("dsh")
+    if not exe:
+        return None
+    for d in Path(exe).resolve().parents:
+        pj = d / "package.json"
+        if pj.is_file() and json.loads(pj.read_text()).get("name") == "@deepseek-ai/dsh":
+            return d
+    return None
+
+
+def check_plugin_configs(rows: list[dict]) -> str:
+    """返回一行说明；不合法的配置记入 errors。"""
+    pkg = dsh_package_dir()
+    if pkg is None:
+        return "未安装 dsh，跳过插件配置校验"
+    res = subprocess.run(
+        ["node", str(ROOT / "scripts" / "check_plugin_configs.mjs"), str(pkg)],
+        input=json.dumps({"env": SAMPLE_ENV, "rows": rows}),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    results = json.loads(res.stdout)
+    for r in results:
+        if r["status"] in ("invalid", "load-error"):
+            errors.append(f"{r['where']}: 插件 {r['id']} 配置{'不合法' if r['status'] == 'invalid' else '无法加载'}：{r['detail']}")
+    version = json.loads((pkg / "package.json").read_text())["version"]
+    ok = sum(r["status"] == "ok" for r in results)
+    skipped = sum(r["status"] == "no-schema" for r in results)
+    return f"插件配置按 dsh {version} 校验 {ok} 个（{skipped} 个插件未导出 Config，未校验）"
+
+
 def main() -> int:
     pkg = json.loads((BUNDLE / "package.json").read_text())
     listed = {Path(p).name for p in pkg["dsh"]["bundle"]["patch"]}
@@ -89,6 +146,7 @@ def main() -> int:
 
     exprs: list[tuple[str, str]] = []
     preset_ids: set[str] = set()
+    plugin_rows: list[dict] = []
     for f in files:
         doc = load(f) or []
         walk(doc, exprs, f.name)
@@ -102,6 +160,7 @@ def main() -> int:
                     errors.append(f"{f.name}: 预设 id 重复 {pid}")
                 preset_ids.add(pid)
                 plugins = {p["id"]: p for p in cfg["plugins"]}
+                plugin_rows += flatten_plugins(cfg["plugins"], pid)
                 if "persona" not in plugins:
                     errors.append(f"{pid}: 缺少 persona")
                 servers = [p["config"]["serverName"] for p in cfg["plugins"] if p.get("name") == "@deepseek-ai/dsh-mcp-client"]
@@ -133,10 +192,12 @@ def main() -> int:
     if preset_ids != expected:
         errors.append(f"预设集合不符：{sorted(preset_ids)}")
 
+    note = check_plugin_configs(plugin_rows)
+
     if errors:
         print("\n".join(f"FAIL  {e}" for e in errors))
         return 1
-    print(f"OK  {len(files)} 个 patch 文件，{len(preset_ids)} 个预设，{len(exprs)} 个 !!js 表达式")
+    print(f"OK  {len(files)} 个 patch 文件，{len(preset_ids)} 个预设，{len(exprs)} 个 !!js 表达式；{note}")
     return 0
 
 

@@ -52,6 +52,8 @@
             name: '@deepseek-ai/dsh-tool-ask-user'
           - id: tool-todo
             name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true   # rc.4 起必填；与 DSH 内置预设一致
           - id: mcp-mine-data
             name: '@deepseek-ai/dsh-mcp-client'
             config:
