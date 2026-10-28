@@ -9,7 +9,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-[ -f .env ] && set -a && . ./.env && set +a
+. scripts/lib/env.sh && load_env .env   # 已 export 的变量优先于 .env
 export RESCUE_HOME="${RESCUE_HOME:-$ROOT}"
 export DSH_HOME="${DSH_HOME:-$ROOT/.dsh-home}"   # DSH_* 必须 export，.env 里的 DSH 不认
 export RESCUE_SIM_CONTROL_URL="${RESCUE_SIM_CONTROL_URL-http://127.0.0.1:8101/sim}"

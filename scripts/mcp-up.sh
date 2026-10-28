@@ -9,7 +9,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-[ -f .env ] && set -a && . ./.env && set +a
+. scripts/lib/env.sh && load_env .env   # 已 export 的变量优先于 .env
 export RESCUE_HOME="${RESCUE_HOME:-$ROOT}"
 export RESCUE_ACTIONS_LEDGER="${RESCUE_ACTIONS_LEDGER:-$ROOT/var/actions-ledger.jsonl}"
 

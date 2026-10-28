@@ -6,12 +6,12 @@
 
 | # | 验证项 | 怎么验证 | 期望 | 结果 |
 | --- | --- | --- | --- | --- |
-| 1 | TS 对真实包编译 | `cd dsh-bundle && pnpm install && pnpm typecheck && pnpm build`；提交 `pnpm-lock.yaml` | 无类型错误 | |
-| 2 | bundle 安装 | `scripts/setup.sh` | `dsh plugin --profile rescue add ./dsh-bundle` 成功 | |
-| 3 | patch 合成 | `dsh rescue --dump-config > var/config.yml` | 含 rescue-approval、rescue-audit、5 个 rescue-* 预设；`!!js` 已求值成实际 URL | |
+| 1 | TS 对真实包编译 | `cd dsh-bundle && pnpm install && pnpm typecheck && pnpm build`；提交 `pnpm-lock.yaml` | 无类型错误 | ✓ 2026-10-28：真实包（cordis 4.0.5 / dsh-tools 0.2.1-rc.4 / schemastery 3.18.5）下 typecheck、build 无错误，15 个 TS 测试通过；已提交 lock |
+| 2 | bundle 安装 | `scripts/setup.sh` | `dsh plugin --profile rescue add ./dsh-bundle` 成功 | ✓ 2026-10-28：`dsh plugin --profile rescue list` 显示 `@rescue/dsh-bundle@link:../../../dsh-bundle`。pnpm 提示 link 方式不从配置档解析 peer 依赖（运行时只 import schemastery，待 #4/#9 观察）|
+| 3 | patch 合成 | `dsh rescue --dump-config > var/config.yml` | 含 rescue-approval、rescue-audit、5 个 rescue-* 预设，默认 rescue-commander；`!!js` 原文正确（该命令输出未求值的原文，求值结果在 #5、#6 运行时核对） | ✓ 2026-10-28：rescue-approval、rescue-audit、5 个 rescue-* 预设在列，默认 rescue-commander，standard/ptc/minimal/cordis 均 `disabled: true`，`!!js` 原文与 patch 一致。原期望写“`!!js` 已求值成实际 URL”，与 `--dump-config` 实际行为不符，已改 |
 | 4 | 关闭内置预设 | 网页端新建会话，查看预设列表 | 只有 rescue-*；默认 rescue-commander。若 `disabled` 行不生效，改用 registry 配置 | |
 | 5 | 预设子配置里的 `!!js` | 改 `RESCUE_MCP_KB_URL` 后重启，看 kb 连接地址 | 使用新地址 | |
-| 6 | MCP 连接与令牌 | 设 `RESCUE_MCP_TOKEN`，重启服务和 DSH | 6 个服务均连接成功；不带令牌的 curl 返回 401 | |
+| 6 | MCP 连接与令牌 | 设 `RESCUE_MCP_TOKEN`，重启服务和 DSH | 6 个服务均连接成功；不带令牌的 curl 返回 401 | ✗ 2026-10-28：原因是 `scripts/mcp-up.sh`/`dev.sh` 加载 `.env` 时，空值 `RESCUE_MCP_TOKEN=` 覆盖已 export 的令牌，已改为 export 优先（`scripts/lib/env.sh`）。复测：6 个服务无令牌 401、带令牌 200。仍未通过：`make smoke` 带令牌时连接失败（`scripts/smoke.py`、`conformance.check_tools` 未带令牌）；DSH 侧连接待复测 |
 | 7 | 技能发现 | 各预设会话中询问“你有哪些技能” | 只看到 shared + 本角色目录下的技能 | |
 | 8 | 委派 | 指挥 Agent：“请研判 1201 工作面” | 调用 delegate → rescue-assessment，结果返回指挥 Agent | |
 | 9 | 预检拦截 | 让指挥 Agent 下发缺少注惰步骤的封闭方案 | 不弹确认，直接拒绝，原因含“第85条”；审计记 denied | |
@@ -22,7 +22,7 @@
 | 14 | 审计事件 | 检查 `var/audit/tool-actions.jsonl` | #9–#12 每次一行，状态正确 | |
 | 15 | 上下文压缩 | s3 场景连续研判 2 小时（加速） | 不超上下文；压缩后仍记得已下发的指令 | |
 | 16 | 本地大模型 | `scripts/dev.sh --local-llm`（有可用端点时） | 能选中 rescue-local 模型并完成 #8 | |
-| 17 | `.env` 加载 | 不 export、只写 `.env` 时启动 | 确认 DSH_* 必须 export 的说法；如有变化更新 `scripts/dev.sh` | |
+| 17 | `.env` 加载 | 不 export、只写 `.env` 时启动 | 确认 DSH_* 必须 export 的说法；如有变化更新 `scripts/dev.sh` | ✓ 2026-10-28：`DSH_HOME` 只写在 `.env` 时 DSH 找不到 rescue 配置档；export 后正常。`scripts/dev.sh` 无需改 |
 
 ## 已知需要关注的点
 
