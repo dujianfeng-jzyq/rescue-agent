@@ -35,7 +35,7 @@ rescue-kb = { workspace = true }
 rescue-actions = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["contract/tests", "mine-data-sim/tests", "ventnet/tests", "fire-model/tests", "dispatch/tests", "kb/tests", "actions/tests"]
+testpaths = ["contract/tests", "mine-data-sim/tests", "ventnet/tests", "fire-model/tests", "dispatch/tests", "kb/tests", "actions/tests", "tests"]
 addopts = "--import-mode=importlib"
 
 [tool.ruff]

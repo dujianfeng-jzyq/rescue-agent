@@ -9,11 +9,32 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, WithJsonSchema
 
-CONTRACT_VERSION = "0.1.0"
+CONTRACT_VERSION = "0.1.1"
+
+
+def _no_tz(v: datetime) -> datetime:
+    if v.tzinfo is not None:
+        raise ValueError("矿井时间是不带时区的矿井本地时间，请去掉时区偏移（如 +08:00、Z）")
+    return v
+
+
+# 矿井本地时间，不带时区（矿井监控系统的惯例）。不用 pydantic 默认的 `format: date-time`：
+# 它按 RFC 3339 要求带时区偏移，DSH 的 MCP 客户端严格校验输出时会拒绝不带时区的值。
+MineTime = Annotated[
+    datetime,
+    AfterValidator(_no_tz),
+    WithJsonSchema(
+        {
+            "type": "string",
+            "pattern": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$",
+            "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+        }
+    ),
+]
 
 
 class _Model(BaseModel):
@@ -60,7 +81,7 @@ class MineNetwork(_Model):
 class MineClock(_Model):
     """矿井当前时间。模拟矿井里它是模拟时钟；所有研判都以它为“现在”。"""
 
-    now: datetime
+    now: MineTime
 
 
 # ── 测点与监测数据 ──────────────────────────────────────────────────────────
@@ -118,7 +139,7 @@ class Quality(StrEnum):
 class Reading(_Model):
     sensor_id: str
     measurand: Measurand
-    ts: datetime
+    ts: MineTime
     value: float | None  # quality == missing 时为 None
     quality: Quality = Quality.OK
 
@@ -131,7 +152,7 @@ class PersonLocation(_Model):
     role: str  # 采煤工、瓦斯检查员、带班领导……
     team: str | None = None
     roadway_id: str
-    ts: datetime
+    ts: MineTime
 
 
 class ResourceItem(_Model):
@@ -162,7 +183,7 @@ class EventKind(StrEnum):
 class MineEvent(_Model):
     event_id: str
     kind: EventKind
-    ts: datetime
+    ts: MineTime
     sensor_id: str | None = None
     roadway_id: str | None = None
     message: str
@@ -222,7 +243,7 @@ class FireContext(_Model):
     """校验方案时依据的灾区现场条件。未知就填 None，规则对未知值按“不放行”处理。"""
 
     fire_type: FireType
-    as_of: datetime
+    as_of: MineTime
     methane_pct: float | None = None
     methane_rising: bool | None = None
     o2_pct: float | None = None
@@ -232,7 +253,7 @@ class FireContext(_Model):
     fire_source_confirmed: bool | None = None
     water_supply_sufficient: bool | None = None
     return_airway_clear: bool | None = None
-    sealed_at: datetime | None = None
+    sealed_at: MineTime | None = None
 
 
 class Citation(_Model):

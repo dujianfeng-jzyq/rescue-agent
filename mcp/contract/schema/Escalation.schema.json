@@ -74,5 +74,5 @@
   ],
   "title": "Escalation",
   "type": "object",
-  "$comment": "rescue-contract 0.1.0"
+  "$comment": "rescue-contract 0.1.1"
 }

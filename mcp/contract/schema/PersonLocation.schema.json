@@ -26,7 +26,8 @@
       "type": "string"
     },
     "ts": {
-      "format": "date-time",
+      "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
       "title": "Ts",
       "type": "string"
     }
@@ -39,5 +40,5 @@
   ],
   "title": "PersonLocation",
   "type": "object",
-  "$comment": "rescue-contract 0.1.0"
+  "$comment": "rescue-contract 0.1.1"
 }

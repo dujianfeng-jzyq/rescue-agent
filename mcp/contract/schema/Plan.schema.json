@@ -67,7 +67,8 @@
           "$ref": "#/$defs/FireType"
         },
         "as_of": {
-          "format": "date-time",
+          "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
           "title": "As Of",
           "type": "string"
         },
@@ -174,7 +175,8 @@
         "sealed_at": {
           "anyOf": [
             {
-              "format": "date-time",
+              "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
               "type": "string"
             },
             {
@@ -353,5 +355,5 @@
   ],
   "title": "Plan",
   "type": "object",
-  "$comment": "rescue-contract 0.1.0"
+  "$comment": "rescue-contract 0.1.1"
 }

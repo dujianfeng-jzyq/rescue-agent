@@ -32,6 +32,7 @@ from rescue_contract.models import (
     DispatchOrder,
     Escalation,
     EvacuationNotice,
+    MineTime,
     Plan,
     StepType,
     WarningNotice,
@@ -63,7 +64,7 @@ SIM_STEP_TYPES = {
 class ActionReceipt(BaseModel):
     action_id: str
     tool: str
-    issued_at: datetime
+    issued_at: MineTime
     status: str
     forwarded_to_sim: bool = False
     note: str | None = None
