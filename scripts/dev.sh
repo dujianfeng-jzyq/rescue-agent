@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# 开发启动：MCP 服务（含模拟矿井）+ DSH 网页端（rescue 配置档）。
+#
+#   scripts/dev.sh                       默认场景（.env 里的 RESCUE_SIM_SCENARIO）
+#   scripts/dev.sh --local-llm           改用本地化部署的大模型（profiles/local-llm.patch.yml）
+#   RESCUE_SIM_SCENARIO=s4-escalation scripts/dev.sh
+#
+# 退出 DSH 后 MCP 服务继续运行，用 scripts/mcp-down.sh 停止。
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+[ -f .env ] && set -a && . ./.env && set +a
+export RESCUE_HOME="${RESCUE_HOME:-$ROOT}"
+export DSH_HOME="${DSH_HOME:-$ROOT/.dsh-home}"   # DSH_* 必须 export，.env 里的 DSH 不认
+export RESCUE_SIM_CONTROL_URL="${RESCUE_SIM_CONTROL_URL-http://127.0.0.1:8101/sim}"
+mkdir -p var/audit
+
+scripts/mcp-up.sh
+
+EXTRA=()
+if [ "${1:-}" = "--local-llm" ]; then
+  : "${RESCUE_LLM_BASE_URL:?未设置 RESCUE_LLM_BASE_URL}" "${RESCUE_LLM_MODEL:?未设置 RESCUE_LLM_MODEL}"
+  EXTRA+=(--patch profiles/local-llm.patch.yml)
+  shift
+fi
+
+exec dsh rescue --no-open "${EXTRA[@]}" "$@"

@@ -1,0 +1,53 @@
+# 煤矿应急救援 bundle 主 patch。
+#
+# 层叠顺序：dsh-base → dsh-web-app → 本 bundle（含 presets/*.patch.yml）→ 用户 profile patch → --patch 叠加层。
+# 顶层 `- id: xxx` 是按 id 覆盖已有行（会整体替换该行的 config）；`- insert:` 是新增行。
+# 依赖的环境变量见仓库根目录 .env.example。
+
+# ── 1. 审批策略固定为 ask ─────────────────────────────────────────────────
+# dsh-base 会在 DSH_PERMISSION_MODE=danger-full-access 时把策略改成 never（自动拒绝一切需确认的操作）。
+# 救援场景下人工确认不能被环境变量关掉，这里写死。
+- id: approval
+  config:
+    policy: ask
+
+# ── 2. 默认预设改为总指挥协调 Agent，并关闭 DSH 自带的编程类预设 ─────────────
+# 自带预设带有 bash、文件读写等工具，不应出现在救援系统里。
+# 验证项：若某个 DSH 版本里这些行 id 不存在，--dump-config 会提示未匹配，按提示删除对应行即可。
+- id: agent-preset-registry
+  config:
+    default: rescue-commander
+- id: preset-standard
+  disabled: true
+- id: preset-minimal
+  disabled: true
+- id: preset-cordis
+  disabled: true
+- id: preset-ptc
+  disabled: true
+
+# ── 3. 本项目的原生插件 ────────────────────────────────────────────────────
+- insert:
+    - id: rescue-approval
+      name: '@rescue/dsh-bundle/approval'
+      config:
+        gatedServer: actions
+        exemptPrefixes: []
+        precheckUrl: !!js "process.env.RESCUE_REDLINE_CHECK_URL ?? 'http://127.0.0.1:8106/redlines/check'"
+        precheckTimeoutMs: 5000
+        token: !!js "process.env.RESCUE_MCP_TOKEN"
+        confirmers:
+          publish_warning: 通风部门负责人
+          issue_firefighting_plan: 总工程师
+          escalate_emergency: 总工程师或矿长
+          notify_evacuation: 调度员
+          issue_dispatch_order: 指挥部指定负责人
+          issue_sealing_plan: 总指挥 + 救护队带队指挥员
+          approve_unsealing: 总指挥
+
+    - id: rescue-audit
+      name: '@rescue/dsh-bundle/audit'
+      config:
+        path: !!js "(process.env.RESCUE_HOME ?? process.cwd()) + '/var/audit/tool-actions.jsonl'"
+        gatedServer: actions
+        exemptPrefixes: []

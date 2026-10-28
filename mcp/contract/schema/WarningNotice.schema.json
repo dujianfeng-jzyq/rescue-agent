@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "Citation": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "article": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Article"
+        },
+        "source": {
+          "default": "ragflow",
+          "enum": [
+            "ragflow",
+            "local-fallback",
+            "data",
+            "calculation"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "title": "Citation",
+      "type": "object"
+    },
+    "WarningLevel": {
+      "enum": [
+        "none",
+        "blue",
+        "yellow",
+        "orange",
+        "red"
+      ],
+      "title": "WarningLevel",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "location": {
+      "title": "Location",
+      "type": "string"
+    },
+    "level": {
+      "$ref": "#/$defs/WarningLevel"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "basis": {
+      "items": {
+        "$ref": "#/$defs/Citation"
+      },
+      "title": "Basis",
+      "type": "array"
+    }
+  },
+  "required": [
+    "location",
+    "level",
+    "summary"
+  ],
+  "title": "WarningNotice",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "AirwayKind": {
+      "enum": [
+        "intake",
+        "return",
+        "working_face",
+        "goaf",
+        "other"
+      ],
+      "title": "AirwayKind",
+      "type": "string"
+    },
+    "Node": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "is_surface": {
+          "default": false,
+          "title": "Is Surface",
+          "type": "boolean"
+        },
+        "is_refuge": {
+          "default": false,
+          "title": "Is Refuge",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Node",
+      "type": "object"
+    },
+    "Roadway": {
+      "additionalProperties": false,
+      "description": "通风网络中的一条分支（巷道）。风向为 from_node → to_node。",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "from_node": {
+          "title": "From Node",
+          "type": "string"
+        },
+        "to_node": {
+          "title": "To Node",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/AirwayKind"
+        },
+        "length_m": {
+          "exclusiveMinimum": 0,
+          "title": "Length M",
+          "type": "number"
+        },
+        "resistance_ns2_m8": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resistance Ns2 M8"
+        },
+        "design_airflow_m3_min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Design Airflow M3 Min"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "from_node",
+        "to_node",
+        "kind",
+        "length_m"
+      ],
+      "title": "Roadway",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "mine_id": {
+      "title": "Mine Id",
+      "type": "string"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/Node"
+      },
+      "title": "Nodes",
+      "type": "array"
+    },
+    "roadways": {
+      "items": {
+        "$ref": "#/$defs/Roadway"
+      },
+      "title": "Roadways",
+      "type": "array"
+    }
+  },
+  "required": [
+    "mine_id",
+    "nodes",
+    "roadways"
+  ],
+  "title": "MineNetwork",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

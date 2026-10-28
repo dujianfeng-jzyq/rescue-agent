@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "Citation": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "article": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Article"
+        },
+        "source": {
+          "default": "ragflow",
+          "enum": [
+            "ragflow",
+            "local-fallback",
+            "data",
+            "calculation"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "title": "Citation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "recommended_level": {
+      "title": "Recommended Level",
+      "type": "string"
+    },
+    "basis": {
+      "items": {
+        "$ref": "#/$defs/Citation"
+      },
+      "title": "Basis",
+      "type": "array"
+    }
+  },
+  "required": [
+    "reason",
+    "recommended_level"
+  ],
+  "title": "Escalation",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

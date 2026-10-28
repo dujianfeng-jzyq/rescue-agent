@@ -1,0 +1,20 @@
+id: s5-sealed-fire-area
+name: 封闭火区演化与启封（含复燃）
+description: >
+  火区在开始时已注惰并封闭（第 0.5 小时临时密闭、第 6 小时永久密闭），
+  密闭内温度和标志气体逐步下降，约 10 天后具备启封讨论条件。
+  若过早启封（如第 240 小时），供氧恢复后高温点复燃。
+  检验第 5 阶段：火区状态监测、启封条件判断、复燃征兆报警，以及 RL-087、RL-164 红线。
+start: 2026-11-02T08:00:00
+duration_h: 360
+speed: 3600
+params:
+  leak_m3_min: 40
+  t0_c: 420
+  k_ox: 2.2
+  beta: 0.035
+  advance_m_day: 0
+script:
+  - {type: inert_injection, at_h: 0, params: {rate_m3_h: 1000}}
+  - {type: temporary_seal, at_h: 0.5}
+  - {type: permanent_seal, at_h: 6}

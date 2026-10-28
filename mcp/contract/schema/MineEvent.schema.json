@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "EventKind": {
+      "enum": [
+        "sensor_alarm",
+        "sensor_fault",
+        "manual_report"
+      ],
+      "title": "EventKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/EventKind"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
+    "sensor_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sensor Id"
+    },
+    "roadway_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Roadway Id"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "kind",
+    "ts",
+    "message"
+  ],
+  "title": "MineEvent",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

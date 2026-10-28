@@ -1,0 +1,17 @@
+id: s4-escalation
+name: 处置无效，恶化为火灾
+description: >
+  与 s3 相近，但第 20 小时工作面停采，第 30 小时采空区漏风突然增大约 8 倍（如顶板垮落、
+  密闭失效），常规防灭火措施失效，约第 40 小时乙烯出现、上隅角 CO 超限。
+  检验升级为应急响应、补充撤人名单、封闭方案生成与红线校验。
+start: 2026-11-02T08:00:00
+duration_h: 120
+speed: 1200
+params:
+  leak_m3_min: 40
+  k_ox: 2.6
+  beta: 0.035
+  advance_m_day: 1.5
+script:
+  - {type: stop_advance, at_h: 20}
+  - {type: leak_change, at_h: 30, params: {factor: 8}}

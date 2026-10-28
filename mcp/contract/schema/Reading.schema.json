@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "Measurand": {
+      "enum": [
+        "CO",
+        "CO2",
+        "CH4",
+        "O2",
+        "N2",
+        "C2H4",
+        "C2H2",
+        "C2H6",
+        "TEMP",
+        "WIND"
+      ],
+      "title": "Measurand",
+      "type": "string"
+    },
+    "Quality": {
+      "enum": [
+        "ok",
+        "suspect",
+        "missing"
+      ],
+      "title": "Quality",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "sensor_id": {
+      "title": "Sensor Id",
+      "type": "string"
+    },
+    "measurand": {
+      "$ref": "#/$defs/Measurand"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Value"
+    },
+    "quality": {
+      "$ref": "#/$defs/Quality",
+      "default": "ok"
+    }
+  },
+  "required": [
+    "sensor_id",
+    "measurand",
+    "ts",
+    "value"
+  ],
+  "title": "Reading",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

@@ -1,0 +1,38 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "persons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Persons",
+      "type": "array"
+    },
+    "routes": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Routes",
+      "type": "object"
+    },
+    "supplementary": {
+      "default": true,
+      "title": "Supplementary",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "reason",
+    "persons"
+  ],
+  "title": "EvacuationNotice",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

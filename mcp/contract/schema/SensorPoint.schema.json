@@ -1,0 +1,88 @@
+{
+  "$defs": {
+    "Measurand": {
+      "enum": [
+        "CO",
+        "CO2",
+        "CH4",
+        "O2",
+        "N2",
+        "C2H4",
+        "C2H2",
+        "C2H6",
+        "TEMP",
+        "WIND"
+      ],
+      "title": "Measurand",
+      "type": "string"
+    },
+    "SensorSource": {
+      "enum": [
+        "safety_monitor",
+        "bundle_tube",
+        "temperature"
+      ],
+      "title": "SensorSource",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/SensorSource"
+    },
+    "measurands": {
+      "items": {
+        "$ref": "#/$defs/Measurand"
+      },
+      "title": "Measurands",
+      "type": "array"
+    },
+    "roadway_id": {
+      "title": "Roadway Id",
+      "type": "string"
+    },
+    "position_m": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Position M"
+    },
+    "goaf_depth_m": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Goaf Depth M"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "source",
+    "measurands",
+    "roadway_id"
+  ],
+  "title": "SensorPoint",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

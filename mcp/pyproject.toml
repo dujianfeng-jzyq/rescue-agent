@@ -1,0 +1,47 @@
+# uv 工作区：数据契约 + 6 个 MCP 服务器。
+#   uv sync                       安装全部
+#   uv run pytest                 运行全部测试
+#   uv run python -m rescue_contract.conformance <URL>   对 mine-data 服务做一致性检查
+[project]
+name = "rescue-mcp-workspace"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "rescue-contract",
+    "rescue-mine-data-sim",
+    "rescue-ventnet",
+    "rescue-fire-model",
+    "rescue-dispatch",
+    "rescue-kb",
+    "rescue-actions",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.11"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["contract", "mine-data-sim", "ventnet", "fire-model", "dispatch", "kb", "actions"]
+
+[tool.uv.sources]
+rescue-contract = { workspace = true }
+rescue-mine-data-sim = { workspace = true }
+rescue-ventnet = { workspace = true }
+rescue-fire-model = { workspace = true }
+rescue-dispatch = { workspace = true }
+rescue-kb = { workspace = true }
+rescue-actions = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["contract/tests", "mine-data-sim/tests", "ventnet/tests", "fire-model/tests", "dispatch/tests", "kb/tests", "actions/tests"]
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501", "SIM117"]

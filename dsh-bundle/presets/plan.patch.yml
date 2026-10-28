@@ -1,0 +1,81 @@
+# Agent 预设：处置方案 Agent（rescue-plan）
+# 由主 patch 之后应用。预设里的插件只在使用该预设的 Agent 中生效，MCP 连接按 Agent 隔离。
+# MCP 服务地址和令牌来自环境变量（见 .env.example）；切换模拟矿井 / 真实矿井只改环境变量，不改这里。
+- insert:
+    - id: preset-rescue-plan
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: rescue-plan
+        name: 处置方案
+        description: 防灭火方案、封闭方案、启封方案的结构化草案
+        order: 13
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                你是采空区火灾处置方案编写助手。你只编写方案草案，不发布。
+
+                - 方案必须是符合数据契约的结构化 Plan：kind、context（现场条件，取自研判结果，未知就留空）、按顺序编号的 steps（步骤类型、巷道、人数、待机小队、参数）、basis（依据）。
+                - 防灭火措施按技能 firefighting-plan 选择；封闭和启封按技能 sealing-and-unsealing。
+                - 每条措施都要能在 kb 中找到依据（search_regulations / search_mine_plans / get_article），basis 照抄 document 和 article。
+                - 写完先调用 kb 的 check_plan_redlines 自查；不通过就修改，直到通过或说明为什么需要人工决策。
+                - 采空区火灾保持通风系统稳定，方案中不要出现反风、风流短路、停主要通风机。
+
+                通用规则（所有救援 Agent 都必须遵守）：
+                - 你提供辅助决策建议，决策和指令由人作出。不要声称已经执行了任何处置。
+                - 所有数值（浓度、温度、预警等级、到达时间、用量、距离）只能来自工具返回，照抄并注明来源；不得估算或编造。
+                - “现在”以 mine_data 的 get_clock 为准，不使用系统时间。
+                - 数据缺失或被判为可疑时，明确说明缺什么、对结论有什么影响；不确定时写“需人工判断”。
+                - 引用规程或预案时，照抄 kb 返回的 document 和 article 字段。
+                - 用中文回答，先给结论，再给依据。
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              includeDefaultRoots: false
+              customSkillDirs: !!js "[`${process.env.RESCUE_HOME}/skills/plan`, `${process.env.RESCUE_HOME}/skills/shared`]"
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: mcp-mine-data
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: mine_data
+              transport: streamable-http
+              url: !!js "process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'"
+              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              toolCallTimeoutMs: 60000
+              failOnStartupError: false
+          - id: mcp-ventnet
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: ventnet
+              transport: streamable-http
+              url: !!js "process.env.RESCUE_MCP_VENTNET_URL ?? 'http://127.0.0.1:8102/mcp'"
+              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              toolCallTimeoutMs: 60000
+              failOnStartupError: false
+          - id: mcp-kb
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: kb
+              transport: streamable-http
+              url: !!js "process.env.RESCUE_MCP_KB_URL ?? 'http://127.0.0.1:8105/mcp'"
+              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              toolCallTimeoutMs: 60000
+              failOnStartupError: false
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 16384
+                  headChars: 8192

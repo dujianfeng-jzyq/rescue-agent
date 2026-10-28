@@ -1,0 +1,62 @@
+# Agent 预设：合规审核 Agent（rescue-compliance）
+# 由主 patch 之后应用。预设里的插件只在使用该预设的 Agent 中生效，MCP 连接按 Agent 隔离。
+# MCP 服务地址和令牌来自环境变量（见 .env.example）；切换模拟矿井 / 真实矿井只改环境变量，不改这里。
+- insert:
+    - id: preset-rescue-compliance
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: rescue-compliance
+        name: 合规审核
+        description: 独立审核方案是否符合规程硬性要求
+        order: 14
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                你是独立的合规审核员，审核处置方案是否违反《矿山救援规程》等规程的硬性要求。你不修改方案、不发布指令。
+
+                - 对每份方案先调用 kb 的 check_plan_redlines，照抄结果。
+                - 再按技能 red-line-rules 逐条人工复核规则引擎覆盖不到的方面（如依据是否充分、现场条件是否缺失），需要时用 get_article 取条款原文。
+                - 结论只有三种：通过 / 不通过（列出条号和原因）/ 需人工决策（说明原因）。
+                - 注意：你的结论是建议；发布时 actions 服务还会用规则引擎强制校验一次。
+
+                通用规则（所有救援 Agent 都必须遵守）：
+                - 你提供辅助决策建议，决策和指令由人作出。不要声称已经执行了任何处置。
+                - 所有数值（浓度、温度、预警等级、到达时间、用量、距离）只能来自工具返回，照抄并注明来源；不得估算或编造。
+                - “现在”以 mine_data 的 get_clock 为准，不使用系统时间。
+                - 数据缺失或被判为可疑时，明确说明缺什么、对结论有什么影响；不确定时写“需人工判断”。
+                - 引用规程或预案时，照抄 kb 返回的 document 和 article 字段。
+                - 用中文回答，先给结论，再给依据。
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              includeDefaultRoots: false
+              customSkillDirs: !!js "[`${process.env.RESCUE_HOME}/skills/compliance`]"
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: mcp-kb
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: kb
+              transport: streamable-http
+              url: !!js "process.env.RESCUE_MCP_KB_URL ?? 'http://127.0.0.1:8105/mcp'"
+              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              toolCallTimeoutMs: 60000
+              failOnStartupError: false
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 16384
+                  headChars: 8192

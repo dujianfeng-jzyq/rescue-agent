@@ -1,0 +1,17 @@
+{
+  "additionalProperties": false,
+  "description": "矿井当前时间。模拟矿井里它是模拟时钟；所有研判都以它为“现在”。",
+  "properties": {
+    "now": {
+      "format": "date-time",
+      "title": "Now",
+      "type": "string"
+    }
+  },
+  "required": [
+    "now"
+  ],
+  "title": "MineClock",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

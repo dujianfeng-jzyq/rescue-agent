@@ -1,0 +1,97 @@
+# Agent 预设：总指挥协调 Agent（rescue-commander）
+# 由主 patch 之后应用。预设里的插件只在使用该预设的 Agent 中生效，MCP 连接按 Agent 隔离。
+# MCP 服务地址和令牌来自环境变量（见 .env.example）；切换模拟矿井 / 真实矿井只改环境变量，不改这里。
+- insert:
+    - id: preset-rescue-commander
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: rescue-commander
+        name: 总指挥协调
+        description: 接收预警和报警，按处置阶段调用专业 Agent，汇总建议，提交需人工确认的指令
+        order: 10
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                你是煤矿采空区自燃应急救援的总指挥协调助手，服务于调度员、通风部门、总工程师和应急指挥部。
+
+                处置分 6 个阶段：0 监测与预警分级 → 1 预警处置 → 2 效果评估 →（恶化时）3 应急响应与先期处置 → 4 指挥部研判与救援方案 → 5 火区管理与启封。
+                你的工作方式：
+                - 用 delegate 工具把专业工作交给专业 Agent：研判交给 rescue-assessment，物资调度交给 rescue-dispatch，处置方案交给 rescue-plan，红线审核交给 rescue-compliance。给它们的任务要具体，并要求返回结构化结果。
+                - 汇总专业 Agent 的结果，向指挥人员说明当前阶段、建议和依据。
+                - 需要发布的指令（预警等级、防灭火方案、升级应急响应、补充撤人名单、调度单、封闭方案、启封）一律通过 actions 工具提交，每次提交都会弹出人工确认；提交前方案必须经过 rescue-compliance 审核。
+                - 指令被拒绝时，照实转告拒绝原因和条号，回到相应专业 Agent 修改，不要绕过。
+                - 每次开始工作先调用 fire_model 的 check_realtime_alarms；有实时红线报警时立即、置顶提示，不等待其他研判。
+                - 一旦进入应急响应，提醒调度员按预案立即撤人，撤人不等待你的任何结果；你给出的撤人名单只是补充。
+
+                通用规则（所有救援 Agent 都必须遵守）：
+                - 你提供辅助决策建议，决策和指令由人作出。不要声称已经执行了任何处置。
+                - 所有数值（浓度、温度、预警等级、到达时间、用量、距离）只能来自工具返回，照抄并注明来源；不得估算或编造。
+                - “现在”以 mine_data 的 get_clock 为准，不使用系统时间。
+                - 数据缺失或被判为可疑时，明确说明缺什么、对结论有什么影响；不确定时写“需人工判断”。
+                - 引用规程或预案时，照抄 kb 返回的 document 和 article 字段。
+                - 用中文回答，先给结论，再给依据。
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              includeDefaultRoots: false
+              customSkillDirs: !!js "[`${process.env.RESCUE_HOME}/skills/shared`]"
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: tool-subagent-control
+            name: '@deepseek-ai/dsh-tool-subagent-control'
+          - id: delegate
+            name: '@deepseek-ai/dsh-tool-subagent'
+            config:
+              provider: spawn
+              toolName: delegate
+              agentPreset: rescue-assessment
+              allowedAgentPresets: [rescue-assessment, rescue-dispatch, rescue-plan, rescue-compliance]
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+          - id: mcp-mine-data
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: mine_data
+              transport: streamable-http
+              url: !!js "process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'"
+              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              toolCallTimeoutMs: 60000
+              failOnStartupError: false
+          - id: mcp-fire-model
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: fire_model
+              transport: streamable-http
+              url: !!js "process.env.RESCUE_MCP_FIRE_MODEL_URL ?? 'http://127.0.0.1:8103/mcp'"
+              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              toolCallTimeoutMs: 60000
+              failOnStartupError: false
+          - id: mcp-actions
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: actions
+              transport: streamable-http
+              url: !!js "process.env.RESCUE_MCP_ACTIONS_URL ?? 'http://127.0.0.1:8106/mcp'"
+              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              toolCallTimeoutMs: 60000
+              failOnStartupError: false
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 16384
+                  headChars: 8192

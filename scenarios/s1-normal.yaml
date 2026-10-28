@@ -1,0 +1,12 @@
+id: s1-normal
+name: 正常回采
+description: >
+  基线场景：工作面正常推进，采空区缓慢氧化但处于受控状态。
+  用于检验误报率：智能体在整个过程中不应给出黄色及以上预警。
+start: 2026-11-02T08:00:00
+duration_h: 72
+speed: 1200          # 模拟秒/真实秒；1200 表示 1 真实秒 = 20 模拟分钟
+params:
+  leak_m3_min: 40
+  k_ox: 0.5
+  advance_m_day: 4.0

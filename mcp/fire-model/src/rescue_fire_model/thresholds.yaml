@@ -1,0 +1,24 @@
+# 采空区自燃预警分级阈值（演示用占位值）
+#
+# TODO(专家): 按客户矿井的《自然发火预测预报制度》和煤层标志气体临界值替换。
+# 格雷哈姆系数的分级参照常用文献值（<0.4 正常；0.5 需关注；1.0 严重；2.0 活跃燃烧；>3 明火），需专家确认。
+# 每一级满足任一条件即触发；取满足条件的最高级别。
+
+blue:
+  uc_co_ppm: 10          # 上隅角 CO
+  tube_co_ppm: 40        # 束管 CO（任一测点）
+  tube_co_rate_ppm_h: 1  # 束管 CO 近 12 小时上升速率
+yellow:
+  uc_co_ppm: 18
+  tube_co_ppm: 80
+  graham_ratio: 0.5
+orange:
+  uc_co_ppm: 24
+  tube_co_ppm: 200
+  c2h4_ppm: 0.3          # 乙烯出现
+  graham_ratio: 1.0
+red:
+  tube_co_ppm: 1000
+  c2h4_ppm: 2.0
+  c2h2_ppm: 0.1          # 乙炔出现
+  graham_ratio: 2.0

@@ -1,0 +1,39 @@
+# 确定性基线的期望值（eval/baseline.py 使用）。
+# 状态：开发占位。预警阈值和场景参数都还是占位值，这些期望只用来防止回归，不代表“正确答案”。
+# 阶段 1 由防灭火专家审定：每个场景应在什么时间前达到什么等级、哪些情况绝不能报警。
+#
+# 字段：
+#   step_h / horizon_h   扫描步长和时长（模拟小时）
+#   max_level            整个过程不得超过的等级（用于误报检验）
+#   reach_by_h           {等级: 最晚到达时间}，到达该等级或更高即算达到
+#   reignition_alarm     true 必须触发复燃报警；false 不得触发（不写则不检查——复燃报警只对封闭火区有意义）
+#   reignition_not_before_h  在此之前触发复燃报警算误报
+#   apply                在指定时刻施加处置，模拟人工操作：[{at_h, type, params}]
+
+s1-normal:
+  horizon_h: 72
+  max_level: none
+  reignition_alarm: false
+
+s2-slow-oxidation:
+  horizon_h: 120
+  reach_by_h: {blue: 66, orange: 90}
+
+s3-accelerating:
+  horizon_h: 72
+  reach_by_h: {blue: 33, yellow: 39, red: 63}
+
+s4-escalation:
+  horizon_h: 72
+  reach_by_h: {yellow: 45, red: 60}
+
+s5-sealed-fire-area:        # 封闭期间不报警；第 240 小时过早启封后必须报复燃
+  step_h: 6
+  horizon_h: 360
+  apply: [{at_h: 240, type: unseal}]
+  reignition_alarm: true
+  reignition_not_before_h: 240
+
+s6-sensor-faults:
+  horizon_h: 72
+  max_level: none          # 传感器故障不应抬高预警等级

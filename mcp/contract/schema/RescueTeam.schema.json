@@ -1,0 +1,35 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "team_id": {
+      "title": "Team Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "members": {
+      "title": "Members",
+      "type": "integer"
+    },
+    "base_node": {
+      "title": "Base Node",
+      "type": "string"
+    },
+    "response_min": {
+      "title": "Response Min",
+      "type": "number"
+    }
+  },
+  "required": [
+    "team_id",
+    "name",
+    "members",
+    "base_node",
+    "response_min"
+  ],
+  "title": "RescueTeam",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

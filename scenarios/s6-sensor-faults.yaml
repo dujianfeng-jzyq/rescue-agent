@@ -1,0 +1,18 @@
+id: s6-sensor-faults
+name: 传感器故障与误报
+description: >
+  过程本身与 s1 相同（正常），但注入多种传感器故障：上隅角 CO 漂移、束管 2 号卡值、
+  回风巷测点断线、上隅角 CO 尖峰。检验数据质量检测：智能体应识别为数据问题，
+  不应据此给出预警或升级。
+start: 2026-11-02T08:00:00
+duration_h: 72
+speed: 1200
+params:
+  leak_m3_min: 40
+  k_ox: 0.5
+  advance_m_day: 4.0
+faults:
+  - {sensor: SM-1201-UC, measurand: CO, kind: drift, start_h: 12, end_h: 30, magnitude: 1.2}
+  - {sensor: BT-1201-G2, kind: stuck, start_h: 24}
+  - {sensor: SM-1201-RET, kind: dropout, start_h: 30, end_h: 36}
+  - {sensor: SM-1201-UC, measurand: CO, kind: spike, start_h: 40, magnitude: 8}

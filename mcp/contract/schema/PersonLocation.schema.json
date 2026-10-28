@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "person_id": {
+      "title": "Person Id",
+      "type": "string"
+    },
+    "role": {
+      "title": "Role",
+      "type": "string"
+    },
+    "team": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Team"
+    },
+    "roadway_id": {
+      "title": "Roadway Id",
+      "type": "string"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    }
+  },
+  "required": [
+    "person_id",
+    "role",
+    "roadway_id",
+    "ts"
+  ],
+  "title": "PersonLocation",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

@@ -1,0 +1,48 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --project mcp --all-packages
+      - name: lint
+        run: cd mcp && uv run ruff check . ../eval ../scripts
+      - name: test
+        run: cd mcp && uv run pytest -q
+      - name: 契约 schema 未过期
+        run: |
+          uv run --project mcp python -m rescue_contract.export_schema
+          git diff --exit-code mcp/contract/schema || (echo "契约模型已改但 schema 未重新导出：make schema" && exit 1)
+      - name: 基线评测
+        run: uv run --project mcp python eval/baseline.py
+      - name: 服务冒烟
+        run: |
+          RESCUE_SIM_CONTROL_URL=http://127.0.0.1:8101/sim scripts/mcp-up.sh
+          uv run --project mcp python scripts/smoke.py
+      - if: failure()
+        run: tail -n 50 var/log/*.log || true
+
+  dsh-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pyyaml
+      - name: patch 离线校验
+        run: python3 scripts/check_patches.py
+      - working-directory: dsh-bundle
+        run: |
+          pnpm install --no-frozen-lockfile   # TODO: 第一次在联网环境安装后提交 pnpm-lock.yaml，并去掉这个参数
+          pnpm typecheck
+          pnpm test
+          pnpm build

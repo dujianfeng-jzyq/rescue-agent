@@ -1,0 +1,15 @@
+# 本地化部署的大模型（OpenAI 兼容接口，不限定 DeepSeek）。
+#
+#   scripts/dev.sh --local-llm      （等价于 dsh rescue --no-open --patch profiles/local-llm.patch.yml）
+#
+# 也可以不用这个文件，直接在 DSH 网页的“模型”页面添加同样的提供方——两种方式等价。
+# 待验证（真实 DSH 安装上）：模型 id 写入后，需在会话里选中 rescue-local/<model>，或设为默认模型。
+- id: llm-pi-ai
+  config:
+    providers:
+      rescue-local:
+        api: openai-completions
+        apiKeyEnv: RESCUE_LLM_API_KEY
+        baseURL: !!js process.env.RESCUE_LLM_BASE_URL
+        models:
+          - id: !!js process.env.RESCUE_LLM_MODEL

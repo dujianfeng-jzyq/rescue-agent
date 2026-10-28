@@ -1,0 +1,357 @@
+{
+  "$defs": {
+    "Citation": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "article": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Article"
+        },
+        "source": {
+          "default": "ragflow",
+          "enum": [
+            "ragflow",
+            "local-fallback",
+            "data",
+            "calculation"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "title": "Citation",
+      "type": "object"
+    },
+    "ExplosionRisk": {
+      "enum": [
+        "explosive",
+        "may_become_explosive",
+        "not_explosive",
+        "unknown"
+      ],
+      "title": "ExplosionRisk",
+      "type": "string"
+    },
+    "FireContext": {
+      "additionalProperties": false,
+      "description": "校验方案时依据的灾区现场条件。未知就填 None，规则对未知值按“不放行”处理。",
+      "properties": {
+        "fire_type": {
+          "$ref": "#/$defs/FireType"
+        },
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "methane_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Methane Pct"
+        },
+        "methane_rising": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Methane Rising"
+        },
+        "o2_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "O2 Pct"
+        },
+        "area_temperature_c": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Area Temperature C"
+        },
+        "visibility_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Visibility M"
+        },
+        "explosion_risk": {
+          "$ref": "#/$defs/ExplosionRisk",
+          "default": "unknown"
+        },
+        "fire_source_confirmed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fire Source Confirmed"
+        },
+        "water_supply_sufficient": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Water Supply Sufficient"
+        },
+        "return_airway_clear": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Return Airway Clear"
+        },
+        "sealed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sealed At"
+        }
+      },
+      "required": [
+        "fire_type",
+        "as_of"
+      ],
+      "title": "FireContext",
+      "type": "object"
+    },
+    "FireType": {
+      "enum": [
+        "goaf_spontaneous_combustion",
+        "belt_roadway",
+        "other"
+      ],
+      "title": "FireType",
+      "type": "string"
+    },
+    "PlanKind": {
+      "enum": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ],
+      "title": "PlanKind",
+      "type": "string"
+    },
+    "PlanStep": {
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "minimum": 1,
+          "title": "Order",
+          "type": "integer"
+        },
+        "type": {
+          "$ref": "#/$defs/StepType"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "roadways": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roadways",
+          "type": "array"
+        },
+        "team_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Team Size"
+        },
+        "standby_team": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Standby Team"
+        },
+        "params": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "order",
+        "type",
+        "description"
+      ],
+      "title": "PlanStep",
+      "type": "object"
+    },
+    "StepType": {
+      "description": "方案步骤类型。红线规则按步骤类型和顺序做确定性校验，所以方案必须结构化。",
+      "enum": [
+        "monitor",
+        "evacuate",
+        "power_cutoff",
+        "inert_injection",
+        "grouting",
+        "inhibitor_spray",
+        "leak_sealing",
+        "pressure_balancing",
+        "temporary_seal",
+        "permanent_seal",
+        "reverse_ventilation",
+        "short_circuit_ventilation",
+        "stop_main_fan",
+        "reduce_airflow",
+        "enter_disaster_area",
+        "direct_firefighting",
+        "water_firefighting",
+        "inspect_sealed_area",
+        "unseal"
+      ],
+      "title": "StepType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "plan_id": {
+      "title": "Plan Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/PlanKind"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "context": {
+      "$ref": "#/$defs/FireContext"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/PlanStep"
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    },
+    "basis": {
+      "items": {
+        "$ref": "#/$defs/Citation"
+      },
+      "title": "Basis",
+      "type": "array"
+    }
+  },
+  "required": [
+    "plan_id",
+    "kind",
+    "title",
+    "context",
+    "steps"
+  ],
+  "title": "Plan",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

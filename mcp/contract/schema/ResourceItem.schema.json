@@ -1,0 +1,35 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "item_type": {
+      "title": "Item Type",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "quantity": {
+      "title": "Quantity",
+      "type": "number"
+    },
+    "unit": {
+      "title": "Unit",
+      "type": "string"
+    },
+    "depot_node": {
+      "title": "Depot Node",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_type",
+    "name",
+    "quantity",
+    "unit",
+    "depot_node"
+  ],
+  "title": "ResourceItem",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}

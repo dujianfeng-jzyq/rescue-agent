@@ -1,0 +1,13 @@
+id: s3-accelerating
+name: 加速自燃，处置有效
+description: >
+  工作面过构造减速，高温点升温较快，约 30 小时后乙烯出现。
+  若在 24 小时内采取注氮加注浆，温度可稳定并缓慢下降。
+start: 2026-11-02T08:00:00
+duration_h: 72
+speed: 1200
+params:
+  leak_m3_min: 40
+  k_ox: 2.2
+  beta: 0.035
+  advance_m_day: 1.5

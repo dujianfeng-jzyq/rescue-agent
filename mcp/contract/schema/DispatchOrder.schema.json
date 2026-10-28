@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "DispatchLine": {
+      "additionalProperties": false,
+      "properties": {
+        "item_type": {
+          "title": "Item Type",
+          "type": "string"
+        },
+        "quantity": {
+          "exclusiveMinimum": 0,
+          "title": "Quantity",
+          "type": "number"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "from_node": {
+          "title": "From Node",
+          "type": "string"
+        },
+        "to_node": {
+          "title": "To Node",
+          "type": "string"
+        },
+        "eta_min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eta Min"
+        }
+      },
+      "required": [
+        "item_type",
+        "quantity",
+        "unit",
+        "from_node",
+        "to_node"
+      ],
+      "title": "DispatchLine",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "purpose": {
+      "title": "Purpose",
+      "type": "string"
+    },
+    "lines": {
+      "items": {
+        "$ref": "#/$defs/DispatchLine"
+      },
+      "minItems": 1,
+      "title": "Lines",
+      "type": "array"
+    }
+  },
+  "required": [
+    "order_id",
+    "purpose",
+    "lines"
+  ],
+  "title": "DispatchOrder",
+  "type": "object",
+  "$comment": "rescue-contract 0.1.0"
+}
