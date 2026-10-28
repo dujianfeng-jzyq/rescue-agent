@@ -35,6 +35,24 @@ class MineDataError(RuntimeError):
     pass
 
 
+@asynccontextmanager
+async def connect(target: Any) -> AsyncIterator[Client]:
+    """打开到 MCP 服务的客户端会话。
+
+    `target` 是 URL 时，若设置了 RESCUE_MCP_TOKEN 就带上 Bearer 令牌（与 serving 的校验对应）；
+    也可以是进程内的 MCPServer 实例（测试用）。所有 Python 侧的 MCP 连接都应经过这里。
+    """
+    token = os.environ.get("RESCUE_MCP_TOKEN")
+    if isinstance(target, str) and token:
+        headers = {"Authorization": f"Bearer {token}"}
+        async with httpx2.AsyncClient(headers=headers, timeout=30) as http:
+            async with Client(streamable_http_client(target, http_client=http)) as c:
+                yield c
+    else:
+        async with Client(target) as c:
+            yield c
+
+
 class MineData:
     """mine-data 服务的类型化客户端。
 
@@ -48,20 +66,8 @@ class MineData:
     def from_env(cls) -> MineData:
         return cls(os.environ.get(MINE_DATA_URL_ENV, DEFAULT_MINE_DATA_URL))
 
-    @asynccontextmanager
-    async def _session(self) -> AsyncIterator[Client]:
-        token = os.environ.get("RESCUE_MCP_TOKEN")
-        if isinstance(self._target, str) and token:
-            headers = {"Authorization": f"Bearer {token}"}
-            async with httpx2.AsyncClient(headers=headers, timeout=30) as http:
-                async with Client(streamable_http_client(self._target, http_client=http)) as c:
-                    yield c
-        else:
-            async with Client(self._target) as c:
-                yield c
-
     async def _call(self, tool: str, args: dict[str, Any]) -> Any:
-        async with self._session() as c:
+        async with connect(self._target) as c:
             r = await c.call_tool(tool, args)
         if r.is_error:
             text = " ".join(getattr(b, "text", "") for b in r.content)

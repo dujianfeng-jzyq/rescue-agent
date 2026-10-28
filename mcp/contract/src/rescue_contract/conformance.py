@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Any
 
-from .client import MineData
+from .client import MineData, connect
 from .models import Quality
 
 REQUIRED_TOOLS = {
@@ -39,9 +39,7 @@ def _check(cond: bool, msg: str) -> None:
 
 
 async def check_tools(target: Any) -> None:
-    from mcp.client import Client
-
-    async with Client(target) as c:
+    async with connect(target) as c:
         names = {t.name for t in (await c.list_tools()).tools}
     missing = REQUIRED_TOOLS - names
     _check(not missing, f"缺少工具：{sorted(missing)}")

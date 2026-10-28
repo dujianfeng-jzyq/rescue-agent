@@ -14,7 +14,7 @@ import sys
 import urllib.request
 from datetime import datetime
 
-from mcp.client import Client
+from rescue_contract.client import connect
 from rescue_contract.conformance import run_all
 
 SERVERS = {
@@ -52,7 +52,7 @@ def short(x: object, n: int = 110) -> str:
 
 async def check_server(key: str, url: str) -> None:
     try:
-        async with Client(url) as c:
+        async with connect(url) as c:
             tools = [t.name for t in (await c.list_tools()).tools]
             report(True, f"{key}: {len(tools)} 个工具", ", ".join(tools))
             for tool, args in CALLS[key]:
@@ -91,7 +91,7 @@ async def main() -> int:
     for name, err in await run_all(SERVERS["mine_data"]):
         report(err is None, f"mine_data 一致性：{name}", err or "")
     try:
-        async with Client(SERVERS["mine_data"]) as c:
+        async with connect(SERVERS["mine_data"]) as c:
             now = (await c.call_tool("get_clock", {})).structured_content["now"]
     except Exception:
         now = datetime.now().isoformat()
