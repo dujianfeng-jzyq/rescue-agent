@@ -4,7 +4,7 @@
 检查内容：
 - YAML 能解析（支持 `!!js` 标签）；
 - 每个 `!!js` 表达式在 Node 中语法正确，并能用示例环境变量求值；
-- 预设：id 唯一、带 persona、技能目录存在、MCP serverName 合法且在预设内唯一、
+- 预设：id 唯一、带 persona、技能目录存在且包含 skills/shared、MCP serverName 合法且在预设内唯一、
   只有总指挥协调预设挂载 actions 服务、MCP 地址来自 RESCUE_MCP_* 环境变量；
 - package.json 的 dsh.bundle.patch 列出了全部 patch 文件；
 - 本机装了 dsh 时，额外用 DSH 自带的插件包校验预设里每个插件的 config
@@ -187,6 +187,8 @@ def main() -> int:
                     errors.append(f"{where}: 技能目录不存在 {d}")
                 elif not any(Path(d).glob("*/SKILL.md")):
                     errors.append(f"{where}: 技能目录下没有 */SKILL.md：{d}")
+            if str(ROOT / "skills" / "shared") not in r["value"]:
+                errors.append(f"{where}: 每个预设都要包含 skills/shared")
 
     expected = {"rescue-commander", "rescue-assessment", "rescue-dispatch", "rescue-plan", "rescue-compliance"}
     if preset_ids != expected:

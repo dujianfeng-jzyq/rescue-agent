@@ -32,7 +32,7 @@
             name: '@deepseek-ai/dsh-skill-filesystem'
             config:
               includeDefaultRoots: false
-              customSkillDirs: !!js "[`${process.env.RESCUE_HOME}/skills/compliance`]"
+              customSkillDirs: !!js "[`${process.env.RESCUE_HOME}/skills/compliance`, `${process.env.RESCUE_HOME}/skills/shared`]"
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
           - id: mcp-kb
