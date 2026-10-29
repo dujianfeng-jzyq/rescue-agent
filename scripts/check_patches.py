@@ -6,6 +6,7 @@
 - 每个 `!!js` 表达式在 Node 中语法正确，并能用示例环境变量求值；
 - 预设：id 唯一、带 persona、技能目录存在且包含 skills/shared、MCP serverName 合法且在预设内唯一、
   只有总指挥协调预设挂载 actions 服务、MCP 地址来自 RESCUE_MCP_* 环境变量；
+- 审批策略写死为 ask，权限预设全部是 ask（人工确认不能被关掉）；
 - package.json 的 dsh.bundle.patch 列出了全部 patch 文件；
 - 本机装了 dsh 时，额外用 DSH 自带的插件包校验预设里每个插件的 config
   （scripts/check_plugin_configs.mjs）。没装 dsh 时跳过并提示。
@@ -189,6 +190,17 @@ def main() -> int:
                     errors.append(f"{where}: 技能目录下没有 */SKILL.md：{d}")
             if str(ROOT / "skills" / "shared") not in r["value"]:
                 errors.append(f"{where}: 每个预设都要包含 skills/shared")
+
+    main_patch = load(BUNDLE / "cordis.patch.yml") or []
+    rows = {r.get("id"): r for r in main_patch if isinstance(r, dict) and "id" in r}
+    if (rows.get("approval") or {}).get("config", {}).get("policy") != "ask":
+        errors.append("cordis.patch.yml: approval 的 policy 必须写死为 ask")
+    presets = ((rows.get("permission") or {}).get("config") or {}).get("presets") or {}
+    if not presets:
+        errors.append("cordis.patch.yml: 必须覆盖 permission 的 presets（DSH 自带 Full access 预设审批为 never）")
+    for name, p in presets.items():
+        if p.get("approval") != "ask":
+            errors.append(f"cordis.patch.yml: 权限预设 {name} 的 approval 必须是 ask")
 
     expected = {"rescue-commander", "rescue-assessment", "rescue-dispatch", "rescue-plan", "rescue-compliance"}
     if preset_ids != expected:

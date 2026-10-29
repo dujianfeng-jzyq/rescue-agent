@@ -11,6 +11,21 @@
   config:
     policy: ask
 
+# 权限预设（网页端输入框的权限选择器）同理：DSH 自带的 Full access 预设审批为 never，
+# 选中后 actions 的指令一律被自动拒绝，审计里又与真人拒绝无法区分（见验证清单）。只保留审批为 ask 的预设。
+# defaultPreset 必须显式给出：export DSH_PERMISSION_MODE=danger-full-access 时沙箱默认值与任何预设都不匹配，
+# 不写会导致本插件启动失败、网页端没有权限选择器。
+- id: permission
+  config:
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+    defaultPreset: workspace-write
+
 # ── 2. 默认预设改为总指挥协调 Agent，并关闭 DSH 自带的编程类预设 ─────────────
 # 自带预设带有 bash、文件读写等工具，不应出现在救援系统里。
 # 验证项：若某个 DSH 版本里这些行 id 不存在，--dump-config 会提示未匹配，按提示删除对应行即可。

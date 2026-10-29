@@ -34,3 +34,4 @@
 - 权限预设与人工确认（2026-10-28 rc.4 实测）：
   - export `DSH_PERMISSION_MODE=danger-full-access` 时，`cordis.patch.yml` 把审批写死为 ask，确认照常弹出（#13）；但沙箱 full-access + 审批 ask 不匹配任何预设，`dsh-permission-presets` 启动失败，网页端没有权限选择器。
   - 正常启动时，网页端输入框可选 Read Only / Workspace Write / Full access。选 Full access（确认“Enable Full access?”）后审批策略变为 never，actions 的指令**一律被自动拒绝**，不弹确认、不会放行；审计记为 denied，detail 是 `the user rejected tool ...`，与真人拒绝无法区分（`var/audit/tool-actions.jsonl` 2026-10-29T02:32:07Z 一条）。不会绕过人工确认，但会让总指挥协调无法发布任何指令，且复盘时会误以为是人拒绝的。
+  - 已处理（2026-10-28）：`cordis.patch.yml` 覆盖 `permission` 的预设表，只保留 Read Only / Workspace Write（审批均为 ask），并显式 `defaultPreset: workspace-write`；`check_patches.py` 要求所有权限预设审批为 ask。复验：正常启动和 export `DSH_PERMISSION_MODE=danger-full-access` 启动都没有插件启动失败，选择器只有 Read Only / Workspace Write。代价：环境变量模式下沙箱也是 workspace-write（救援预设没有 bash 和文件工具，无实际影响）。
