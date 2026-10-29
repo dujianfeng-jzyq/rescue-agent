@@ -31,3 +31,6 @@
 - `rescue-audit` 根据错误码和错误信息正则判断 issued / denied / failed（`src/audit/record.ts`）。DSH 改错误文案会导致误判，#11、#12 要核对。
   - 2026-10-28 rc.4 实测：插件 deny 的 `info.code` 能传到审计（#9、#12 按 code 识别）；用户拒绝没有 code，靠 `the user rejected tool` 文案识别（#11）。
 - 确认人按角色限定暂未实现（DSH 侧需要账号/角色能力）。
+- 权限预设与人工确认（2026-10-28 rc.4 实测）：
+  - export `DSH_PERMISSION_MODE=danger-full-access` 时，`cordis.patch.yml` 把审批写死为 ask，确认照常弹出（#13）；但沙箱 full-access + 审批 ask 不匹配任何预设，`dsh-permission-presets` 启动失败，网页端没有权限选择器。
+  - 正常启动时，网页端输入框可选 Read Only / Workspace Write / Full access。选 Full access（确认“Enable Full access?”）后审批策略变为 never，actions 的指令**一律被自动拒绝**，不弹确认、不会放行；审计记为 denied，detail 是 `the user rejected tool ...`，与真人拒绝无法区分（`var/audit/tool-actions.jsonl` 2026-10-29T02:32:07Z 一条）。不会绕过人工确认，但会让总指挥协调无法发布任何指令，且复盘时会误以为是人拒绝的。
