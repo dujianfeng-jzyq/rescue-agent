@@ -37,6 +37,7 @@ from rescue_contract.models import (
     StepType,
     WarningNotice,
 )
+from rescue_contract.serving import auth_headers
 from rescue_contract.validation import precheck, validate_plan
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -90,7 +91,7 @@ class Sim:
         if not self.base:
             return False
         body = json.dumps({"type": iv_type, "params": params or {}, "roadways": roadways or [], "source": "action"}).encode()
-        req = urllib.request.Request(f"{self.base}/interventions", data=body, headers={"Content-Type": "application/json"}, method="POST")
+        req = urllib.request.Request(f"{self.base}/interventions", data=body, headers={"Content-Type": "application/json", **auth_headers()}, method="POST")
         try:
             with urllib.request.urlopen(req, timeout=5):
                 return True

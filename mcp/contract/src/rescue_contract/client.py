@@ -26,6 +26,7 @@ from .models import (
     ResourceItem,
     SensorPoint,
 )
+from .serving import auth_headers
 
 MINE_DATA_URL_ENV = "RESCUE_MCP_MINE_DATA_URL"
 DEFAULT_MINE_DATA_URL = "http://127.0.0.1:8101/mcp"
@@ -42,9 +43,8 @@ async def connect(target: Any) -> AsyncIterator[Client]:
     `target` 是 URL 时，若设置了 RESCUE_MCP_TOKEN 就带上 Bearer 令牌（与 serving 的校验对应）；
     也可以是进程内的 MCPServer 实例（测试用）。所有 Python 侧的 MCP 连接都应经过这里。
     """
-    token = os.environ.get("RESCUE_MCP_TOKEN")
-    if isinstance(target, str) and token:
-        headers = {"Authorization": f"Bearer {token}"}
+    headers = auth_headers()
+    if isinstance(target, str) and headers:
         async with httpx2.AsyncClient(headers=headers, timeout=30) as http:
             async with Client(streamable_http_client(target, http_client=http)) as c:
                 yield c

@@ -32,6 +32,12 @@ DEFAULT_PORTS = {
 }
 
 
+def auth_headers() -> dict[str, str]:
+    """服务间 HTTP 调用要带的认证头（与 BearerTokenMiddleware 对应）；未设置令牌时为空。"""
+    token = os.environ.get("RESCUE_MCP_TOKEN")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 class BearerTokenMiddleware:
     """令牌校验。/healthz 不需要令牌，便于容器探活。"""
 

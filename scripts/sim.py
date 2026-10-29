@@ -20,13 +20,16 @@ import sys
 import urllib.request
 
 BASE = os.environ.get("RESCUE_SIM_CONTROL_URL", "http://127.0.0.1:8101/sim").rstrip("/")
+# 与 rescue_contract.serving.auth_headers 一致（本脚本只用标准库，不导入它）
+TOKEN = os.environ.get("RESCUE_MCP_TOKEN")
+AUTH = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
 
 
 def call(method: str, path: str, body: dict | None = None) -> object:
     req = urllib.request.Request(
         f"{BASE}{path}",
         data=json.dumps(body).encode() if body is not None else None,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", **AUTH},
         method=method,
     )
     with urllib.request.urlopen(req, timeout=10) as resp:
