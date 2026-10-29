@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, WithJsonSchema
 
-CONTRACT_VERSION = "0.1.1"
+CONTRACT_VERSION = "0.2.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -187,6 +187,29 @@ class MineEvent(_Model):
     sensor_id: str | None = None
     roadway_id: str | None = None
     message: str
+
+
+# ── 火区台账 ───────────────────────────────────────────────────────────────
+
+
+class FireAreaStatus(StrEnum):
+    SEALED = "sealed"  # 已封闭（临时或永久密闭）
+    UNSEALED = "unsealed"  # 已启封
+
+
+class FireArea(_Model):
+    """火区管理台账中的一条：封闭过的火区及其状态。
+
+    来自矿井的火区台账（人工登记的事实），不是模拟器真值。从未封闭的发火区域不在台账里。
+    复燃征兆（第164条）等只对封闭火区或启封后的火区有意义的判据，依据这里的状态决定是否适用。
+    """
+
+    area_id: str
+    panel: str  # 所在工作面编号，如 "1201"
+    name: str
+    status: FireAreaStatus
+    sealed_at: MineTime
+    unsealed_at: MineTime | None = None
 
 
 # ── 处置方案（需人工确认的结构化指令）────────────────────────────────────────

@@ -37,4 +37,4 @@
   - 已处理（2026-10-28）：`cordis.patch.yml` 覆盖 `permission` 的预设表，只保留 Read Only / Workspace Write（审批均为 ask），并显式 `defaultPreset: workspace-write`；`check_patches.py` 要求所有权限预设审批为 ask。复验：正常启动和 export `DSH_PERMISSION_MODE=danger-full-access` 启动都没有插件启动失败，选择器只有 Read Only / Workspace Write。代价：环境变量模式下沙箱也是 workspace-write（救援预设没有 bash 和文件工具，无实际影响）。
 - #15 长时间研判中发现（2026-10-28，s3）：
   - 乙烯/乙炔真实为 0（s3 高温点 90 ℃ 以上才出现）时，`fire_model` 的 `detect_stuck`（最近 6 点完全不变即判卡值）把它们判为“疑似卡值、已排除”，指标为 null；Agent 连续 10 轮报告“标志气体判据缺失、无法判定”，而不是“未检出”。已修复（6b2660e）：恒为 0 且同测点 CO 仍在变化时按未检出处理，整根束管卡住时仍排除。
-  - 第 10 轮起 `check_realtime_alarms` 报第164条红线（束管 CO 上升速率超限），同时 `assess_warning_level` 仍为 none（第 11 轮才到 blue）；红线报警也没有进入 `get_events`。两套判据不一致，Agent 每轮都在提示这个矛盾。
+  - 第 10 轮起 `check_realtime_alarms` 报第164条红线（束管 CO 上升速率超限），同时 `assess_warning_level` 仍为 none（第 11 轮才到 blue）；红线报警也没有进入 `get_events`。两套判据不一致，Agent 每轮都在提示这个矛盾。已处理：根因是第164条复燃判据对从未封闭的 s3 也生效。契约 0.2.0 新增 `mine_data.get_fire_areas`（火区台账），第164条只对台账中已封闭或已启封的火区检查；`assess_warning_level` 同时返回 `realtime_alarms`，等级与报警仍独立判定；`get_events` 说明改为只含监控系统自身事件。

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from mcp.server.mcpserver import MCPServer
 from rescue_contract.models import (
+    FireArea,
     Measurand,
     MineClock,
     MineEvent,
@@ -100,9 +101,18 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
 
     @server.tool()
     def get_events(hours: float = 24) -> list[MineEvent]:
-        """最近若干小时的报警和测点故障事件。"""
+        """最近若干小时安全监控系统自身产生的事件：测点超报警值、测点故障（无数据）。
+
+        这是矿井监控系统的记录，不包含 fire_model 计算出的红线报警（check_realtime_alarms）；
+        后者没有出现在这里是正常的，不代表报警未留痕。"""
         e = sim.engine
         return e.events(e.now_h() - hours, e.now_h())
+
+    @server.tool()
+    def get_fire_areas() -> list[FireArea]:
+        """火区管理台账：封闭过的火区、所在工作面、状态（sealed 已封闭 / unsealed 已启封）、封闭和启封时间。
+        从未封闭的发火区域不在台账里。"""
+        return sim.engine.fire_areas()
 
     @server.tool()
     def get_personnel() -> list[PersonLocation]:

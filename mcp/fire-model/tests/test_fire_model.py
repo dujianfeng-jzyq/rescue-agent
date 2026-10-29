@@ -130,3 +130,38 @@ def test_s6_stuck_tube_still_excludes_its_ethylene():
 def test_gas_trend_ethylene_zero_is_usable():
     r = _gas_trend("s3-accelerating", 20, "BT-1201-G1", "C2H4")
     assert r["latest"] == 0.0 and r["usable_points"] > 0 and r["data_quality"] == [], r
+
+
+# ── 第164条只对火区台账中的火区适用 ──
+
+
+class _NoRegister(MineData):
+    """模拟取不到火区台账的数据源。"""
+
+    async def fire_areas(self):
+        from rescue_contract.client import MineDataError
+
+        raise MineDataError("mine_data.get_fire_areas 失败：未实现")
+
+
+def test_reignition_not_reported_for_never_sealed_area():
+    holder, md = sim("s3-accelerating", 28)  # CO 快速上升，但 1201 从未封闭
+    assert asyncio.run(alarms.check_reignition(md)) == []
+    fallback = _NoRegister(build_mine(holder))
+    assert any(a.rule_id == "RL-164" for a in asyncio.run(alarms.check_reignition(fallback)))  # 台账取不到时照常检查
+
+
+def test_assess_warning_level_includes_realtime_alarms():
+    from mcp.client import Client
+    from rescue_fire_model.server import build_server
+
+    holder, _ = sim("s5-sealed-fire-area", 240)
+    holder.engine.apply("unseal")
+    holder.engine.clock.advance(72)
+
+    async def go():
+        async with Client(build_server(build_mine(holder))) as c:
+            return (await c.call_tool("assess_warning_level", {})).structured_content
+
+    r = asyncio.run(go())
+    assert any(a["rule_id"] == "RL-164" for a in r["realtime_alarms"]), r

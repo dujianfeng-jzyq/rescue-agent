@@ -8,7 +8,7 @@
 
 ## 决定
 
-- 边界是 `mine_data` MCP 服务的工具集合（get_network、list_sensors、get_readings、get_latest、get_events、get_personnel、get_inventory、get_rescue_teams、get_clock）和 `rescue_contract.models` 的数据模型。
+- 边界是 `mine_data` MCP 服务的工具集合（get_network、list_sensors、get_readings、get_latest、get_events、get_personnel、get_inventory、get_rescue_teams、get_fire_areas、get_clock）和 `rescue_contract.models` 的数据模型。
 - 其他服务通过 `rescue_contract.client.MineData` 读数据，不直接依赖模拟器。
 - 模拟器的控制接口（`/sim/*`）和真实状态（truth）不属于契约，智能体看不到。
 - `rescue_contract.conformance` 是适配器的验收测试：模拟器和真实适配器都必须通过。

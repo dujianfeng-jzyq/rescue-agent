@@ -20,7 +20,7 @@ def test_all_scenarios_load():
     )
 
 
-@pytest.mark.parametrize("scenario", ["s1-normal", "s2-slow-oxidation", "s6-sensor-faults"])
+@pytest.mark.parametrize("scenario", ["s1-normal", "s2-slow-oxidation", "s5-sealed-fire-area", "s6-sensor-faults"])
 def test_conformance(scenario):
     _, server = make(scenario, 30)
     results = asyncio.run(run_all(server))
@@ -84,3 +84,31 @@ def test_client_roundtrip_in_process():
     now, latest, people = asyncio.run(go())
     assert latest and all(r.ts <= now for r in latest)
     assert people
+
+
+# ── 火区台账 ──
+
+
+def test_fire_areas_register_follows_sealing_and_unsealing():
+    from rescue_contract.models import FireAreaStatus
+
+    holder, server = make("s3-accelerating", 20)
+    md = MineData(server)
+    assert asyncio.run(md.fire_areas()) == []  # 从未封闭的发火区域不在台账里
+
+    holder, server = make("s5-sealed-fire-area", 24)
+    md = MineData(server)
+    (a,) = asyncio.run(md.fire_areas())
+    assert a.panel == "1201" and a.status == FireAreaStatus.SEALED and a.unsealed_at is None
+    sealed_at = a.sealed_at
+
+    holder.engine.apply("unseal")
+    holder.engine.clock.advance(1)
+    (a,) = asyncio.run(md.fire_areas())
+    assert a.status == FireAreaStatus.UNSEALED and a.sealed_at == sealed_at and a.unsealed_at is not None
+    assert [err for _, err in asyncio.run(run_all(server)) if err] == []  # 启封后仍通过一致性检查
+
+    holder.engine.apply("temporary_seal")  # 重新封闭：启封时间清空，封闭时间更新
+    holder.engine.clock.advance(1)
+    (a,) = asyncio.run(md.fire_areas())
+    assert a.status == FireAreaStatus.SEALED and a.unsealed_at is None and a.sealed_at > sealed_at

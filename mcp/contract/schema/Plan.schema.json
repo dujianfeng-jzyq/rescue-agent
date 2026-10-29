@@ -355,5 +355,5 @@
   ],
   "title": "Plan",
   "type": "object",
-  "$comment": "rescue-contract 0.1.1"
+  "$comment": "rescue-contract 0.2.0"
 }

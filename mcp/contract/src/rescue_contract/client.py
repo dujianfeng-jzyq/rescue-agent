@@ -18,6 +18,7 @@ from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 
 from .models import (
+    FireArea,
     MineClock,
     MineNetwork,
     PersonLocation,
@@ -112,6 +113,9 @@ class MineData:
 
     async def rescue_teams(self) -> list[RescueTeam]:
         return [RescueTeam.model_validate(x) for x in await self._call("get_rescue_teams", {})]
+
+    async def fire_areas(self) -> list[FireArea]:
+        return [FireArea.model_validate(x) for x in await self._call("get_fire_areas", {})]
 
     async def now(self) -> datetime:
         return MineClock.model_validate(await self._call("get_clock", {})).now

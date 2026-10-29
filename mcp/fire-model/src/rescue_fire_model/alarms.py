@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 
-from rescue_contract.client import MineData
+from rescue_contract.client import MineData, MineDataError
 from rescue_contract.models import Measurand
 
 from .quality import check_series
@@ -52,8 +52,15 @@ async def check_reignition(md: MineData, panel: str = "1201", co_rate_ppm_h: flo
     """第164条相关：启封后（或封闭火区内）束管 CO 持续上升，视为复燃征兆。
 
     判据：近 12 小时 CO 上升速率 ≥ co_rate_ppm_h，且最新值 ≥ 窗口起点的 co_growth_ratio 倍。
+    只对火区台账（mine_data.get_fire_areas）中该工作面已封闭或已启封的火区适用；从未封闭的发火区域
+    CO 上升属于自燃发展，由预警分级处理，不报“复燃”。台账取不到时照常检查（宁可多报）。
     TODO(专家): 判据和参数需按本矿火区管理经验确定。
     """
+    try:
+        if not any(a.panel == panel for a in await md.fire_areas()):
+            return []
+    except MineDataError:
+        pass
     now = await md.now()
     tubes = [s for s in await md.sensors() if s.id.startswith(f"BT-{panel}")]
     readings = await md.readings([s.id for s in tubes], start=now - timedelta(hours=12), end=now, measurands=["CO"])

@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "FireAreaStatus": {
+      "enum": [
+        "sealed",
+        "unsealed"
+      ],
+      "title": "FireAreaStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "火区管理台账中的一条：封闭过的火区及其状态。\n\n来自矿井的火区台账（人工登记的事实），不是模拟器真值。从未封闭的发火区域不在台账里。\n复燃征兆（第164条）等只对封闭火区或启封后的火区有意义的判据，依据这里的状态决定是否适用。",
+  "properties": {
+    "area_id": {
+      "title": "Area Id",
+      "type": "string"
+    },
+    "panel": {
+      "title": "Panel",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/FireAreaStatus"
+    },
+    "sealed_at": {
+      "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+      "title": "Sealed At",
+      "type": "string"
+    },
+    "unsealed_at": {
+      "anyOf": [
+        {
+          "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unsealed At"
+    }
+  },
+  "required": [
+    "area_id",
+    "panel",
+    "name",
+    "status",
+    "sealed_at"
+  ],
+  "title": "FireArea",
+  "type": "object",
+  "$comment": "rescue-contract 0.2.0"
+}

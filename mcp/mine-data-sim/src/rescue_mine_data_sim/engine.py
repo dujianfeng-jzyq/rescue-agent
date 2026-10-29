@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 
 from rescue_contract.models import (
     EventKind,
+    FireArea,
+    FireAreaStatus,
     Measurand,
     MineEvent,
     PersonLocation,
@@ -110,6 +112,7 @@ class _State:
     h_mult: float = 1.0
     sealed: bool = False
     sealed_at_h: float | None = None
+    unsealed_at_h: float | None = None
     advancing: bool = True
     depth_m: float = 0.0
 
@@ -204,9 +207,11 @@ class SimEngine:
             s.leak_mult *= 1 - min(0.9, float(prm.get("reduction", 0.5)))
         elif kind in ("temporary_seal", "permanent_seal"):
             if not s.sealed:
-                s.sealed, s.sealed_at_h = True, s.t_h
+                s.sealed, s.sealed_at_h, s.unsealed_at_h = True, s.t_h, None
             s.leak_mult *= 0.1 if kind == "temporary_seal" else 0.3
         elif kind == "unseal":
+            if s.sealed:
+                s.unsealed_at_h = s.t_h
             s.sealed, s.leak_mult = False, max(s.leak_mult, 0.5)
         elif kind == "leak_change":  # 剧本：漏风突然增大（如顶板垮落、密闭失效）
             s.leak_mult *= float(prm.get("factor", 2.0))
@@ -254,6 +259,22 @@ class SimEngine:
             "open_fire": s.temp_c >= self.scenario.params.open_fire_c,
             "n2_m3_h": s.n2_m3_h,
         }
+
+    def fire_areas(self) -> list[FireArea]:
+        """火区台账：封闭过的火区。封闭和启封是人工处置留下的记录，不是隐藏的真值。"""
+        s = self.state_at(self.now_h())
+        if s.sealed_at_h is None:
+            return []
+        return [
+            FireArea(
+                area_id="FA-1201-GOAF",
+                panel="1201",
+                name="1201 工作面采空区火区",
+                status=FireAreaStatus.SEALED if s.sealed else FireAreaStatus.UNSEALED,
+                sealed_at=self.at(s.sealed_at_h),
+                unsealed_at=None if s.unsealed_at_h is None else self.at(s.unsealed_at_h),
+            )
+        ]
 
     def _hot_gases(self, s: _State) -> dict[Measurand, float]:
         p = self.scenario.params

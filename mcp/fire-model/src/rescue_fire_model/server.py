@@ -23,11 +23,20 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
     md = MineData(mine_data_target) if mine_data_target is not None else MineData.from_env()
     server = MCPServer("fire_model", instructions=INSTRUCTIONS)
 
+    async def realtime_alarms(panel: str) -> list[dict[str, Any]]:
+        found = await alarms.check_methane(md) + await alarms.check_reignition(md, panel)
+        return [asdict(a) for a in found]
+
     @server.tool()
     async def assess_warning_level(panel: str = "1201") -> dict[str, Any]:
         """按标志气体判定工作面采空区自燃预警等级（none/blue/yellow/orange/red），
-        返回触发条件、指标值和数据质量说明。可疑数据已排除。"""
-        return (await warning.assess(md, panel)).to_dict()
+        返回触发条件、指标值和数据质量说明。可疑数据已排除。
+
+        预警等级反映自燃发展程度；实时红线报警是“立即行动”的触发条件，两者独立判定，
+        报警不会抬高等级。realtime_alarms 一并给出同一时刻的报警，有报警时以报警为先。"""
+        out = (await warning.assess(md, panel)).to_dict()
+        out["realtime_alarms"] = await realtime_alarms(panel)
+        return out
 
     @server.tool()
     async def gas_trend(sensor_id: str, measurand: Measurand, hours: float = 24) -> dict[str, Any]:
@@ -66,9 +75,9 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
 
     @server.tool()
     async def check_realtime_alarms(panel: str = "1201") -> list[dict[str, Any]]:
-        """检查实时红线报警：甲烷超 2% 且上升（第75条）、火区 CO 持续上升的复燃征兆（第164条）。
+        """检查实时红线报警：甲烷超 2% 且上升（第75条）、封闭或启封后火区 CO 持续上升的复燃征兆（第164条，
+        只对火区台账中的火区检查）。
         有报警时应立即提示指挥人员，不等待其他研判。"""
-        found = await alarms.check_methane(md) + await alarms.check_reignition(md, panel)
-        return [asdict(a) for a in found]
+        return await realtime_alarms(panel)
 
     return server

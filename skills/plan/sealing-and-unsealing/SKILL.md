@@ -26,7 +26,7 @@ whenToUse: 需要编写封闭火区方案（第 4 阶段）或启封方案（第
 
 ## 封闭后
 
-- 进入检查或加固密闭（`inspect_sealed_area`）应在封闭 24 小时后（第87条），`context.sealed_at` 必须填写。
+- 进入检查或加固密闭（`inspect_sealed_area`）应在封闭 24 小时后（第87条），`context.sealed_at` 必须填写，照抄 `mine_data.get_fire_areas` 返回的火区 `sealed_at`，台账里没有该火区时写明“需人工判断”，不要自行推算。
 - 密闭被爆炸破坏时严禁派救护队探察或恢复密闭（第87条）——这种情况不要写进入步骤，交人工决策。
 
 ## 启封方案（kind = unsealing，发布工具 approve_unsealing）

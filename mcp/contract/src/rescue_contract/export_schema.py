@@ -21,6 +21,7 @@ EXPORTED = [
     "ResourceItem",
     "RescueTeam",
     "MineEvent",
+    "FireArea",
     "Plan",
     "WarningNotice",
     "DispatchOrder",

@@ -14,7 +14,7 @@ from datetime import timedelta
 from typing import Any
 
 from .client import MineData, connect
-from .models import Quality
+from .models import FireAreaStatus, Quality
 
 REQUIRED_TOOLS = {
     "get_clock",
@@ -26,6 +26,7 @@ REQUIRED_TOOLS = {
     "get_personnel",
     "get_inventory",
     "get_rescue_teams",
+    "get_fire_areas",
 }
 
 
@@ -84,10 +85,23 @@ async def check_personnel_and_resources(md: MineData) -> None:
     await md.rescue_teams()
 
 
+async def check_fire_areas(md: MineData) -> None:
+    now = await md.now()
+    areas = await md.fire_areas()
+    ids = [a.area_id for a in areas]
+    _check(len(ids) == len(set(ids)), "火区 id 重复")
+    for a in areas:
+        _check(a.sealed_at <= now, f"火区 {a.area_id} 的封闭时间晚于矿井当前时间")
+        _check((a.status == FireAreaStatus.UNSEALED) == (a.unsealed_at is not None), f"火区 {a.area_id} 启封状态与启封时间不一致")
+        if a.unsealed_at is not None:
+            _check(a.sealed_at <= a.unsealed_at <= now, f"火区 {a.area_id} 的启封时间不合理")
+
+
 CHECKS: list[Callable[[MineData], Awaitable[None]]] = [
     check_network,
     check_sensors_and_readings,
     check_personnel_and_resources,
+    check_fire_areas,
 ]
 
 
