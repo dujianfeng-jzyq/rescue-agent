@@ -36,5 +36,5 @@
   - 正常启动时，网页端输入框可选 Read Only / Workspace Write / Full access。选 Full access（确认“Enable Full access?”）后审批策略变为 never，actions 的指令**一律被自动拒绝**，不弹确认、不会放行；审计记为 denied，detail 是 `the user rejected tool ...`，与真人拒绝无法区分（`var/audit/tool-actions.jsonl` 2026-10-29T02:32:07Z 一条）。不会绕过人工确认，但会让总指挥协调无法发布任何指令，且复盘时会误以为是人拒绝的。
   - 已处理（2026-10-28）：`cordis.patch.yml` 覆盖 `permission` 的预设表，只保留 Read Only / Workspace Write（审批均为 ask），并显式 `defaultPreset: workspace-write`；`check_patches.py` 要求所有权限预设审批为 ask。复验：正常启动和 export `DSH_PERMISSION_MODE=danger-full-access` 启动都没有插件启动失败，选择器只有 Read Only / Workspace Write。代价：环境变量模式下沙箱也是 workspace-write（救援预设没有 bash 和文件工具，无实际影响）。
 - #15 长时间研判中发现（2026-10-28，s3）：
-  - 乙烯/乙炔真实为 0（s3 高温点 90 ℃ 以上才出现）时，`fire_model` 的 `detect_stuck`（最近 6 点完全不变即判卡值）把它们判为“疑似卡值、已排除”，指标为 null；Agent 连续 10 轮报告“标志气体判据缺失、无法判定”，而不是“未检出”。
+  - 乙烯/乙炔真实为 0（s3 高温点 90 ℃ 以上才出现）时，`fire_model` 的 `detect_stuck`（最近 6 点完全不变即判卡值）把它们判为“疑似卡值、已排除”，指标为 null；Agent 连续 10 轮报告“标志气体判据缺失、无法判定”，而不是“未检出”。已修复（6b2660e）：恒为 0 且同测点 CO 仍在变化时按未检出处理，整根束管卡住时仍排除。
   - 第 10 轮起 `check_realtime_alarms` 报第164条红线（束管 CO 上升速率超限），同时 `assess_warning_level` 仍为 none（第 11 轮才到 blue）；红线报警也没有进入 `get_events`。两套判据不一致，Agent 每轮都在提示这个矛盾。
