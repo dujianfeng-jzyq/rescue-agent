@@ -45,12 +45,23 @@ def spike_indices(rs: list[Reading], factor: float = 4.0, floor: float = 5.0) ->
     return out
 
 
-def check_series(name: str, rs: list[Reading]) -> QualityReport:
+def _constant_zero(rs: list[Reading], min_points: int = 6) -> bool:
+    vals = [r.value for r in _valid(rs)][-min_points:]
+    return len(vals) >= min_points and max(abs(v) for v in vals) < 1e-9
+
+
+def check_series(name: str, rs: list[Reading], sibling: list[Reading] | None = None) -> QualityReport:
+    """检查单个测点单个参数的序列。
+
+    `sibling` 是同一测点上另一个持续变化的参数（如束管的 CO）。乙烯、乙炔等标志气体在出现之前
+    真实读数就是 0：若序列恒为 0 而同测点的 sibling 仍在变化，说明测点在工作，按“未检出”保留，
+    不判卡值。不给 sibling 或 sibling 也不变时，恒 0 仍按卡值排除（宁可判缺数，不把卡在 0 读成未检出）。
+    """
     flags = []
     missing = sum(1 for r in rs if r.quality == Quality.MISSING)
     if missing:
         flags.append(f"{name}：{missing} 个点缺数")
-    if detect_stuck(rs):
+    if detect_stuck(rs) and not (_constant_zero(rs) and sibling is not None and not detect_stuck(sibling)):
         flags.append(f"{name}：读数长时间不变，疑似卡值，已排除")
         return QualityReport(usable=[], flags=flags)
     spikes = spike_indices(rs)

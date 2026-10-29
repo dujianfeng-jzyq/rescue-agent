@@ -98,8 +98,9 @@ async def assess(md: MineData, panel: str = "1201", thresholds: dict | None = No
     dq: list[str] = []
     notes: list[str] = []
 
-    def usable(sid: str, m: Measurand) -> list[Reading]:
-        rep = check_series(f"{sid}/{m.value}", _series(readings, sid, m))
+    def usable(sid: str, m: Measurand, sibling: Measurand | None = None) -> list[Reading]:
+        sib = _series(readings, sid, sibling) if sibling else None
+        rep = check_series(f"{sid}/{m.value}", _series(readings, sid, m), sib)
         dq.extend(rep.flags)
         return rep.usable
 
@@ -128,7 +129,7 @@ async def assess(md: MineData, panel: str = "1201", thresholds: dict | None = No
                 if n2[-1].value > 85:
                     notes.append(f"{t.id} 氮气浓度 {n2[-1].value:.1f}%，可能处于注氮影响范围，格雷哈姆系数偏低失真")
         for m, cur in ((Measurand.C2H4, "c2h4"), (Measurand.C2H2, "c2h2")):
-            s = usable(t.id, m)
+            s = usable(t.id, m, sibling=Measurand.CO)  # 未出现时恒为 0，用同测点 CO 判断测点是否在工作
             if s:
                 v = s[-1].value
                 if cur == "c2h4":

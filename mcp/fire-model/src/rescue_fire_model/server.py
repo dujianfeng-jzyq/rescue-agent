@@ -34,7 +34,11 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
         """单个测点某参数的趋势：最新值、上升速率（每小时）、数据质量说明。"""
         now = await md.now()
         rs = await md.readings([sensor_id], start=now - timedelta(hours=hours), end=now, measurands=[measurand.value])
-        rep = check_series(f"{sensor_id}/{measurand.value}", sorted(rs, key=lambda r: r.ts))
+        sibling = None
+        if measurand in (Measurand.C2H4, Measurand.C2H2):  # 与 assess_warning_level 一致：恒 0 时用同测点 CO 判断是否卡值
+            co = await md.readings([sensor_id], start=now - timedelta(hours=hours), end=now, measurands=[Measurand.CO.value])
+            sibling = sorted(co, key=lambda r: r.ts)
+        rep = check_series(f"{sensor_id}/{measurand.value}", sorted(rs, key=lambda r: r.ts), sibling)
         return {
             "sensor_id": sensor_id,
             "measurand": measurand.value,
