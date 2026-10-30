@@ -171,3 +171,82 @@ def test_assess_warning_level_includes_realtime_alarms():
 
     r = asyncio.run(go())
     assert any(a["rule_id"] == "RL-164" for a in r["realtime_alarms"]), r
+
+
+# ── 自燃发展阶段、处置效果评估（判据为占位值，这里只检查在标准场景上方向正确）──
+
+
+def test_stage_follows_scenarios():
+    for h in (12, 36, 60, 96):
+        assert level("s1-normal", h).stage == "no_sign", h
+    assert level("s2-slow-oxidation", 48).stage == "slow_oxidation"
+    assert level("s2-slow-oxidation", 84).stage == "accelerating"  # 乙烯已检出
+    stages = [level("s3-accelerating", h).stage for h in (10, 20, 30, 40)]
+    order = ["no_sign", "slow_oxidation", "accelerating", "intense"]
+    assert [order.index(s) for s in stages] == sorted(order.index(s) for s in stages), stages
+
+
+def test_stage_unknown_without_tube_co():
+    from rescue_fire_model.stage import classify_stage
+
+    assert classify_stage({"tube_co_ppm": None, "c2h4_ppm": None}, warning.load_thresholds()["stage"])[0] == "unknown"
+
+
+def _effect(act: bool, after_h: float, at_h: float = 48) -> dict:
+    from mcp.client import Client
+    from rescue_fire_model.server import build_server
+
+    holder, _ = sim("s2-slow-oxidation", at_h)
+    since = holder.engine.now().replace(microsecond=0)
+    if act:
+        holder.engine.apply("inert_injection", {"rate_m3_h": 1000})
+        holder.engine.apply("leak_sealing", {"reduction": 0.5})
+    holder.engine.clock.advance(after_h)
+
+    async def go():
+        async with Client(build_server(build_mine(holder))) as c:
+            args = {"sensor_id": "BT-1201-G1", "since": since.isoformat()}
+            return (await c.call_tool("evaluate_effect", args)).structured_content
+
+    return asyncio.run(go())
+
+
+def test_effect_needs_a_full_observation_period():
+    r = _effect(True, 6)
+    assert r["effect"] == "insufficient" and r["observed_h"] == 6.0, r
+
+
+def test_s2_intervention_needs_continued_treatment():
+    # 场景说明：第 2 天注氮加堵漏后升温基本被遏制，但仍需持续处置，不应判为已受控
+    r = _effect(True, 24)
+    assert r["effect"] == "continuing", r
+    assert 0 < r["rate_after_per_hour"] < r["rate_before_per_hour"]
+
+
+def test_s2_without_intervention_is_worsening():
+    r = _effect(False, 24)
+    assert r["effect"] == "worsening" and r["rate_after_per_hour"] > r["rate_before_per_hour"], r
+
+
+def test_effect_controlled_and_new_marker_gas():
+    from datetime import datetime, timedelta
+
+    from rescue_contract.models import Measurand, Reading
+    from rescue_fire_model.stage import evaluate
+
+    t0 = datetime(2026, 11, 2, 8)
+    cfg = warning.load_thresholds()
+
+    def series(m, values, start):
+        return [Reading(sensor_id="BT", measurand=m, ts=start + timedelta(hours=i), value=v) for i, v in enumerate(values)]
+
+    before = series(Measurand.CO, [20, 22, 24, 26], t0 - timedelta(hours=3))
+    falling = series(Measurand.CO, [26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14], t0)
+    now = t0 + timedelta(hours=12)
+    r = evaluate(t0, now, before, falling, {}, cfg["stage"], cfg["effect"])
+    assert r["effect"] == "controlled" and r["change_since"] == -12, r
+
+    zeros = series(Measurand.C2H4, [0] * 4, t0 - timedelta(hours=3))
+    appears = series(Measurand.C2H4, [0] * 12 + [0.5], t0)
+    r = evaluate(t0, now, before, falling, {"C2H4": (zeros, appears)}, cfg["stage"], cfg["effect"])
+    assert r["effect"] == "worsening" and r["new_marker_gases"] == ["C2H4"], r

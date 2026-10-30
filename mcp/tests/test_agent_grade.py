@@ -117,6 +117,15 @@ def test_actions_call_fails_no_actions(tree):
     assert r["checks"]["no_actions"] == {"ok": False, "detail": ["mcp__actions__publish_warning"]}
 
 
+def test_stage_reported(tmp_path):
+    result = json.dumps({"level": "none", "stage_name": "缓慢氧化"}, ensure_ascii=False)
+    for final, ok in (("结论：自燃发展阶段为缓慢氧化", True), ("结论：未见异常", False)):
+        base = tmp_path / str(ok)
+        events = [{"type": "turn/start"}, _user("请研判"), *_assistant("", [("c1", "mcp__fire_model__assess_warning_level", {})]), _result("c1", result), *_assistant(final), {"type": "turn/end"}]
+        _write(base, ROOT_ID, events, "rescue-commander")
+        assert grade.grade(grade.load_tree(ROOT_ID, base), {"stage_reported": True})["checks"]["stage_reported"]["ok"] is ok
+
+
 def test_delegation_to_wrong_preset_fails(tree):
     r = grade.grade(tree("无"), {"delegates_to": "rescue-plan"})
     assert r["checks"]["delegates_to"] == {"ok": False, "detail": ["rescue-assessment"]}

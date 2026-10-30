@@ -62,8 +62,12 @@ class Assessment:
     triggered: list[str]
     data_quality: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    stage: str = "unknown"
+    stage_basis: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        from .stage import stage_dict
+
         return {
             "as_of": self.as_of.isoformat(),
             "level": self.level.value,
@@ -72,7 +76,8 @@ class Assessment:
             "triggered": self.triggered,
             "data_quality": self.data_quality,
             "notes": self.notes,
-            "method": "阈值分级（thresholds.yaml）。阈值为演示占位值，需按本矿自然发火预测预报制度设定",
+            **stage_dict(self.stage, self.stage_basis),
+            "method": "阈值分级（thresholds.yaml）。阈值为演示占位值，需按本矿自然发火预测预报制度设定；自燃发展阶段与等级独立判定",
         }
 
 
@@ -148,7 +153,10 @@ async def assess(md: MineData, panel: str = "1201", thresholds: dict | None = No
         "graham_ratio": graham,
     }
     level, triggered = classify(ind, thresholds)
-    return Assessment(as_of=now, level=level, indicators=ind, triggered=triggered, data_quality=dq, notes=notes)
+    from .stage import classify_stage
+
+    stage, stage_basis = classify_stage(ind, thresholds.get("stage", {}))
+    return Assessment(as_of=now, level=level, indicators=ind, triggered=triggered, data_quality=dq, notes=notes, stage=stage, stage_basis=stage_basis)
 
 
 def level_index(level: WarningLevel) -> int:

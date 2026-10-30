@@ -8,9 +8,9 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from rescue_contract.client import MineData
-from rescue_contract.models import Measurand
+from rescue_contract.models import Measurand, MineTime
 
-from . import alarms, explosion, warning
+from . import alarms, explosion, stage, warning
 from .quality import check_series
 
 INSTRUCTIONS = (
@@ -31,6 +31,8 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
     async def assess_warning_level(panel: str = "1201") -> dict[str, Any]:
         """按标志气体判定工作面采空区自燃预警等级（none/blue/yellow/orange/red），
         返回触发条件、指标值和数据质量说明。可疑数据已排除。
+        同时给出自燃发展阶段（stage：no_sign/slow_oxidation/accelerating/intense/unknown）及依据，
+        报告阶段时照抄 stage_name，不要根据标志气体自行推断阶段或煤温。
 
         预警等级反映自燃发展程度；实时红线报警是“立即行动”的触发条件，两者独立判定，
         报警不会抬高等级。realtime_alarms 一并给出同一时刻的报警，有报警时以报警为先。"""
@@ -63,6 +65,31 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
             "rate_per_hour": warning.slope_per_hour(rep.usable),
             "data_quality": rep.flags,
         }
+
+    @server.tool()
+    async def evaluate_effect(sensor_id: str, since: MineTime, measurand: Measurand = Measurand.CO) -> dict[str, Any]:
+        """处置效果评估：比较处置开始时刻（since，矿井时间，取自指令台账或指挥人员）前后，
+        同一测点同一参数的上升速率，并检查同测点是否新出现乙烯、乙炔。
+        effect：controlled（已受控）/ continuing（需继续处置）/ worsening（恶化）/ insufficient（观测时间不足）。
+        报告效果时照抄 effect_name、速率和 basis，不要自己比较读数下结论。"""
+        cfg = warning.load_thresholds()
+        ecfg, scfg = cfg["effect"], cfg.get("stage", {})
+        now = await md.now()
+        start = since - timedelta(hours=ecfg["baseline_h"])
+
+        async def usable(m: Measurand, a, b, sibling: Measurand | None = None):
+            rs = sorted(await md.readings([sensor_id], start=a, end=b, measurands=[m.value]), key=lambda r: r.ts)
+            sib = None
+            if sibling:
+                sib = sorted(await md.readings([sensor_id], start=a, end=b, measurands=[sibling.value]), key=lambda r: r.ts)
+            return check_series(f"{sensor_id}/{m.value}", rs, sib).usable
+
+        before, after = await usable(measurand, start, since), await usable(measurand, since, now)
+        markers = {}
+        for gas in (Measurand.C2H4, Measurand.C2H2):
+            markers[gas.value] = (await usable(gas, start, since, Measurand.CO), await usable(gas, since, now, Measurand.CO))
+        out = stage.evaluate(since, now, before, after, markers, scfg, ecfg)
+        return {"sensor_id": sensor_id, "measurand": measurand.value, **out}
 
     @server.tool()
     async def assess_explosion_risk(ch4_pct: float, o2_pct: float) -> dict[str, Any]:

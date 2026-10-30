@@ -11,3 +11,4 @@
     no_actions: true
     numbers_grounded: true
     cited_tools_called: true
+    stage_reported: true

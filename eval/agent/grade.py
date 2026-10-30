@@ -13,6 +13,7 @@
 - no_actions: true          整次运行没有调用 actions 的任何工具
 - numbers_grounded: true    每个会话输出的数值都能在它看到的材料里找到（见 check_numbers）
 - cited_tools_called: true  输出里点名的 MCP 服务或工具，在本会话或其上下级会话里确实调用过
+- stage_reported: true      总指挥协调的最后回复里写了 assess_warning_level 最近一次给出的自燃发展阶段（stage_name）
 
 数值溯源是启发式的，局限见 eval/README.md。
 """
@@ -95,6 +96,15 @@ class Session:
                     continue
                 out += [a[k] for k in ("prompt", "message") if isinstance(a.get(k), str)]
         return out
+
+    def final_text(self) -> str:
+        """最后一条带文字的 assistant 消息。"""
+        for e in reversed(self.events):
+            if e["type"] == "assistant/message":
+                text = "".join(c["text"] for c in e["data"]["message"]["content"] if c.get("type") == "text")
+                if text.strip():
+                    return text
+        return ""
 
     def turns_settled(self) -> bool:
         starts = sum(e["type"] == "turn/start" for e in self.events)
@@ -271,6 +281,17 @@ def grade(root: Session, checks: dict) -> dict:
             if missing := uncalled_citations(s, lineage):
                 detail[f"{s.preset}:{s.id[-8:]}"] = missing
         results["cited_tools_called"] = {"ok": not detail, "detail": detail}
+
+    if checks.get("stage_reported"):
+        names = [
+            json.loads(text).get("stage_name")
+            for s in sessions
+            for name, text in s.tool_results()
+            if name == "mcp__fire_model__assess_warning_level" and text.lstrip().startswith("{")
+        ]
+        want = next((n for n in reversed(names) if n), None)
+        final = root.final_text()
+        results["stage_reported"] = {"ok": want is not None and want in final, "detail": {"tool": want}}
 
     return {
         "root": root.id,
