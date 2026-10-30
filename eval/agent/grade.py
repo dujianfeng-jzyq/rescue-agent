@@ -151,7 +151,7 @@ def load_tree(root_id: str, sessions_dir: Path = SESSIONS) -> Session:
 # 不用 \b：中文字符也算 \w，“使G1”里的 G1 前面没有词边界
 _STRIP = [
     re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?"),  # 日期时间
-    re.compile(r"(?<![\d.-])\d{1,2}-\d{1,2}(?=\s*\d{1,2}:\d{2})"),  # 月-日（后跟时刻）
+    re.compile(r"(?<![\d.-])\d{1,2}-\d{1,2}(?=[T\s]*\d{1,2}:\d{2})"),  # 月-日（后跟时刻，如 11-03 06:00、11-04T08:00）
     re.compile(r"(?<![\d.])\d{1,2}:\d{2}(?::\d{2})?(?![\d.])"),  # 时刻
     re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)+"),  # 编号：BT-1201-G1、P-13、call_xxx
     re.compile(r"(?<![A-Za-z0-9])[A-Za-z]+\d+[A-Za-z0-9]*"),  # G1、C2H4、CO2、s2
@@ -218,7 +218,8 @@ def uncalled_citations(s: Session, lineage_calls: set[str]) -> list[str]:
     for server in SERVERS:
         if server == "kb" or server == "actions":  # 太短或常作普通词，不按名字点名判定
             continue
-        if re.search(rf"(?<![A-Za-z_]){server}(?![A-Za-z_])", text) and server not in called_servers:
+        # 前面不能是连字符：rescue-dispatch 是预设名，不是在引用 dispatch 服务
+        if re.search(rf"(?<![A-Za-z_-]){server}(?![A-Za-z_-])", text) and server not in called_servers:
             missing.append(server)
     for tool, full in tools.items():
         if full.startswith("mcp__actions__"):  # 提到发布类工具通常是在建议下发指令，不是引用来源

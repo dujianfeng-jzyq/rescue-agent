@@ -1,5 +1,5 @@
 # 常用命令入口。具体说明见 README.md。
-.PHONY: setup setup-py dev up down smoke test test-py test-ts lint check eval schema sim-state clean
+.PHONY: setup setup-py dev up down smoke test test-py test-ts lint check eval eval-agent schema sim-state clean
 
 UV := uv run --project mcp
 
@@ -31,6 +31,8 @@ check:            ## 提交前：lint + 全部测试 + patch 离线校验 + 基�
 
 eval:             ## 确定性基线评测（不需要大模型）
 	$(UV) python eval/baseline.py
+eval-agent:       ## 智能体端到端评测（需已启动 DSH 网页端；ARGS="--url … --model … --repeat 3"）
+	$(UV) --with playwright python eval/agent/run.py $(ARGS)
 schema:           ## 重新导出契约 JSON Schema
 	$(UV) python -m rescue_contract.export_schema
 sim-state:
