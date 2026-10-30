@@ -7,6 +7,7 @@ from datetime import timedelta
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from rescue_contract.client import MineData
 from rescue_contract.models import Measurand, MineTime
 
@@ -70,10 +71,15 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
     async def evaluate_effect(sensor_id: str, since: MineTime, measurand: Measurand = Measurand.CO) -> dict[str, Any]:
         """处置效果评估：比较处置开始时刻（since，矿井时间，取自指令台账或指挥人员）前后，
         同一测点同一参数的上升速率，并检查同测点是否新出现乙烯、乙炔。
+        只适用于上升即变坏的发火指标（CO、TEMP、C2H4、C2H2、CO2）；O2、CH4、N2 等会报错。
+        速率绝对值小于 flat_rate_per_hour 按“不变”处理。
         effect：controlled（已受控）/ continuing（需继续处置）/ worsening（恶化）/ insufficient（观测时间不足）。
         报告效果时照抄 effect_name、速率和 basis，不要自己比较读数下结论。"""
         cfg = warning.load_thresholds()
         ecfg, scfg = cfg["effect"], cfg.get("stage", {})
+        flat = ecfg.get("flat_rate", {})
+        if measurand.value not in flat:
+            raise ToolError(f"{measurand.value} 不是发火指标，不能用于效果评估；可用：{'、'.join(flat)}")
         now = await md.now()
         start = since - timedelta(hours=ecfg["baseline_h"])
 
@@ -88,7 +94,7 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
         markers = {}
         for gas in (Measurand.C2H4, Measurand.C2H2):
             markers[gas.value] = (await usable(gas, start, since, Measurand.CO), await usable(gas, since, now, Measurand.CO))
-        out = stage.evaluate(since, now, before, after, markers, scfg, ecfg)
+        out = stage.evaluate(since, now, before, after, markers, scfg, ecfg, flat[measurand.value])
         return {"sensor_id": sensor_id, "measurand": measurand.value, **out}
 
     @server.tool()

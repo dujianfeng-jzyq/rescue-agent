@@ -192,7 +192,7 @@ def test_stage_unknown_without_tube_co():
     assert classify_stage({"tube_co_ppm": None, "c2h4_ppm": None}, warning.load_thresholds()["stage"])[0] == "unknown"
 
 
-def _effect(act: bool, after_h: float, at_h: float = 48) -> dict:
+def _effect(act: bool, after_h: float, at_h: float = 48, measurand: str = "CO", sensor_id: str = "BT-1201-G1"):
     from mcp.client import Client
     from rescue_fire_model.server import build_server
 
@@ -205,8 +205,9 @@ def _effect(act: bool, after_h: float, at_h: float = 48) -> dict:
 
     async def go():
         async with Client(build_server(build_mine(holder))) as c:
-            args = {"sensor_id": "BT-1201-G1", "since": since.isoformat()}
-            return (await c.call_tool("evaluate_effect", args)).structured_content
+            args = {"sensor_id": sensor_id, "since": since.isoformat(), "measurand": measurand}
+            r = await c.call_tool("evaluate_effect", args)
+            return r.structured_content if not r.is_error else r.content[0].text
 
     return asyncio.run(go())
 
@@ -250,3 +251,32 @@ def test_effect_controlled_and_new_marker_gas():
     appears = series(Measurand.C2H4, [0] * 12 + [0.5], t0)
     r = evaluate(t0, now, before, falling, {"C2H4": (zeros, appears)}, cfg["stage"], cfg["effect"])
     assert r["effect"] == "worsening" and r["new_marker_gases"] == ["C2H4"], r
+
+
+def test_effect_rejects_non_fire_indicators():
+    # O2 下降、采空区 CH4 波动不说明火情好坏（评测中曾把 CH4 -0.018→0.002 %/h 判成“恶化”）
+    for m in ("CH4", "O2"):
+        msg = _effect(True, 24, measurand=m)
+        assert isinstance(msg, str) and "不是发火指标" in msg, msg
+
+
+def test_effect_temperature_follows_co():
+    assert _effect(True, 24, measurand="TEMP", sensor_id="TP-1201-G1")["effect"] == "continuing"
+
+
+def test_effect_noise_band_counts_as_flat():
+    from datetime import datetime, timedelta
+
+    from rescue_contract.models import Measurand, Reading
+    from rescue_fire_model.stage import evaluate
+
+    t0 = datetime(2026, 11, 2, 8)
+    cfg = warning.load_thresholds()
+
+    def series(values, start):
+        return [Reading(sensor_id="BT", measurand=Measurand.CO, ts=start + timedelta(hours=i), value=v) for i, v in enumerate(values)]
+
+    before = series([20.03, 20.0, 19.98, 19.95], t0 - timedelta(hours=3))  # 约 -0.025/h，在回落
+    after = series([20 + 0.002 * i for i in range(13)], t0)  # 0.002/h，噪声
+    r = evaluate(t0, t0 + timedelta(hours=12), before, after, {}, cfg["stage"], cfg["effect"], cfg["effect"]["flat_rate"]["CO"])
+    assert r["effect"] == "controlled" and r["rate_after_per_hour"] == 0.002, r

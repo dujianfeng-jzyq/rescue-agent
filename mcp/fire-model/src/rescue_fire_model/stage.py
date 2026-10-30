@@ -51,14 +51,21 @@ def evaluate(
     after: list[Reading],
     markers: dict[str, tuple[list[Reading], list[Reading]]],
     stage_cfg: dict[str, dict[str, float]],
-    cfg: dict[str, float],
+    cfg: dict[str, Any],
+    flat: float = 0.0,
 ) -> dict[str, Any]:
     """比较处置前后同一测点同一参数的上升速率，判定效果。
 
     before / after：处置前、处置后的可用读数（已排除可疑数据）。
-    markers：同测点标志气体（C2H4、C2H2）处置前后的可用读数，用于判断是否新出现。"""
+    markers：同测点标志气体（C2H4、C2H2）处置前后的可用读数，用于判断是否新出现。
+    flat：|速率| 小于它按 0 处理（噪声带）；输出里的速率仍是原值。"""
     observed_h = (now - since).total_seconds() / 3600
     rate_before, rate_after = slope_per_hour(before), slope_per_hour(after)
+
+    def eff(v: float | None) -> float | None:
+        return None if v is None else (0.0 if abs(v) < flat else v)
+
+    rb, ra = eff(rate_before), eff(rate_after)
     basis: list[str] = []
 
     detect = {"C2H4": stage_cfg.get("accelerating", {}).get("c2h4_ppm"), "C2H2": stage_cfg.get("intense", {}).get("c2h2_ppm")}
@@ -76,13 +83,14 @@ def evaluate(
     elif new_markers:
         effect = "worsening"
         basis.append(f"处置后新出现标志气体：{'、'.join(new_markers)}")
-    elif rate_after is None or rate_before is None:
+    elif ra is None or rb is None:
         effect = "insufficient"
         basis.append("处置前或处置后可用读数不足，无法计算速率")
-    elif rate_after <= cfg["controlled_rate"]:
+    elif ra <= cfg["controlled_rate"]:
         effect = "controlled"
-        basis.append(f"处置后速率 {rate_after:.3f}/h ≤ {cfg['controlled_rate']}，已停止上升")
-    elif rate_before > 0 and rate_after <= rate_before * cfg["slowdown_ratio"]:
+        note = f"（|速率| < {flat} 按不变处理）" if ra == 0 and rate_after != 0 else ""
+        basis.append(f"处置后速率 {rate_after:.3f}/h ≤ {cfg['controlled_rate']}{note}，已停止上升")
+    elif rb > 0 and ra <= rb * cfg["slowdown_ratio"]:
         effect = "continuing"
         basis.append(f"处置后速率 {rate_after:.3f}/h ≤ 处置前 {rate_before:.3f}/h × {cfg['slowdown_ratio']}，明显减缓但仍在上升")
     else:
@@ -101,6 +109,7 @@ def evaluate(
         "change_since": _r(after[-1].value - before[-1].value) if after and before else None,
         "rate_before_per_hour": _r(rate_before),
         "rate_after_per_hour": _r(rate_after),
+        "flat_rate_per_hour": flat,
         "new_marker_gases": new_markers,
         "effect": effect,
         "effect_name": EFFECT_NAMES[effect],
