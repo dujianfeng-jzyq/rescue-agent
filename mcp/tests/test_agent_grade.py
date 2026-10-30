@@ -113,6 +113,10 @@ def test_field_names_and_declared_skips_are_not_citations():
     # escape_route 是已调用工具结果里的字段；evaluate_effect 写明“未做”
     assert missing("escape_route reachable=false；处置效果评估（evaluate_effect）未做：无处置起始时刻", {"escape_route"}) == []
 
+    # 调了总体评估就算调了逐点评估（总体评估的 points 就是逐点结果）
+    s = grade.Session("s", "rescue-assessment", None, 0, [offered, *_assistant("以 evaluate_effect 的 effect_name 为准")])
+    assert grade.uncalled_citations(s, {"mcp__fire_model__evaluate_effect_panel"}) == []
+
 
 def test_preset_name_is_not_a_server_citation(tree):
     r = grade.grade(tree("用量交 rescue-dispatch 估算"), ALL)

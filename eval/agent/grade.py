@@ -230,6 +230,8 @@ def _catalog(s: Session) -> set[str]:
     return set(re.findall(r"mcp__[a-z_]+?__[a-z_]+", raw))
 
 
+# 调用了键里的工具，就算调用过值里的工具：总体评估的输出就是逐点 evaluate_effect 的结果
+COVERS = {"evaluate_effect_panel": {"evaluate_effect"}}
 _NOT_DONE = re.compile(r"未做|未调用|没有调用|未执行|没有执行|无法调用")
 
 
@@ -241,6 +243,7 @@ def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str
     tools = {name.split("__", 2)[2]: name for name in _catalog(s)}
     called_servers = {n.split("__")[1] for n in lineage_calls if n.startswith("mcp__")}
     called_tools = {n.split("__", 2)[2] for n in lineage_calls if n.startswith("mcp__")}
+    called_tools |= {t for c in list(called_tools) for t in COVERS.get(c, ())}
     text = "\n".join(s.outputs())
     missing = []
     for server in SERVERS:
