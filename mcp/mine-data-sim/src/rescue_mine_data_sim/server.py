@@ -13,6 +13,7 @@ import os
 from datetime import datetime, timedelta
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from rescue_contract.models import (
     FireArea,
     Measurand,
@@ -84,7 +85,7 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         安全监控 15 分钟一个点，束管 1 小时，测温 30 分钟。单次最多返回 5000 条。"""
         bad = _unknown_sensors(sensor_ids)
         if bad:
-            raise ValueError(f"未知测点：{bad}")
+            raise ToolError(f"未知测点：{bad}")
         e = sim.engine
         end_h = e.hours_of(datetime.fromisoformat(end)) if end else e.now_h()
         start_h = e.hours_of(datetime.fromisoformat(start)) if start else end_h - 24
@@ -96,7 +97,7 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         ids = sensor_ids or all_sensor_ids()
         bad = _unknown_sensors(ids)
         if bad:
-            raise ValueError(f"未知测点：{bad}")
+            raise ToolError(f"未知测点：{bad}")
         return sim.engine.latest(ids)
 
     @server.tool()

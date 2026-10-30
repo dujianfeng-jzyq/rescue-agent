@@ -102,7 +102,10 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
         """用爆炸三角形判定甲烷—空气混合气体的爆炸危险性：
         explosive（处于爆炸范围）、may_become_explosive（混入空气后可能爆炸）、not_explosive。
         只考虑甲烷，火区存在其他可燃气体时结论偏乐观，需人工复核。"""
-        risk = explosion.classify(ch4_pct, o2_pct)
+        try:
+            risk = explosion.classify(ch4_pct, o2_pct)
+        except ValueError as exc:  # 只有 ToolError 的说明能传给 Agent
+            raise ToolError(str(exc)) from exc
         return {
             "ch4_pct": ch4_pct,
             "o2_pct": o2_pct,

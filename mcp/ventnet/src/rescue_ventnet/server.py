@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from rescue_contract.client import MineData
 
 from . import network
@@ -15,6 +16,14 @@ INSTRUCTIONS = (
 )
 
 
+def _user_error(fn, *args):
+    """调用网络计算；输入错误（如未知巷道）转成 ToolError，说明才能传给 Agent。"""
+    try:
+        return fn(*args)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
+
+
 def build_server(mine_data_target: Any | None = None) -> MCPServer:
     md = MineData(mine_data_target) if mine_data_target is not None else MineData.from_env()
     server = MCPServer("ventnet", instructions=INSTRUCTIONS)
@@ -23,7 +32,7 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
     async def downstream_roadways(source_roadway_id: str) -> list[dict[str, Any]]:
         """源头巷道下风侧会受有害气体影响的巷道，按估算到达时间（分钟）排序。"""
         net = await md.network()
-        return [{"roadway_id": e.roadway_id, "arrival_min": e.arrival_min} for e in network.downstream(net, source_roadway_id)]
+        return [{"roadway_id": e.roadway_id, "arrival_min": e.arrival_min} for e in _user_error(network.downstream, net, source_roadway_id)]
 
     @server.tool()
     async def threatened_personnel(source_roadway_id: str) -> dict[str, Any]:
@@ -31,12 +40,12 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
         这是补充撤人名单的依据；撤人本身由调度员按预案立即执行，不等待本结果。"""
         net = await md.network()
         people = await md.personnel()
-        return network.threatened(net, source_roadway_id, people)
+        return _user_error(network.threatened, net, source_roadway_id, people)
 
     @server.tool()
     async def escape_route(from_roadway_id: str, avoid_roadway_ids: list[str] | None = None) -> dict[str, Any]:
         """从指定巷道到地面出口或避难硐室的最短路线，可指定需避开的巷道。"""
         net = await md.network()
-        return network.escape_route(net, from_roadway_id, set(avoid_roadway_ids or []))
+        return _user_error(network.escape_route, net, from_roadway_id, set(avoid_roadway_ids or []))
 
     return server

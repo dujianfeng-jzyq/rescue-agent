@@ -11,6 +11,7 @@ from typing import Any
 
 import networkx as nx
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel, Field
 from rescue_contract.client import MineData
 from rescue_contract.models import DispatchLine, DispatchOrder, MineNetwork
@@ -63,7 +64,10 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
     @server.tool()
     async def estimate_inert_gas(leak_m3_min: float, current_o2_pct: float, target_o2_pct: float) -> dict[str, Any]:
         """估算把高温区氧浓度从 current 降到 target 所需的注氮流量（m³/h）。"""
-        return estimate_inerting(leak_m3_min, current_o2_pct, target_o2_pct)
+        try:
+            return estimate_inerting(leak_m3_min, current_o2_pct, target_o2_pct)
+        except ValueError as exc:  # 只有 ToolError 的说明能传给 Agent，其他异常只显示“执行出错”
+            raise ToolError(str(exc)) from exc
 
     @server.tool()
     async def draft_dispatch_order(items: list[ItemRequest], destination_node: str, purpose: str) -> DispatchOrder:
@@ -71,14 +75,14 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
         net = await md.network()
         g = _graph(net)
         if destination_node not in g:
-            raise ValueError(f"目的地节点不存在或不可达：{destination_node}")
+            raise ToolError(f"目的地节点不存在或不可达：{destination_node}")
         stock = await md.inventory()
         lines = []
         for req in items:
             candidates = [s for s in stock if s.item_type == req.item_type and s.quantity >= req.quantity]
             if not candidates:
                 have = sum(s.quantity for s in stock if s.item_type == req.item_type)
-                raise ValueError(f"{req.item_type} 库存不足：需要 {req.quantity}，现有 {have}")
+                raise ToolError(f"{req.item_type} 库存不足：需要 {req.quantity}，现有 {have}")
             best = min(candidates, key=lambda s: nx.shortest_path_length(g, s.depot_node, destination_node, weight="length"))
             dist = nx.shortest_path_length(g, best.depot_node, destination_node, weight="length")
             lines.append(
