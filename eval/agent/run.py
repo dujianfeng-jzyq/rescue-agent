@@ -145,7 +145,9 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float) -> 
         if all(s.turns_settled() for s in sessions) and time.time() - last_change >= quiet_s:
             return root, "settled"
         # 指挥 Agent 停下来问人（ask_user_question）也是正常收尾：评测不代答，按已有输出判定
-        if any(n == "ask_user_question" for n, _ in _unanswered(root)) and time.time() - last_change >= quiet_s:
+        # 子 Agent 还在工作时提问（如“要不要先给出要点”）不算收尾，等子 Agent 结束
+        children_done = all(c.turns_settled() for c in sessions if c is not root)
+        if children_done and any(n == "ask_user_question" for n, _ in _unanswered(root)) and time.time() - last_change >= quiet_s:
             return root, "asked_user"
         time.sleep(3)
     return grade.load_tree(root_id), "timeout"
@@ -206,7 +208,7 @@ def regrade(path: Path) -> list[dict]:
         root = grade.load_tree(old["root"])
         r = grade.grade(root, cases[old["case"]]["checks"])
         status = old["status"]
-        if status == "timeout" and any(n == "ask_user_question" for n, _ in _unanswered(root)):
+        if status == "timeout" and any(n == "ask_user_question" for n, _ in _unanswered(root)) and all(c.turns_settled() for c in root.walk() if c is not root):
             status = "asked_user"
         if r["llm_errors"]:
             status = "llm_error"
