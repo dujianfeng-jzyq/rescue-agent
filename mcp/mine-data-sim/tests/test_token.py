@@ -44,3 +44,25 @@ def test_conformance_over_http_without_token_is_rejected(token_server, monkeypat
     monkeypatch.delenv("RESCUE_MCP_TOKEN")
     results = asyncio.run(run_all(token_server))
     assert results[0][0] == "check_tools" and results[0][1] is not None
+
+
+def test_conformance_in_process_includes_input_errors():
+    from rescue_mine_data_sim.server import SimHolder, build_server
+
+    results = dict(asyncio.run(run_all(build_server(SimHolder("s2-slow-oxidation", manual_clock=True)))))
+    assert results["check_input_errors"] is None, results
+    assert all(err is None for err in results.values()), results
+
+
+def test_conformance_flags_adapter_hiding_error_reasons():
+    from mcp.server.mcpserver import MCPServer
+    from rescue_contract.conformance import check_input_errors
+
+    bad = MCPServer("bad-adapter")
+
+    @bad.tool()
+    def get_latest(sensor_ids: list[str] | None = None) -> list[dict]:
+        raise ValueError(f"未知测点：{sensor_ids}")  # 不是 ToolError，说明传不到客户端
+
+    with pytest.raises(AssertionError, match="错误说明没有传给客户端"):
+        asyncio.run(check_input_errors(bad))

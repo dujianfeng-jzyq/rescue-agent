@@ -46,6 +46,24 @@ async def check_tools(target: Any) -> None:
     _check(not missing, f"缺少工具：{sorted(missing)}")
 
 
+UNKNOWN_SENSOR = "NO-SUCH-SENSOR"
+
+
+async def check_input_errors(target: Any) -> None:
+    """输入错误（如未知测点）必须以工具错误返回、并说明原因。
+
+    MCP SDK 只把 ToolError（mcp.server.mcpserver.exceptions）的说明传给客户端；适配器若抛 ValueError 等，
+    Agent 只看到 “Error executing tool …”，不知道错在哪。"""
+    results = []
+    async with connect(target) as c:  # 在连接内只收集结果：在里面抛错会被包成 ExceptionGroup，说明看不清
+        for tool in ("get_latest", "get_readings"):
+            r = await c.call_tool(tool, {"sensor_ids": [UNKNOWN_SENSOR]})
+            results.append((tool, r.is_error, " ".join(getattr(x, "text", "") for x in r.content)))
+    for tool, is_error, text in results:
+        _check(is_error, f"{tool} 查询未知测点没有返回错误")
+        _check(UNKNOWN_SENSOR in text, f"{tool} 的错误说明没有传给客户端（应抛 ToolError 并写明未知测点）：{text[:80]}")
+
+
 async def check_network(md: MineData) -> None:
     net = await md.network()
     node_ids = {n.id for n in net.nodes}
@@ -114,6 +132,11 @@ async def run_all(target: Any) -> list[tuple[str, str | None]]:
     except Exception as exc:  # noqa: BLE001
         results.append(("check_tools", str(exc)))
         return results
+    try:
+        await check_input_errors(target)
+        results.append(("check_input_errors", None))
+    except Exception as exc:  # noqa: BLE001
+        results.append(("check_input_errors", f"{type(exc).__name__}: {exc}"))
     md = MineData(target)
     for check in CHECKS:
         try:
