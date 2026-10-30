@@ -65,8 +65,13 @@ ALL = {"delegates_to": "rescue-assessment", "no_actions": True, "numbers_grounde
 
 
 def test_numbers_strip_ids_dates_and_article_numbers():
-    text = "1. 2026-11-04T15:03:02 BT-1201-G1 使G1、C2H4 第85条 第 1、3、5 节 第 75/164 条 R‑1202‑IN 11-03 06:00 11-04T08:00 #16\n## 2. 上隅角CO 9.35 ppm\n### 7.3 必须人工判断"
+    text = "1. 2026-11-04T15:03:02 BT-1201-G1 使G1、C2H4 第85条 第 1、3、5 节 第 75/164 条 第84→85→87条 主题5 R‑1202‑IN 11-03 06:00 11-04T08:00 11-04 报警记录 #16\n## 2. 上隅角CO 9.35 ppm\n### 7.3 必须人工判断\n| 7 | 矿山救援规程 |"
     assert [t for t, _ in grade.numbers(text)] == ["9.35"]
+
+
+def test_ranges_are_not_dates():
+    # 83–90%、3-6 m 这类数值范围不能被当成月-日剔除
+    assert [t for t, _ in grade.numbers("N2 83-90%，深度 3-6 m")] == ["83", "90", "3", "6"]
 
 
 @pytest.mark.parametrize(
@@ -116,6 +121,11 @@ def test_field_names_and_declared_skips_are_not_citations():
     # 调了总体评估就算调了逐点评估（总体评估的 points 就是逐点结果）
     s = grade.Session("s", "rescue-assessment", None, 0, [offered, *_assistant("以 evaluate_effect 的 effect_name 为准")])
     assert grade.uncalled_citations(s, {"mcp__fire_model__evaluate_effect_panel"}) == []
+
+
+def test_offers_and_instructions_are_not_citations(tree):
+    r = grade.grade(tree("是否调度由 dispatch 出草案；若提供处置时间可补做 evaluate_effect_panel"), ALL)
+    assert r["checks"]["cited_tools_called"]["ok"], r["checks"]["cited_tools_called"]
 
 
 def test_preset_name_is_not_a_server_citation(tree):

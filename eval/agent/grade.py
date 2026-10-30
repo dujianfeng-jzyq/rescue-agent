@@ -91,8 +91,9 @@ class Session:
                 out.append("\n".join(c.get("text", "") for c in e["data"]["content"] if c.get("type") == "text"))
         return out
 
-    def outputs(self) -> list[str]:
-        """模型写给人或别的 Agent 的文字：assistant 的 text 块，以及 delegate / send_message 的消息正文。"""
+    def outputs(self, include_messages: bool = True) -> list[str]:
+        """模型写给人或别的 Agent 的文字：assistant 的 text 块，以及 delegate / send_message 的消息正文
+        （include_messages=False 时不含后者：给别的 Agent 的指令里提到工具不是引用）。"""
         out = []
         for e in self.events:
             if e["type"] != "assistant/message":
@@ -100,7 +101,7 @@ class Session:
             for c in e["data"]["message"]["content"]:
                 if c.get("type") == "text" and c["text"].strip():
                     out.append(c["text"])
-        for name, args in self.calls():
+        for name, args in self.calls() if include_messages else []:
             if name in ("delegate", "send_message"):
                 try:
                     a = json.loads(args)
@@ -174,12 +175,15 @@ def load_tree(root_id: str, sessions_dir: Path = SESSIONS) -> Session:
 _STRIP = [
     re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?"),  # 日期时间
     re.compile(r"(?<![\d.-])\d{1,2}-\d{1,2}(?=[T\s]*\d{1,2}:\d{2})"),  # 月-日（后跟时刻，如 11-03 06:00、11-04T08:00）
+    re.compile(r"(?<![\d.\-–])(?:0?[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?![\d.%℃]|\s*(?:ppm|%|℃|°C|m\b|人))"),  # 月-日（如“11-04 报警记录”）
     re.compile(r"(?<![\d.])\d{1,2}:\d{2}(?::\d{2})?(?![\d.])"),  # 时刻
     re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_‐‑‒–—][A-Za-z0-9]+)+"),  # 编号：BT-1201-G1、P-13、call_xxx（含 U+2011 等连字符）
     re.compile(r"(?<![A-Za-z0-9])[A-Za-z]+\d+[A-Za-z0-9]*"),  # G1、C2H4、CO2、s2
-    re.compile(r"第\s*\d+(?:\s*[、,，/／]\s*\d+)*\s*[条节章步轮项]"),  # 条号、节号：第85条、第 75/164 条
+    re.compile(r"第\s*\d+(?:\s*[、,，/／→~～至-]\s*\d+)*\s*[条节章步轮项]"),  # 条号、节号：第85条、第 75/164 条、第84→85→87条
+    re.compile(r"(?:主题|步骤|表|图|附件|阶段)\s*\d+"),  # 编号标签：主题5、表2
     re.compile(r"(?m)^\s*#+\s*\d+(?:\.\d+)*[.、]?\s"),  # 标题序号：## 5.、### 2.1
     re.compile(r"(?m)^\s*[(（]?\d+[.、)）]\s"),  # 列表序号
+    re.compile(r"(?m)^\s*\|\s*\d+\s*(?=\|)"),  # 表格首列序号：| 7 |
     re.compile(r"#\d+"),  # 验证项、用例编号
 ]
 _NUM = re.compile(r"\d+(?:\.\d+)?")
@@ -233,7 +237,8 @@ def _catalog(s: Session) -> set[str]:
 
 # 调用了键里的工具，就算调用过值里的工具：总体评估的输出就是逐点 evaluate_effect 的结果
 COVERS = {"evaluate_effect_panel": {"evaluate_effect"}}
-_NOT_DONE = re.compile(r"未做|未调用|没有调用|未执行|没有执行|无法调用")
+# 写明没做，或只是提议以后做（可补做、由 dispatch 出草案、如需再调），都不是引用依据
+_NOT_DONE = re.compile(r"未做|未调用|没有调用|未执行|没有执行|无法调用|补做|可调用|再调|如需|如需要|出草案|下一步|建议调用|可以调用")
 
 
 def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str] = frozenset()) -> list[str]:
@@ -245,7 +250,7 @@ def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str
     called_servers = {n.split("__")[1] for n in lineage_calls if n.startswith("mcp__")}
     called_tools = {n.split("__", 2)[2] for n in lineage_calls if n.startswith("mcp__")}
     called_tools |= {t for c in list(called_tools) for t in COVERS.get(c, ())}
-    text = "\n".join(s.outputs())
+    text = "\n".join(s.outputs(include_messages=False))
     missing = []
     for server in SERVERS:
         if server == "kb" or server == "actions":  # 太短或常作普通词，不按名字点名判定
