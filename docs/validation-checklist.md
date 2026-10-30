@@ -21,7 +21,7 @@
 | 13 | danger-full-access 下仍拦截 | `DSH_PERMISSION_MODE=danger-full-access` 启动，重复 #9 | 仍被拒绝（预检不依赖审批策略）；记录 #10 在此模式下是否还弹确认 | ✓ 2026-10-28（export `DSH_PERMISSION_MODE=danger-full-access` 启动）：缺注惰步骤的封闭方案不弹确认、直接被拒（第85条，另报现场条件过时），审计 denied；`publish_warning` 仍弹“requires confirmation by 通风部门负责人”，只有 Reject / Allow once，Reject 后审计 denied、台账不变——因为 `cordis.patch.yml` 把审批策略写死为 ask。过程：总指挥协调第一次以“发布前必须过合规”为由拒绝跳过审核、未调用 actions，经合规审核后再要求提交才触发网关。副作用：此模式下沙箱为 danger-full-access、审批为 ask，不匹配任何权限预设，`@deepseek-ai/dsh-permission-presets` 启动失败（“composed sandbox and approval defaults match no preset”），网页端没有权限选择器 |
 | 14 | 审计事件 | 检查 `var/audit/tool-actions.jsonl` | #9–#12 每次一行，状态正确 | ✓ 2026-10-28：#9–#12 共 5 次调用各一行，状态依次 denied / issued / issued / denied / denied，与实际一致 |
 | 15 | 上下文压缩 | s3 场景连续研判 2 小时（加速） | 不超上下文；压缩后仍记得已下发的指令 | ✓（压缩为手动触发）2026-10-28：s3、18 倍速，真实约 1 小时 50 分 = 模拟 0→31.8 h，总指挥协调同一会话 12 轮研判（每轮委派 rescue-assessment，部分轮次加 rescue-compliance，共 14 个子 Agent）。第 3 轮经人工确认下发 publish_warning（A-4f00d9e691，none）；第 5 轮起按指示不再提交。累计约 10M token（缓存命中 96–99%），上下文占用由 2% 线性涨到 19%，2 小时内**没有触发自动压缩**，未超上下文。随后手动 `/compact`：“Compacted 301 history items (~90990 tokens)”，占用 19%→10%；压缩后不调工具追问已下发指令，答出唯一一条 publish_warning、等级 none、回执 A-4f00d9e691、时间 16:34:03，与台账一致，并正确列出被合规判不通过和未提交的指令。注意：网页端发出 `/compact` 后页面立即断开会导致压缩被中止（“This operation was aborted”），需保持页面打开到完成。自动压缩在更长会话中的触发与效果仍未验证 |
-| 16 | 本地大模型 | `scripts/dev.sh --local-llm`（有可用端点时） | 能选中 rescue-local 模型并完成 #8 | 未验证：无可用本地大模型端点（`.env` 中仍为占位地址） |
+| 16 | 本地大模型 | `scripts/dev.sh --local-llm`（有可用端点时） | 能选中 rescue-local 模型并完成 #8 | ✓ 2026-10-29（qwen35-122b-a10b，OpenAI 兼容网关）：模型下拉出现 rescue-local 分组并可选中；指挥 Agent 调 delegate → rescue-assessment，两者都走 rescue-local，结果返回指挥 Agent 汇总；约 1 分钟、67K token，未调用 actions。**`scripts/dev.sh --local-llm` 本身启动失败**（`unknown option '--patch'`），本次手动按正确参数顺序启动，见下方“#16 本地大模型”。研判内容质量问题也见下方 |
 | 17 | `.env` 加载 | 不 export、只写 `.env` 时启动 | 确认 DSH_* 必须 export 的说法；如有变化更新 `scripts/dev.sh` | ✓ 2026-10-28：`DSH_HOME` 只写在 `.env` 时 DSH 找不到 rescue 配置档；export 后正常。`scripts/dev.sh` 无需改 |
 
 ## 已知需要关注的点
@@ -38,3 +38,8 @@
 - #15 长时间研判中发现（2026-10-28，s3）：
   - 乙烯/乙炔真实为 0（s3 高温点 90 ℃ 以上才出现）时，`fire_model` 的 `detect_stuck`（最近 6 点完全不变即判卡值）把它们判为“疑似卡值、已排除”，指标为 null；Agent 连续 10 轮报告“标志气体判据缺失、无法判定”，而不是“未检出”。已修复（6b2660e）：恒为 0 且同测点 CO 仍在变化时按未检出处理，整根束管卡住时仍排除。
   - 第 10 轮起 `check_realtime_alarms` 报第164条红线（束管 CO 上升速率超限），同时 `assess_warning_level` 仍为 none（第 11 轮才到 blue）；红线报警也没有进入 `get_events`。两套判据不一致，Agent 每轮都在提示这个矛盾。已处理：根因是第164条复燃判据对从未封闭的 s3 也生效。契约 0.2.0 新增 `mine_data.get_fire_areas`（火区台账），第164条只对台账中已封闭或已启封的火区检查；`assess_warning_level` 同时返回 `realtime_alarms`，等级与报警仍独立判定；`get_events` 说明改为只含监控系统自身事件。
+- #16 本地大模型（2026-10-29，qwen35-122b-a10b，s2）：
+  - `scripts/dev.sh --local-llm` 报 `error: unknown option '--patch'`：`--patch` 是 dsh 启动器参数，必须写在 app 参数 `--no-open` 之前，而脚本拼成了 `dsh rescue --no-open --patch ...`。手动 `dsh rescue --patch profiles/local-llm.patch.yml --no-open` 正常。待修。
+  - 该网关没有 `/models` 接口（`.env` 说明里“从 /v1/models 查模型 id”不适用），但 chat completions、流式输出和工具调用都正常，DSH 不依赖 `/models`。
+  - 本机代理环境变量 `ALL_PROXY=socks://...` 会让 MCP 客户端（httpx）报 `Unknown scheme for proxy URL`，`make smoke` 全部失败；`NO_PROXY` 的 `127.*` 通配写法 httpx 也不认。本次 unset 代理变量后启动。与本地大模型无关，但换机器部署时会遇到。
+  - 研判内容比 DeepSeek 弱，违反“数值只来自代码”的约定：研判 Agent 自行写出“>100℃ 才出现乙烯”“氧浓度降至 8% 以下”“CO 上升速率超过 1.0 ppm/h 立即启动应急响应”“束管加密至 30 分钟/次”“采空区氧浓度已降至安全水平”，均无工具依据；声称依据含“ventnet 通风网络分析”，实际未调用 ventnet；把指挥 Agent 转述的旧读数（G1/G2 氮气 85.3%/88.9%）与自己新取的计算结果（G2 92.0%）混在同一时刻下报告。指挥 Agent 委派 18 秒后就发消息催“请加快研判进度”。弱模型上线前需要输出侧约束（例如报告中的数值必须能在本轮工具结果里找到）和智能体端到端评测。
