@@ -40,7 +40,8 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
 
     @server.tool()
     async def gas_trend(sensor_id: str, measurand: Measurand, hours: float = 24) -> dict[str, Any]:
-        """单个测点某参数的趋势：最新值、上升速率（每小时）、数据质量说明。"""
+        """单个测点某参数的趋势：窗口内首个与最新可用值、变化量（最新减首个）、上升速率（每小时）、数据质量说明。
+        报告“升温多少”“上升多少”时照抄 change，不要自己相减。"""
         now = await md.now()
         rs = await md.readings([sensor_id], start=now - timedelta(hours=hours), end=now, measurands=[measurand.value])
         sibling = None
@@ -48,13 +49,17 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
             co = await md.readings([sensor_id], start=now - timedelta(hours=hours), end=now, measurands=[Measurand.CO.value])
             sibling = sorted(co, key=lambda r: r.ts)
         rep = check_series(f"{sensor_id}/{measurand.value}", sorted(rs, key=lambda r: r.ts), sibling)
+        first, last = (rep.usable[0], rep.usable[-1]) if rep.usable else (None, None)
         return {
             "sensor_id": sensor_id,
             "measurand": measurand.value,
             "points": len(rs),
             "usable_points": len(rep.usable),
-            "latest": rep.usable[-1].value if rep.usable else None,
-            "latest_ts": rep.usable[-1].ts.isoformat() if rep.usable else None,
+            "first": first.value if first else None,
+            "first_ts": first.ts.isoformat() if first else None,
+            "latest": last.value if last else None,
+            "latest_ts": last.ts.isoformat() if last else None,
+            "change": round(last.value - first.value, 3) if first and last else None,
             "rate_per_hour": warning.slope_per_hour(rep.usable),
             "data_quality": rep.flags,
         }

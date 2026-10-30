@@ -13,9 +13,9 @@ whenToUse: 需要判断工作面采空区是否有自燃征兆、给出或复核
 1. `mine_data.get_clock` 取矿井当前时间。
 2. `fire_model.check_realtime_alarms`：有实时红线报警（甲烷超限、复燃征兆）时，结论第一句就写报警，不等后续研判。
 3. `fire_model.assess_warning_level`：得到等级、触发条件、指标和数据质量说明。**等级照抄，不要自己升降级。**
-4. 对触发条件涉及的测点，用 `fire_model.gas_trend` 看 24 小时趋势（上升速率）。
+4. 对触发条件涉及的测点，用 `fire_model.gas_trend` 看 24 小时趋势（上升速率）。报告窗口内升高或下降了多少时照抄它的 `change`，不要自己用两个读数相减。
 5. 需要判断能否进入或封闭时，用该位置的 CH₄、O₂ 调 `fire_model.assess_explosion_risk`。
-6. 预警等级达到橙色及以上，或用户要求时，调 `ventnet.threatened_personnel` 列出受威胁人员。
+6. 预警等级达到橙色及以上，或用户要求时，调 `ventnet.threatened_personnel` 列出受威胁人员。各组人数、受威胁合计、井下合计照抄它的 `count`、`total_threatened`、`total_underground`，不要自己数人员名单。
 
 ## 解读要点
 

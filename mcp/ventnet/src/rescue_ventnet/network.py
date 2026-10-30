@@ -102,20 +102,25 @@ def escape_route(net: MineNetwork, from_roadway: str, avoid: set[str]) -> dict:
 
 
 def threatened(net: MineNetwork, source_roadway: str, people: list[PersonLocation]) -> dict:
+    """受威胁人员按巷道分组，附到达时间和避灾路线；不受威胁的人员也按巷道列出。
+    各组人数和合计都在这里算好，Agent 照抄即可，不要自己数。"""
     exposures = {e.roadway_id: e.arrival_min for e in downstream(net, source_roadway)}
     contaminated = set(exposures)
     groups: dict[str, list[str]] = {}
+    others: dict[str, list[str]] = {}
     for p in people:
-        if p.roadway_id in contaminated:
-            groups.setdefault(p.roadway_id, []).append(p.person_id)
+        (groups if p.roadway_id in contaminated else others).setdefault(p.roadway_id, []).append(p.person_id)
     result = []
     for roadway, persons in sorted(groups.items(), key=lambda kv: exposures[kv[0]]):
         route = escape_route(net, roadway, contaminated)
-        result.append({"roadway_id": roadway, "persons": persons, "arrival_min": exposures[roadway], "escape_route": route})
+        result.append({"roadway_id": roadway, "persons": persons, "count": len(persons), "arrival_min": exposures[roadway], "escape_route": route})
     return {
         "source_roadway": source_roadway,
         "contaminated_roadways": [{"roadway_id": r, "arrival_min": t} for r, t in sorted(exposures.items(), key=lambda kv: kv[1])],
         "threatened": result,
         "total_threatened": sum(len(x["persons"]) for x in result),
+        "not_threatened": [{"roadway_id": r, "persons": ps, "count": len(ps)} for r, ps in sorted(others.items())],
+        "total_not_threatened": sum(len(ps) for ps in others.values()),
+        "total_underground": len(people),
         "method": "网络拓扑 + 设计风量估算（未做风量解算），到达时间仅供参考",
     }

@@ -124,7 +124,13 @@ def test_s6_stuck_tube_still_excludes_its_ethylene():
     c = level("s6-sensor-faults", 36)
     assert "BT-1201-G2/CO：读数长时间不变，疑似卡值，已排除" in c.data_quality  # 整根束管卡住，assess 跳过该管
     r = _gas_trend("s6-sensor-faults", 36, "BT-1201-G2", "C2H4")
-    assert r["usable_points"] == 0 and r["latest"] is None and any("卡值" in f for f in r["data_quality"]), r
+    assert r["usable_points"] == 0 and r["latest"] is None and r["change"] is None and any("卡值" in f for f in r["data_quality"]), r
+
+
+def test_gas_trend_reports_change_over_window():
+    r = _gas_trend("s2-slow-oxidation", 48, "TP-1201-G1", "TEMP")
+    assert r["change"] == round(r["latest"] - r["first"], 3) and r["change"] > 0, r
+    assert r["first_ts"] < r["latest_ts"]
 
 
 def test_gas_trend_ethylene_zero_is_usable():

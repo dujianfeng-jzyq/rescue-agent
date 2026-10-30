@@ -38,3 +38,6 @@ def test_threatened_personnel_via_server():
     assert result["total_threatened"] >= 9  # 工作面 9 人 + 回风巷人员
     faces = [g for g in result["threatened"] if g["roadway_id"] == "R-1201-FACE"]
     assert faces and faces[0]["escape_route"]["reachable"]
+    # 人数都由代码给出：各组 count、受威胁 + 不受威胁 = 井下合计
+    assert all(g["count"] == len(g["persons"]) for g in result["threatened"] + result["not_threatened"])
+    assert result["total_threatened"] + result["total_not_threatened"] == result["total_underground"] > result["total_threatened"]
