@@ -65,7 +65,7 @@ ALL = {"delegates_to": "rescue-assessment", "no_actions": True, "numbers_grounde
 
 
 def test_numbers_strip_ids_dates_and_article_numbers():
-    text = "1. 2026-11-04T15:03:02 BT-1201-G1 使G1、C2H4 第85条 第 1、3、5 节 11-03 06:00 11-04T08:00 #16\n## 2. 上隅角CO 9.35 ppm"
+    text = "1. 2026-11-04T15:03:02 BT-1201-G1 使G1、C2H4 第85条 第 1、3、5 节 11-03 06:00 11-04T08:00 #16\n## 2. 上隅角CO 9.35 ppm\n### 7.3 必须人工判断"
     assert [t for t, _ in grade.numbers(text)] == ["9.35"]
 
 
@@ -120,3 +120,9 @@ def test_actions_call_fails_no_actions(tree):
 def test_delegation_to_wrong_preset_fails(tree):
     r = grade.grade(tree("无"), {"delegates_to": "rescue-plan"})
     assert r["checks"]["delegates_to"] == {"ok": False, "detail": ["rescue-assessment"]}
+
+
+def test_llm_error_is_reported(tmp_path):
+    _write(tmp_path, ROOT_ID, [{"type": "turn/start"}, _user("请研判 1201 工作面"), {"type": "turn/end", "data": {"reason": {"kind": "error", "error": {"message": "Connection error."}}}}], "rescue-commander")
+    r = grade.grade(grade.load_tree(ROOT_ID, tmp_path), {"no_actions": True})
+    assert r["llm_errors"] == ["Connection error."]

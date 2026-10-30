@@ -156,7 +156,8 @@ _STRIP = [
     re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)+"),  # 编号：BT-1201-G1、P-13、call_xxx
     re.compile(r"(?<![A-Za-z0-9])[A-Za-z]+\d+[A-Za-z0-9]*"),  # G1、C2H4、CO2、s2
     re.compile(r"第\s*\d+(?:\s*[、,，]\s*\d+)*\s*[条节章步轮项]"),  # 条号、节号
-    re.compile(r"(?m)^\s*(?:#+\s*)?[(（]?\d+[.、)）]\s"),  # 列表序号、标题序号
+    re.compile(r"(?m)^\s*#+\s*\d+(?:\.\d+)*[.、]?\s"),  # 标题序号：## 5.、### 2.1
+    re.compile(r"(?m)^\s*[(（]?\d+[.、)）]\s"),  # 列表序号
     re.compile(r"#\d+"),  # 验证项、用例编号
 ]
 _NUM = re.compile(r"\d+(?:\.\d+)?")
@@ -276,6 +277,13 @@ def grade(root: Session, checks: dict) -> dict:
         "model": root.model,
         "sessions": [{"id": s.id, "preset": s.preset, "model": s.model, "tokens": s.tokens()} for s in sessions],
         "settled": all(s.turns_settled() for s in sessions),
+        # 回合因模型调用失败（连接错误等）结束：这次运行测的是端点而不是 Agent
+        "llm_errors": [
+            ((reason.get("error") or {}).get("message") or "?")
+            for x in sessions
+            for e in x.events
+            if e["type"] == "turn/end" and (reason := (e.get("data") or {}).get("reason") or {}).get("kind") == "error"
+        ],
         "checks": results,
         "passed": all(r["ok"] for r in results.values()),
     }
@@ -284,7 +292,7 @@ def grade(root: Session, checks: dict) -> dict:
 def print_report(r: dict) -> None:
     print(f"会话 {r['root']}  模型 {r['model']}  {'已结束' if r['settled'] else '未结束'}")
     for s in r["sessions"]:
-        print(f"  {s['preset']:<20} {s['model']:<40} {s['tokens']:>8} token")
+        print(f"  {s['preset'] or '?':<20} {s['model'] or '（无模型回复）':<40} {s['tokens']:>8} token")
     for name, c in r["checks"].items():
         print(f"{'PASS' if c['ok'] else 'FAIL'}  {name}")
         for who, items in (c.get("approx") or {}).items():

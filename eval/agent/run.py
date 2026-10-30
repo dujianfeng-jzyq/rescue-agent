@@ -113,7 +113,8 @@ def find_root(prompt: str, since_ms: int, timeout_s: float) -> str:
 
 
 def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float) -> tuple[grade.Session, str]:
-    """全部会话的回合都结束、且 quiet_s 秒内没有新事件，视为结束。
+    """全部会话的回合都结束、且 quiet_s 秒内没有新事件，视为结束（settled）；
+    根会话停在 ask_user_question 等人回答时也视为结束（asked_user）。
 
     卡在人工确认（调用了 actions 却没有结果）时点“拒绝”，避免无人值守时一直挂着；这本身会被 no_actions 判为失败。"""
     deadline = time.time() + timeout_s
@@ -133,6 +134,9 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float) -> 
                 btn.first.click()
         if all(s.turns_settled() for s in sessions) and time.time() - last_change >= quiet_s:
             return root, "settled"
+        # 指挥 Agent 停下来问人（ask_user_question）也是正常收尾：评测不代答，按已有输出判定
+        if any(n == "ask_user_question" for n, _ in _unanswered(root)) and time.time() - last_change >= quiet_s:
+            return root, "asked_user"
         time.sleep(3)
     return grade.load_tree(root_id), "timeout"
 
@@ -155,22 +159,51 @@ def run_one(page: Page, case: dict, model: str | None, timeout_s: float, quiet_s
     root_id = find_root(case["prompt"], t0 - 5000, 120)
     root, status = wait_settled(root_id, page, timeout_s, quiet_s)
     r = grade.grade(root, case["checks"])
-    r.update(case=case["id"], requested_model=model, mine_now=mine_now, status=status, seconds=round(time.time() - t0 / 1000))
-    if status != "settled":
+    r.update(case=case["id"], requested_model=model, mine_now=mine_now, seconds=round(time.time() - t0 / 1000))
+    if r["llm_errors"]:
+        status = "llm_error"
+    r["status"] = status
+    if status in ("timeout", "llm_error"):
         r["passed"] = False
     return r
 
 
+VALID = ("settled", "asked_user")  # 模型调用失败或超时的运行不计入通过率
+
+
 def summarize(results: list[dict]) -> None:
-    print("\n== 汇总（通过次数 / 运行次数）")
+    print("\n== 汇总（通过次数 / 有效运行次数；模型调用失败、超时的运行另计）")
     groups: dict[tuple[str, str], list[dict]] = {}
     for r in results:
-        groups.setdefault((r["case"], r["model"] or r["requested_model"] or "?"), []).append(r)
-    for (case, model), rs in groups.items():
-        names = list(rs[0]["checks"])
-        cells = [f"{n} {sum(r['checks'][n]['ok'] for r in rs)}/{len(rs)}" for n in names]
-        tokens = sum(s["tokens"] for r in rs for s in r["sessions"]) // len(rs)
-        print(f"{case:<18} {model:<36} 全部通过 {sum(r['passed'] for r in rs)}/{len(rs)}  " + "  ".join(cells) + f"  平均 {tokens} token")
+        groups.setdefault((r["case"], r["requested_model"] or r["model"] or "?"), []).append(r)
+    for (case, model), runs in groups.items():
+        rs = [r for r in runs if r["status"] in VALID]
+        invalid = ", ".join(f"{r['status']} {sum(x['status'] == r['status'] for x in runs)}" for r in {x["status"]: x for x in runs if x not in rs}.values())
+        line = f"{case:<18} {model:<36} 全部通过 {sum(r['passed'] for r in rs)}/{len(rs)}"
+        if rs:
+            line += "  " + "  ".join(f"{n} {sum(r['checks'][n]['ok'] for r in rs)}/{len(rs)}" for n in rs[0]["checks"])
+            line += f"  平均 {sum(s['tokens'] for r in rs for s in r['sessions']) // len(rs)} token"
+        print(line + (f"  （另有 {invalid}）" if invalid else ""))
+
+
+def regrade(path: Path) -> list[dict]:
+    """用当前的判定规则重新判定已保存的运行（不重新提问）。"""
+    cases = {c["id"]: c for c in yaml.safe_load(CASES.read_text(encoding="utf-8"))}
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        old = json.loads(line)
+        root = grade.load_tree(old["root"])
+        r = grade.grade(root, cases[old["case"]]["checks"])
+        status = old["status"]
+        if status == "timeout" and any(n == "ask_user_question" for n, _ in _unanswered(root)):
+            status = "asked_user"
+        if r["llm_errors"]:
+            status = "llm_error"
+        r.update({k: old[k] for k in ("case", "requested_model", "mine_now", "seconds")}, status=status)
+        if status in ("timeout", "llm_error"):
+            r["passed"] = False
+        out.append(r)
+    return out
 
 
 def main(argv: list[str]) -> int:
@@ -182,7 +215,15 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--timeout", type=float, default=900, help="单次运行超时秒数")
     ap.add_argument("--quiet", type=float, default=20, help="无新事件多少秒视为结束")
     ap.add_argument("--headed", action="store_true", help="显示浏览器窗口")
+    ap.add_argument("--regrade", type=Path, help="不提问，只按当前规则重新判定这个 results.jsonl")
     a = ap.parse_args(argv)
+    if a.regrade:
+        results = regrade(a.regrade)
+        for r in results:
+            print(f"== {r['case']}  {r['requested_model']}  {r['status']}")
+            grade.print_report(r)
+        summarize(results)
+        return 0 if all(r["passed"] for r in results) else 1
     if not a.url:
         ap.error("需要 --url 或 RESCUE_DSH_URL")
 
@@ -208,7 +249,7 @@ def main(argv: list[str]) -> int:
                         with (out_dir / "results.jsonl").open("a", encoding="utf-8") as f:
                             f.write(json.dumps(r, ensure_ascii=False) + "\n")
                         grade.print_report(r)
-                        print(f"   {r['status']}，{r['seconds']} 秒，矿井时间 {r['mine_now']}", flush=True)
+                        print(f"   {r['status']}，{r['seconds']} 秒，矿井时间 {r['mine_now']}" + (f"，模型调用失败：{r['llm_errors'][0]}" if r["llm_errors"] else ""), flush=True)
         finally:
             if original and a.model:
                 new_session(page)
