@@ -64,6 +64,15 @@
               headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
               toolCallTimeoutMs: 60000
               failOnStartupError: false
+          - id: mcp-kb # 研判报告引用规程条文（照抄 document、article）
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: kb
+              transport: streamable-http
+              url: !!js "process.env.RESCUE_MCP_KB_URL ?? 'http://127.0.0.1:8105/mcp'"
+              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              toolCallTimeoutMs: 60000
+              failOnStartupError: false
           - id: compaction
             name: cordis:group
             group: true

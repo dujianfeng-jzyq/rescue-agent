@@ -19,7 +19,7 @@
 | 预设 | 挂载 MCP | 其他 | 说明 |
 | --- | --- | --- | --- |
 | rescue-commander（默认） | mine_data, fire_model, actions | delegate、ask_user、todo | 唯一能下指令的 Agent |
-| rescue-assessment | mine_data, fire_model, ventnet | — | 预警研判、指挥部研判报告 |
+| rescue-assessment | mine_data, fire_model, ventnet, kb | — | 预警研判、指挥部研判报告 |
 | rescue-dispatch | mine_data, dispatch | — | 物资、队伍、调度单草案 |
 | rescue-plan | mine_data, ventnet, kb | — | 防灭火 / 封闭 / 启封方案，含红线自查 |
 | rescue-compliance | kb | — | 条文检索、方案合规审查 |

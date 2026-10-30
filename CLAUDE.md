@@ -54,4 +54,4 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
 - 真实 DSH 0.2.1-rc.4 验证清单 17 项全部通过（`docs/validation-checklist.md`），`pnpm-lock.yaml` 已提交。其中 #15 的自动压缩未触发，靠手动 `/compact`；网页端权限选择器只保留审批为 ask 的预设。
 - `fire_model` 除预警等级外，还给出自燃发展阶段（`assess_warning_level` 的 stage）和处置效果（`evaluate_effect_panel` 总体结论、`evaluate_effect` 单点）；判据在 `thresholds.yaml` 的 stage、effect 两节，均为占位值。
 - 智能体端到端评测（DeepSeek deepseek-flash，各 3 次）：`s2-assess-1201` 全部通过 3/3，`s2-effect-after-inerting` 2/3（剩余问题是 Agent 偶尔自行推算时长或取整）。本地 qwen35-122b-a10b 不适合担任救援 Agent（不委派、编造阈值），不再纳入评测。
-- 待办：专家审定阈值（含阶段、效果判据）/场景/技能；评测补充用例（升级应急响应、封闭方案、人工确认被拒）；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；研判预设未挂载 kb，无法照抄规程条文（其预设提示词却要求引用）；kb 尚未接入 RAGFlow，目前只有本地降级。
+- 待办：专家审定阈值（含阶段、效果判据）/场景/技能；评测补充用例（升级应急响应、封闭方案、人工确认被拒）；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；kb 接入 RAGFlow（目前只有本地降级）。
