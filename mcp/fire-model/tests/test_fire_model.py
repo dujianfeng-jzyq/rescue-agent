@@ -280,3 +280,52 @@ def test_effect_noise_band_counts_as_flat():
     after = series([20 + 0.002 * i for i in range(13)], t0)  # 0.002/h，噪声
     r = evaluate(t0, t0 + timedelta(hours=12), before, after, {}, cfg["stage"], cfg["effect"], cfg["effect"]["flat_rate"]["CO"])
     assert r["effect"] == "controlled" and r["rate_after_per_hour"] == 0.002, r
+
+
+def _panel_effect(act: bool, after_h: float) -> dict:
+    from mcp.client import Client
+    from rescue_fire_model.server import build_server
+
+    holder, _ = sim("s2-slow-oxidation", 48)
+    since = holder.engine.now().replace(microsecond=0)
+    if act:
+        holder.engine.apply("inert_injection", {"rate_m3_h": 1000})
+        holder.engine.apply("leak_sealing", {"reduction": 0.5})
+    holder.engine.clock.advance(after_h)
+
+    async def go():
+        async with Client(build_server(build_mine(holder))) as c:
+            return (await c.call_tool("evaluate_effect_panel", {"since": since.isoformat()})).structured_content
+
+    return asyncio.run(go())
+
+
+def test_panel_effect_s2_with_and_without_treatment():
+    r = _panel_effect(True, 24)
+    assert r["overall"] == "continuing", r
+    # 发火指标测点：采空区束管 CO、采空区测温、非进风侧安全监控 CO（不含进风巷 SM-1201-IN）
+    assert {(p["sensor_id"], p["measurand"]) for p in r["points"]} >= {("BT-1201-G1", "CO"), ("TP-1201-G1", "TEMP"), ("SM-1201-UC", "CO")}
+    assert "SM-1201-IN" not in {p["sensor_id"] for p in r["points"]}
+    assert sum(r["counts"].values()) == r["evaluated"] == len(r["points"])
+    assert _panel_effect(False, 24)["overall"] == "worsening"
+    assert _panel_effect(True, 6)["overall"] == "insufficient"
+
+
+@pytest.mark.parametrize(
+    ("effects", "expected"),
+    [
+        (["controlled", "controlled", "insufficient"], "controlled"),  # 观测不足的测点不参与
+        (["controlled", "continuing"], "continuing"),
+        (["controlled", "continuing", "worsening"], "worsening"),
+        (["insufficient", "insufficient"], "insufficient"),
+    ],
+)
+def test_panel_overall_rule(effects, expected):
+    from datetime import datetime
+
+    from rescue_fire_model.stage import EFFECT_NAMES, overall
+
+    keys = ("value_at_since", "latest", "change_since", "rate_before_per_hour", "rate_after_per_hour", "rate_reduction_pct")
+    points = [{"sensor_id": f"S{i}", "measurand": "CO", "effect": e, "effect_name": EFFECT_NAMES[e], "new_marker_gases": [], **dict.fromkeys(keys)} for i, e in enumerate(effects)]
+    t = datetime(2026, 11, 4, 8)
+    assert overall(points, t, t)["overall"] == expected

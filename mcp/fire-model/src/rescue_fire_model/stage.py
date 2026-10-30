@@ -100,6 +100,10 @@ def evaluate(
     def _r(v: float | None) -> float | None:
         return round(v, 3) if v is not None else None
 
+    reduction = None
+    if rate_before is not None and rate_after is not None and rate_before > 0:
+        reduction = round((1 - rate_after / rate_before) * 100, 1)
+
     return {
         "since": since.isoformat(),
         "as_of": now.isoformat(),
@@ -109,10 +113,43 @@ def evaluate(
         "change_since": _r(after[-1].value - before[-1].value) if after and before else None,
         "rate_before_per_hour": _r(rate_before),
         "rate_after_per_hour": _r(rate_after),
+        "rate_reduction_pct": reduction,  # 处置后速率比处置前降低的百分比（处置前在上升时才有）
         "flat_rate_per_hour": flat,
         "new_marker_gases": new_markers,
         "effect": effect,
         "effect_name": EFFECT_NAMES[effect],
         "basis": basis,
         "method": "处置前后速率比较（thresholds.yaml 的 effect 节）。判据为演示占位值，需按本矿制度审定",
+    }
+
+
+def overall(points: list[dict[str, Any]], since: datetime, now: datetime) -> dict[str, Any]:
+    """汇总逐测点效果。规则（演示占位，需审定）：任一恶化→恶化；全部已受控→已受控；否则需继续处置。
+    观测时间不足（insufficient）的测点单列，不参与总体结论。"""
+    counts = {EFFECT_NAMES[k]: sum(p["effect"] == k for p in points) for k in ("controlled", "continuing", "worsening", "insufficient")}
+    judged = [p for p in points if p["effect"] != "insufficient"]
+    if not judged:
+        result, basis = "insufficient", ["全部测点观测时间或数据不足"]
+    elif any(p["effect"] == "worsening" for p in judged):
+        result = "worsening"
+        basis = ["恶化的测点：" + "、".join(f"{p['sensor_id']}/{p['measurand']}" for p in judged if p["effect"] == "worsening")]
+    elif all(p["effect"] == "controlled" for p in judged):
+        result, basis = "controlled", [f"参与判定的 {len(judged)} 个测点全部已受控"]
+    else:
+        result = "continuing"
+        basis = [f"参与判定的 {len(judged)} 个测点中 {counts[EFFECT_NAMES['controlled']]} 个已受控、{counts[EFFECT_NAMES['continuing']]} 个需继续处置，无恶化"]
+    return {
+        "since": since.isoformat(),
+        "as_of": now.isoformat(),
+        "overall": result,
+        "overall_name": EFFECT_NAMES[result],
+        "basis": basis,
+        "evaluated": len(points),
+        "judged": len(judged),
+        "counts": counts,
+        "points": [
+            {k: p[k] for k in ("sensor_id", "measurand", "effect", "effect_name", "value_at_since", "latest", "change_since", "rate_before_per_hour", "rate_after_per_hour", "rate_reduction_pct", "new_marker_gases")}
+            for p in points
+        ],
+        "method": "逐测点处置前后速率比较后汇总（thresholds.yaml 的 effect 节；汇总规则见工具说明）。判据为演示占位值，需按本矿制度审定",
     }

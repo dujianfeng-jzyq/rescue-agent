@@ -26,5 +26,5 @@
     no_actions: true
     numbers_grounded: true
     cited_tools_called: true
-    tools_called: [evaluate_effect]
+    tools_called: [evaluate_effect_panel]
     effect_reported: true

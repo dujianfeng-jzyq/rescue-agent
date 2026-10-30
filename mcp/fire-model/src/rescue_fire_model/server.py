@@ -9,7 +9,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from rescue_contract.client import MineData
-from rescue_contract.models import Measurand, MineTime
+from rescue_contract.models import AirwayKind, Measurand, MineTime, SensorSource
 
 from . import alarms, explosion, stage, warning
 from .quality import check_series
@@ -75,12 +75,38 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
         速率绝对值小于 flat_rate_per_hour 按“不变”处理。
         effect：controlled（已受控）/ continuing（需继续处置）/ worsening（恶化）/ insufficient（观测时间不足）。
         报告效果时照抄 effect_name、速率和 basis，不要自己比较读数下结论。"""
+        return await effect_at(sensor_id, since, measurand, warning.load_thresholds(), await md.now())
+
+    @server.tool()
+    async def evaluate_effect_panel(since: MineTime, panel: str = "1201") -> dict[str, Any]:
+        """工作面处置效果的总体评估：对该工作面全部发火指标测点（采空区束管 CO、采空区测温、
+        非进风侧安全监控 CO）逐个做 evaluate_effect，给出逐点结果、各结论的测点数和总体结论。
+        总体结论：任一测点恶化→恶化；全部已受控→已受控；否则需继续处置；观测时间不足的测点不参与总体结论。
+        报告时照抄 overall_name、counts、points，不要自己数测点或汇总；要细看单个测点用 evaluate_effect。"""
         cfg = warning.load_thresholds()
+        now = await md.now()
+        net = await md.network()
+        intake = {r.id for r in net.roadways if r.kind == AirwayKind.INTAKE}
+        targets = []
+        for sen in await md.sensors():
+            if panel not in sen.id:
+                continue
+            if sen.source == SensorSource.BUNDLE_TUBE and Measurand.CO in sen.measurands:
+                targets.append((sen.id, Measurand.CO))
+            elif sen.source == SensorSource.TEMPERATURE and Measurand.TEMPERATURE in sen.measurands:
+                targets.append((sen.id, Measurand.TEMPERATURE))
+            elif sen.source == SensorSource.SAFETY_MONITOR and Measurand.CO in sen.measurands and sen.roadway_id not in intake:
+                targets.append((sen.id, Measurand.CO))
+        if not targets:
+            raise ToolError(f"工作面 {panel} 没有可用于效果评估的发火指标测点")
+        points = [await effect_at(sid, since, m, cfg, now) for sid, m in targets]
+        return {"panel": panel, **stage.overall(points, since, now)}
+
+    async def effect_at(sensor_id: str, since, measurand: Measurand, cfg: dict, now) -> dict[str, Any]:
         ecfg, scfg = cfg["effect"], cfg.get("stage", {})
         flat = ecfg.get("flat_rate", {})
         if measurand.value not in flat:
             raise ToolError(f"{measurand.value} 不是发火指标，不能用于效果评估；可用：{'、'.join(flat)}")
-        now = await md.now()
         start = since - timedelta(hours=ecfg["baseline_h"])
 
         async def usable(m: Measurand, a, b, sibling: Measurand | None = None):

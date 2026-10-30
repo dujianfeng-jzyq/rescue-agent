@@ -15,7 +15,8 @@
 - cited_tools_called: true  输出里点名的 MCP 服务或工具，在本会话或其上下级会话里确实调用过
 - stage_reported: true      总指挥协调的最后回复里写了 assess_warning_level 最近一次给出的自燃发展阶段（stage_name）
 - tools_called: [<工具>]     这些工具（不带 mcp__ 前缀的短名）在整次运行中至少调用过一次
-- effect_reported: true     总指挥协调的最后回复里写了 evaluate_effect 给出的某个效果结论（effect_name）
+- effect_reported: true     总指挥协调的最后回复里写了效果评估工具给出的结论（evaluate_effect_panel 的 overall_name；
+                            没调总体评估时取 evaluate_effect 的 effect_name）
 
 数值溯源是启发式的，局限见 eval/README.md。
 """
@@ -320,15 +321,12 @@ def grade(root: Session, checks: dict) -> dict:
         results["tools_called"] = {"ok": not missing, "detail": missing}
 
     if checks.get("effect_reported"):
-        effects = sorted(
-            {
-                json.loads(text).get("effect_name")
-                for s in sessions
-                for name, text in s.tool_results()
-                if name == "mcp__fire_model__evaluate_effect" and text.lstrip().startswith("{")
-            }
-            - {None}
-        )
+        def names(tool: str, key: str) -> list[str]:
+            return sorted(
+                {json.loads(t).get(key) for s in sessions for n, t in s.tool_results() if n == tool and t.lstrip().startswith("{")} - {None}
+            )
+
+        effects = names("mcp__fire_model__evaluate_effect_panel", "overall_name") or names("mcp__fire_model__evaluate_effect", "effect_name")
         final = root.final_text()
         results["effect_reported"] = {"ok": any(e in final for e in effects), "detail": {"tool": effects}}
 
