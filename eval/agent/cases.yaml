@@ -12,3 +12,19 @@
     numbers_grounded: true
     cited_tools_called: true
     stage_reported: true
+
+- id: s2-effect-after-inerting
+  description: 注氮加堵漏 24 小时后请求效果评估（第 2 阶段；场景设计的结论是“需继续处置”）
+  scenario: s2-slow-oxidation
+  apply: # 与 eval/expectations.yaml 同格式；第一次处置的矿井时间填入提问的 {since}
+    - {at_h: 48, type: inert_injection, params: {rate_m3_h: 1000}}
+    - {at_h: 48, type: leak_sealing, params: {reduction: 0.5}, roadways: [R-1201-RET]}
+  at_h: 72
+  prompt: 1201 工作面自 {since} 起开始注氮并封堵回风侧漏风，请评估处置效果
+  checks:
+    delegates_to: rescue-assessment
+    no_actions: true
+    numbers_grounded: true
+    cited_tools_called: true
+    tools_called: [evaluate_effect]
+    effect_reported: true

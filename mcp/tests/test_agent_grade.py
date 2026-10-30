@@ -119,6 +119,11 @@ def test_preset_name_is_not_a_server_citation(tree):
     assert r["checks"]["cited_tools_called"]["ok"]
 
 
+def test_server_declared_not_called_is_not_a_citation(tree):
+    r = grade.grade(tree("ventnet 未调用（等级未达橙色）"), ALL)
+    assert r["checks"]["cited_tools_called"]["ok"]
+
+
 def test_citation_backed_by_parent_call_passes(tree):
     r = grade.grade(tree("依据：ventnet 通风网络分析", root_calls=[("c3", "mcp__ventnet__escape_route", {})]), ALL)
     assert r["checks"]["cited_tools_called"]["ok"]
@@ -136,6 +141,23 @@ def test_stage_reported(tmp_path):
         events = [{"type": "turn/start"}, _user("请研判"), *_assistant("", [("c1", "mcp__fire_model__assess_warning_level", {})]), _result("c1", result), *_assistant(final), {"type": "turn/end"}]
         _write(base, ROOT_ID, events, "rescue-commander")
         assert grade.grade(grade.load_tree(ROOT_ID, base), {"stage_reported": True})["checks"]["stage_reported"]["ok"] is ok
+
+
+def test_effect_reported_and_tools_called(tmp_path):
+    result = json.dumps({"effect": "continuing", "effect_name": "需继续处置"}, ensure_ascii=False)
+    checks = {"tools_called": ["evaluate_effect", "gas_trend"], "effect_reported": True}
+    events = [
+        {"type": "turn/start"},
+        _user("请评估处置效果"),
+        *_assistant("", [("c1", "mcp__fire_model__evaluate_effect", {"sensor_id": "BT-1201-G1"})]),
+        _result("c1", result),
+        *_assistant("效果评估：需继续处置"),
+        {"type": "turn/end"},
+    ]
+    _write(tmp_path, ROOT_ID, events, "rescue-commander")
+    r = grade.grade(grade.load_tree(ROOT_ID, tmp_path), checks)
+    assert r["checks"]["effect_reported"]["ok"]
+    assert r["checks"]["tools_called"] == {"ok": False, "detail": ["gas_trend"]}
 
 
 def test_delegation_to_wrong_preset_fails(tree):

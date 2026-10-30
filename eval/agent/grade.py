@@ -14,6 +14,8 @@
 - numbers_grounded: true    每个会话输出的数值都能在它看到的材料里找到（见 check_numbers）
 - cited_tools_called: true  输出里点名的 MCP 服务或工具，在本会话或其上下级会话里确实调用过
 - stage_reported: true      总指挥协调的最后回复里写了 assess_warning_level 最近一次给出的自燃发展阶段（stage_name）
+- tools_called: [<工具>]     这些工具（不带 mcp__ 前缀的短名）在整次运行中至少调用过一次
+- effect_reported: true     总指挥协调的最后回复里写了 evaluate_effect 给出的某个效果结论（effect_name）
 
 数值溯源是启发式的，局限见 eval/README.md。
 """
@@ -226,7 +228,7 @@ def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str
     """输出里点名的服务（如 ventnet）或工具（如 threatened_personnel），在本会话及其上下级会话里都没有调用过。
 
     不算点名：名字同时是已调用工具结果里的字段（如 threatened_personnel 结果里的 escape_route）；
-    名字前后 30 字内写明“未做/未调用”等（如实说明没做，不是冒称依据）。"""
+    名字前后 40 字内写明“未做/未调用”等（如实说明没做，不是冒称依据）。"""
     tools = {name.split("__", 2)[2]: name for name in _catalog(s)}
     called_servers = {n.split("__")[1] for n in lineage_calls if n.startswith("mcp__")}
     called_tools = {n.split("__", 2)[2] for n in lineage_calls if n.startswith("mcp__")}
@@ -236,7 +238,8 @@ def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str
         if server == "kb" or server == "actions":  # 太短或常作普通词，不按名字点名判定
             continue
         # 前面不能是连字符：rescue-dispatch 是预设名，不是在引用 dispatch 服务
-        if re.search(rf"(?<![A-Za-z_-]){server}(?![A-Za-z_-])", text) and server not in called_servers:
+        hits = list(re.finditer(rf"(?<![A-Za-z_-]){server}(?![A-Za-z_-])", text))
+        if server not in called_servers and any(not _NOT_DONE.search(text[max(0, m.start() - 40) : m.end() + 40]) for m in hits):
             missing.append(server)
     for tool, full in tools.items():
         if full.startswith("mcp__actions__") or tool in result_keys:  # 发布类工具通常是在建议下发指令；同名字段不是引用
@@ -244,7 +247,7 @@ def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str
         if tool in called_tools:
             continue
         hits = [m for m in re.finditer(rf"(?<![A-Za-z_]){tool}(?![A-Za-z_])", text)]
-        if any(not _NOT_DONE.search(text[max(0, m.start() - 30) : m.end() + 30]) for m in hits):
+        if any(not _NOT_DONE.search(text[max(0, m.start() - 40) : m.end() + 40]) for m in hits):
             missing.append(tool)
     return sorted(set(missing))
 
@@ -302,6 +305,24 @@ def grade(root: Session, checks: dict) -> dict:
         want = next((n for n in reversed(names) if n), None)
         final = root.final_text()
         results["stage_reported"] = {"ok": want is not None and want in final, "detail": {"tool": want}}
+
+    if checks.get("tools_called"):
+        called = {n.split("__", 2)[2] for n in all_calls if n.startswith("mcp__")}
+        missing = [t for t in checks["tools_called"] if t not in called]
+        results["tools_called"] = {"ok": not missing, "detail": missing}
+
+    if checks.get("effect_reported"):
+        effects = sorted(
+            {
+                json.loads(text).get("effect_name")
+                for s in sessions
+                for name, text in s.tool_results()
+                if name == "mcp__fire_model__evaluate_effect" and text.lstrip().startswith("{")
+            }
+            - {None}
+        )
+        final = root.final_text()
+        results["effect_reported"] = {"ok": any(e in final for e in effects), "detail": {"tool": effects}}
 
     return {
         "root": root.id,

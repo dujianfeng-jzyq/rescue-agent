@@ -50,10 +50,20 @@ def sim(path: str, body: dict) -> dict:
         return json.loads(resp.read())
 
 
-def setup_sim(case: dict) -> str:
-    """重置场景为手动时钟（评测期间不走），快进到用例时刻。返回矿井时间。"""
+def setup_sim(case: dict) -> tuple[str, dict[str, str]]:
+    """重置场景为手动时钟（评测期间不走），按 apply 在指定时刻施加处置，快进到用例时刻。
+
+    返回（矿井时间, 提问模板变量）：since 是第一次处置的矿井时间（精确到秒）。"""
     sim("/scenario", {"id": case["scenario"], "manual": True})
-    return sim("/advance", {"hours": float(case.get("at_h", 0))})["now"]
+    t, fmt = 0.0, {}
+    for act in sorted(case.get("apply", []), key=lambda a: a["at_h"]):
+        if act["at_h"] > t:
+            sim("/advance", {"hours": act["at_h"] - t})
+            t = act["at_h"]
+        body = {"type": act["type"], "params": act.get("params", {}), "roadways": act.get("roadways", []), "source": "eval"}
+        fmt.setdefault("since", sim("/interventions", body)["applied_at"][:19])
+    now = sim("/advance", {"hours": float(case.get("at_h", 0)) - t})["now"]
+    return now, fmt
 
 
 # ── 网页端操作 ──────────────────────────────────────────────────────────────
@@ -150,13 +160,14 @@ def _unanswered(s: grade.Session) -> list[tuple[str, str]]:
 
 
 def run_one(page: Page, case: dict, model: str | None, timeout_s: float, quiet_s: float) -> dict:
-    mine_now = setup_sim(case)
+    mine_now, fmt = setup_sim(case)
+    prompt = case["prompt"].format(**fmt)
     new_session(page)
     if model:
         select_model(page, model)
     t0 = int(time.time() * 1000)
-    send(page, case["prompt"])
-    root_id = find_root(case["prompt"], t0 - 5000, 120)
+    send(page, prompt)
+    root_id = find_root(prompt, t0 - 5000, 120)
     root, status = wait_settled(root_id, page, timeout_s, quiet_s)
     r = grade.grade(root, case["checks"])
     r.update(case=case["id"], requested_model=model, mine_now=mine_now, seconds=round(time.time() - t0 / 1000))

@@ -29,9 +29,9 @@ make eval-agent ARGS="--url 'http://127.0.0.1:3080/?token=…' \
 uv run --project mcp python eval/agent/grade.py <会话 id>   # 对任意已有会话离线判定
 ```
 
-- 用例在 `agent/cases.yaml`：场景 + 模拟时刻 + 对总指挥协调的提问 + 判定规则。运行时把模拟矿井重置为手动时钟并快进到该时刻，评测期间时钟不走（避免 #8 那样指挥与子 Agent 取数相差十几个模拟小时）。
+- 用例在 `agent/cases.yaml`：场景 + 模拟时刻 + 对总指挥协调的提问 + 判定规则。可用 `apply` 在指定时刻施加处置（格式同 `expectations.yaml`），第一次处置的矿井时间填入提问里的 `{since}`。运行时把模拟矿井重置为手动时钟并快进到该时刻，评测期间时钟不走（避免 #8 那样指挥与子 Agent 取数相差十几个模拟小时）。
 - `agent/run.py` 经 DSH 网页端提问（Playwright 无头浏览器）。DSH 0.2.1-rc.4 的 headless 和 ACP 入口不支持 Agent 预设，只能这样驱动。`--model` 取网页模型下拉里的 `提供方/模型 id`；网页端选模型会改写配置档的默认模型，跑完自动恢复原来的。
-- `agent/grade.py` 读 `.dsh-home/sessions` 下的会话日志判定，规则：委派到指定预设、未调用 actions、输出的数值都能在该 Agent 看到的材料（工具结果、工具参数、收到的消息，含技能原文）里找到、点名的服务或工具确实调用过。
+- `agent/grade.py` 读 `.dsh-home/sessions` 下的会话日志判定，规则：委派到指定预设、未调用 actions、输出的数值都能在该 Agent 看到的材料（工具结果、工具参数、收到的消息，含技能原文）里找到、点名的服务或工具确实调用过、调用了指定工具、最后回复里写了工具给出的自燃发展阶段或处置效果结论。规则全文见 `grade.py` 文件头。
 - 每个用例重复多次，按“通过次数/有效运行次数”汇总；明细写 `var/eval/agent/<时间>/results.jsonl`。
 - 运行结束方式：`settled`（全部回合结束）、`asked_user`（指挥 Agent 停在 ask_user_question 等人回答，评测不代答，按已有输出判定）、`timeout`、`llm_error`（模型调用失败，如本地端点连接错误；测的是端点不是 Agent）。后两种不计入通过率。
 - 判定规则改了以后，`run.py --regrade var/eval/agent/<时间>/results.jsonl` 按新规则重新判定已保存的运行，不重新提问。
