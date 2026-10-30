@@ -130,6 +130,7 @@ def test_s6_stuck_tube_still_excludes_its_ethylene():
 def test_gas_trend_reports_change_over_window():
     r = _gas_trend("s2-slow-oxidation", 48, "TP-1201-G1", "TEMP")
     assert r["change"] == round(r["latest"] - r["first"], 3) and r["change"] > 0, r
+    assert r["rate_per_hour"] == round(r["rate_per_hour"], 3)  # 与其他输出一样保留 3 位，Agent 照抄不出长尾数
     assert r["first_ts"] < r["latest_ts"]
 
 

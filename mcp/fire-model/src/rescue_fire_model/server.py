@@ -63,7 +63,7 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
             "latest": last.value if last else None,
             "latest_ts": last.ts.isoformat() if last else None,
             "change": round(last.value - first.value, 3) if first and last else None,
-            "rate_per_hour": warning.slope_per_hour(rep.usable),
+            "rate_per_hour": round(rate, 3) if (rate := warning.slope_per_hour(rep.usable)) is not None else None,
             "data_quality": rep.flags,
         }
 

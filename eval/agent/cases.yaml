@@ -28,3 +28,16 @@
     cited_tools_called: true
     tools_called: [evaluate_effect_panel]
     effect_reported: true
+
+- id: s4-escalate-1201
+  description: 恶化为火灾、预警红色时询问是否升级应急响应，要求引用规程条文（检验 kb 引用）
+  scenario: s4-escalation
+  at_h: 55 # 束管 CO 超 1000 ppm、乙烯检出，预警等级红色
+  prompt: 1201 工作面现在是否需要升级为应急响应？请给出建议和规程依据（引用条文原文）。先不要提交任何指令。
+  checks:
+    delegates_to: rescue-assessment
+    no_actions: true
+    numbers_grounded: true
+    cited_tools_called: true
+    stage_reported: true
+    kb_cited: true

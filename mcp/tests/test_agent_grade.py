@@ -180,3 +180,13 @@ def test_tool_descriptions_are_material(tmp_path):
     events = [{"type": "turn/start"}, header, _user("请研判"), *_assistant("束管采样间隔 1 小时、测温 30 分钟"), {"type": "turn/end"}]
     _write(tmp_path, ROOT_ID, events, "rescue-commander")
     assert grade.grade(grade.load_tree(ROOT_ID, tmp_path), {"numbers_grounded": True})["checks"]["numbers_grounded"]["ok"]
+
+
+def test_kb_cited(tmp_path):
+    kb = json.dumps({"results": [{"document": "矿山救援规程", "article": "第73条", "content": "参加矿井火灾救援应了解……"}]}, ensure_ascii=False)
+    for final, ok in (("依据《矿山救援规程》第 73 条：……", True), ("依据规程要求", False)):
+        base = tmp_path / str(ok)
+        events = [{"type": "turn/start"}, _user("是否升级"), *_assistant("", [("c1", "mcp__kb__search_regulations", {"query": "火灾"})]), _result("c1", kb), *_assistant(final), {"type": "turn/end"}]
+        _write(base, ROOT_ID, events, "rescue-commander")
+        r = grade.grade(grade.load_tree(ROOT_ID, base), {"kb_cited": True})["checks"]["kb_cited"]
+        assert r["ok"] is ok, r

@@ -17,6 +17,7 @@
 - tools_called: [<工具>]     这些工具（不带 mcp__ 前缀的短名）在整次运行中至少调用过一次
 - effect_reported: true     总指挥协调的最后回复里写了效果评估工具给出的结论（evaluate_effect_panel 的 overall_name；
                             没调总体评估时取 evaluate_effect 的 effect_name）
+- kb_cited: true            调用过 kb，且总指挥协调的最后回复里出现 kb 返回过的某个条号（如 第73条；忽略空格）
 
 数值溯源是启发式的，局限见 eval/README.md。
 """
@@ -332,6 +333,16 @@ def grade(root: Session, checks: dict) -> dict:
         effects = names("mcp__fire_model__evaluate_effect_panel", "overall_name") or names("mcp__fire_model__evaluate_effect", "effect_name")
         final = root.final_text()
         results["effect_reported"] = {"ok": any(e in final for e in effects), "detail": {"tool": effects}}
+
+    if checks.get("kb_cited"):
+        articles: set[str] = set()
+        for s in sessions:
+            for name, text in s.tool_results():
+                if name.startswith("mcp__kb__") and text.lstrip().startswith("{"):
+                    articles.update(re.sub(r"\s+", "", a) for a in re.findall(r'"article":\s*"([^"]+)"', text))
+        final = re.sub(r"\s+", "", root.final_text())
+        hit = sorted(a for a in articles if a in final)
+        results["kb_cited"] = {"ok": bool(hit), "detail": {"kb_articles": sorted(articles), "cited": hit}}
 
     return {
         "root": root.id,
