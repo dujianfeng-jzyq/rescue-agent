@@ -7,7 +7,7 @@ DSH 0.2.1-rc.4 的 headless / ACP 入口都不支持 Agent 预设，所以经网
 前提：make up（或 scripts/dev.sh）已启动 MCP 服务和 DSH 网页端；RESCUE_MCP_TOKEN 与服务一致。
 
     uv run --project mcp --with playwright python eval/agent/run.py --url 'http://127.0.0.1:3080/?token=…' \\
-        --model deepseek-official/deepseek-flash --model rescue-local/qwen35-122b-a10b --repeat 3
+        --model deepseek-official/deepseek-flash --repeat 3
 
 --url 是 DSH 启动时打印的带 token 地址（也可设 RESCUE_DSH_URL）。--model 取网页模型下拉里的
 提供方/模型 id，不给则用当前默认模型；结束后恢复原来的默认模型。

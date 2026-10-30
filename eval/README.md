@@ -25,7 +25,7 @@ uv run --project mcp python eval/baseline.py s6 # 指定场景
 ```bash
 make dev                                         # 另开终端；记下打印的带 token 地址
 make eval-agent ARGS="--url 'http://127.0.0.1:3080/?token=…' \
-    --model deepseek-official/deepseek-flash --model rescue-local/qwen35-122b-a10b --repeat 3"
+    --model deepseek-official/deepseek-flash --repeat 3"
 uv run --project mcp python eval/agent/grade.py <会话 id>   # 对任意已有会话离线判定
 ```
 

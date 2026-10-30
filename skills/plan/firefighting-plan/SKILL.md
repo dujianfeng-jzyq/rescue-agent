@@ -24,7 +24,7 @@ whenToUse: 需要为采空区自燃预警编写或修改防灭火方案时。
 - 措施组合优于单一措施：注氮通常与堵漏或均压配合，否则漏风会把氮气稀释掉。
 - 注氮量用 `dispatch.estimate_inert_gas` 估算，不要自己算；把估算假设写进 description。
 - 采空区火灾保持通风系统稳定：**不要**写反风、风流短路、停主要通风机（第98条，红线规则会拦截）。
-- 每个方案最后都要有 `monitor` 步骤，写明观测哪些测点、多久复核一次效果。
+- 每个方案最后都要有 `monitor` 步骤，写明观测哪些测点、多久复核一次效果。取样和复核频次按本矿《自然发火预测预报制度》；没有依据时写“频次由指挥部确定”，不要自己定一个数。
 
 ## 结构化方案（Plan）
 
@@ -36,18 +36,18 @@ whenToUse: 需要为采空区自燃预警编写或修改防灭火方案时。
   "context": {
     "fire_type": "goaf_spontaneous_combustion",
     "as_of": "<get_clock 的时间>",
-    "methane_pct": 0.5, "methane_rising": false, "o2_pct": null,
-    "explosion_risk": "not_explosive"
+    "methane_pct": "<get_latest 的 CH4 值>", "methane_rising": "<gas_trend 判断，未知填 null>", "o2_pct": null,
+    "explosion_risk": "<assess_explosion_risk 的结果>"
   },
   "steps": [
-    {"order": 1, "type": "leak_sealing", "description": "...", "roadways": ["R-1201-RET"], "params": {"reduction": 0.5}},
-    {"order": 2, "type": "inert_injection", "description": "...", "params": {"rate_m3_h": 1000}},
-    {"order": 3, "type": "monitor", "description": "每 2 小时取束管气样，重点看 BT-1201-G1/G2 的 CO 和乙烯"}
+    {"order": 1, "type": "leak_sealing", "description": "...", "roadways": ["R-1201-RET"], "params": {"reduction": "<预计减少漏风比例，无依据时不填>"}},
+    {"order": 2, "type": "inert_injection", "description": "...", "params": {"rate_m3_h": "<estimate_inert_gas 的结果>"}},
+    {"order": 3, "type": "monitor", "description": "按本矿预测预报制度的频次取束管气样，重点看 BT-1201-G1/G2 的 CO 和乙烯"}
   ],
   "basis": [{"document": "<kb 返回的 document>", "article": "<条号>", "source": "ragflow"}]
 }
 ```
 
-- `context` 只填工具给出的值；没有的填 `null`。红线规则对未知值按“不放行”处理，所以与进入灾区相关的条件（温度、甲烷）务必先查清。
+- 示例里尖括号是占位，写方案时换成对应工具的实际返回值（数值写成数字）。`context` 只填工具给出的值；没有的填 `null`。红线规则对未知值按“不放行”处理，所以与进入灾区相关的条件（温度、甲烷）务必先查清。
 - `basis` 每条都要来自 kb 检索结果，照抄 document 和 article。
 - 写完调用 `kb.check_plan_redlines`（tool = `issue_firefighting_plan`）自查。
