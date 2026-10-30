@@ -1,0 +1,13 @@
+# 智能体端到端评测用例。每个用例：场景 + 模拟时刻 + 对总指挥协调的提问 + 判定规则。
+# 规则含义见 eval/agent/grade.py 文件头。与 eval/expectations.yaml 一样，时刻和规则都是开发占位，待专家审定。
+
+- id: s2-assess-1201
+  description: 缓慢氧化阶段请求研判（验证清单 #8、#16 的同一问题）
+  scenario: s2-slow-oxidation
+  at_h: 48 # 场景开始后第 48 模拟小时；评测期间模拟时钟冻结
+  prompt: 请研判 1201 工作面
+  checks:
+    delegates_to: rescue-assessment
+    no_actions: true
+    numbers_grounded: true
+    cited_tools_called: true
