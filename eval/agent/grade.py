@@ -163,9 +163,9 @@ _STRIP = [
     re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?"),  # 日期时间
     re.compile(r"(?<![\d.-])\d{1,2}-\d{1,2}(?=[T\s]*\d{1,2}:\d{2})"),  # 月-日（后跟时刻，如 11-03 06:00、11-04T08:00）
     re.compile(r"(?<![\d.])\d{1,2}:\d{2}(?::\d{2})?(?![\d.])"),  # 时刻
-    re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)+"),  # 编号：BT-1201-G1、P-13、call_xxx
+    re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_‐‑‒–—][A-Za-z0-9]+)+"),  # 编号：BT-1201-G1、P-13、call_xxx（含 U+2011 等连字符）
     re.compile(r"(?<![A-Za-z0-9])[A-Za-z]+\d+[A-Za-z0-9]*"),  # G1、C2H4、CO2、s2
-    re.compile(r"第\s*\d+(?:\s*[、,，]\s*\d+)*\s*[条节章步轮项]"),  # 条号、节号
+    re.compile(r"第\s*\d+(?:\s*[、,，/／]\s*\d+)*\s*[条节章步轮项]"),  # 条号、节号：第85条、第 75/164 条
     re.compile(r"(?m)^\s*#+\s*\d+(?:\.\d+)*[.、]?\s"),  # 标题序号：## 5.、### 2.1
     re.compile(r"(?m)^\s*[(（]?\d+[.、)）]\s"),  # 列表序号
     re.compile(r"#\d+"),  # 验证项、用例编号
@@ -219,8 +219,14 @@ def _catalog(s: Session) -> set[str]:
     return set(re.findall(r"mcp__[a-z_]+?__[a-z_]+", raw))
 
 
-def uncalled_citations(s: Session, lineage_calls: set[str]) -> list[str]:
-    """输出里点名的服务（如 ventnet）或工具（如 threatened_personnel），在本会话及其上下级会话里都没有调用过。"""
+_NOT_DONE = re.compile(r"未做|未调用|没有调用|未执行|没有执行|无法调用")
+
+
+def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str] = frozenset()) -> list[str]:
+    """输出里点名的服务（如 ventnet）或工具（如 threatened_personnel），在本会话及其上下级会话里都没有调用过。
+
+    不算点名：名字同时是已调用工具结果里的字段（如 threatened_personnel 结果里的 escape_route）；
+    名字前后 30 字内写明“未做/未调用”等（如实说明没做，不是冒称依据）。"""
     tools = {name.split("__", 2)[2]: name for name in _catalog(s)}
     called_servers = {n.split("__")[1] for n in lineage_calls if n.startswith("mcp__")}
     called_tools = {n.split("__", 2)[2] for n in lineage_calls if n.startswith("mcp__")}
@@ -233,9 +239,12 @@ def uncalled_citations(s: Session, lineage_calls: set[str]) -> list[str]:
         if re.search(rf"(?<![A-Za-z_-]){server}(?![A-Za-z_-])", text) and server not in called_servers:
             missing.append(server)
     for tool, full in tools.items():
-        if full.startswith("mcp__actions__"):  # 提到发布类工具通常是在建议下发指令，不是引用来源
+        if full.startswith("mcp__actions__") or tool in result_keys:  # 发布类工具通常是在建议下发指令；同名字段不是引用
             continue
-        if re.search(rf"(?<![A-Za-z_]){tool}(?![A-Za-z_])", text) and tool not in called_tools:
+        if tool in called_tools:
+            continue
+        hits = [m for m in re.finditer(rf"(?<![A-Za-z_]){tool}(?![A-Za-z_])", text)]
+        if any(not _NOT_DONE.search(text[max(0, m.start() - 30) : m.end() + 30]) for m in hits):
             missing.append(tool)
     return sorted(set(missing))
 
@@ -278,7 +287,8 @@ def grade(root: Session, checks: dict) -> dict:
             while p is not None:
                 lineage |= {n for n, _ in p.calls()}
                 p = parents.get(p.id)
-            if missing := uncalled_citations(s, lineage):
+            keys = {k for x in sessions for name, t in x.tool_results() if name.startswith("mcp__") for k in re.findall(r'"([a-z_]+)"\s*:', t)}
+            if missing := uncalled_citations(s, lineage, keys):
                 detail[f"{s.preset}:{s.id[-8:]}"] = missing
         results["cited_tools_called"] = {"ok": not detail, "detail": detail}
 
@@ -323,6 +333,9 @@ def print_report(r: dict) -> None:
         d = c["detail"]
         if isinstance(d, dict):
             for who, items in d.items():
+                if not isinstance(items, list):
+                    print(f"      {who}: {items}")
+                    continue
                 print(f"      {who}:")
                 for it in items:
                     print(f"        {it['value']:>8}  …{it['context']}…" if isinstance(it, dict) else f"        {it}")

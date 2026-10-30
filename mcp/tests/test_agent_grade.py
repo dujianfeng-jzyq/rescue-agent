@@ -65,7 +65,7 @@ ALL = {"delegates_to": "rescue-assessment", "no_actions": True, "numbers_grounde
 
 
 def test_numbers_strip_ids_dates_and_article_numbers():
-    text = "1. 2026-11-04T15:03:02 BT-1201-G1 使G1、C2H4 第85条 第 1、3、5 节 11-03 06:00 11-04T08:00 #16\n## 2. 上隅角CO 9.35 ppm\n### 7.3 必须人工判断"
+    text = "1. 2026-11-04T15:03:02 BT-1201-G1 使G1、C2H4 第85条 第 1、3、5 节 第 75/164 条 R‑1202‑IN 11-03 06:00 11-04T08:00 #16\n## 2. 上隅角CO 9.35 ppm\n### 7.3 必须人工判断"
     assert [t for t, _ in grade.numbers(text)] == ["9.35"]
 
 
@@ -100,6 +100,18 @@ def test_runtime_context_is_not_material(tree):
 def test_cited_server_not_called_fails(tree):
     r = grade.grade(tree("依据：ventnet 通风网络分析"), ALL)
     assert r["checks"]["cited_tools_called"]["detail"] == {"rescue-assessment:sub-1": ["ventnet"]}
+
+
+def test_field_names_and_declared_skips_are_not_citations():
+    offered = {"type": "request/context", "data": {"tools": ["mcp__fire_model__evaluate_effect", "mcp__ventnet__escape_route", "mcp__ventnet__threatened_personnel"]}}
+
+    def missing(text: str, keys=frozenset()) -> list[str]:
+        s = grade.Session("s", "rescue-assessment", None, 0, [offered, *_assistant(text)])
+        return grade.uncalled_citations(s, {"mcp__ventnet__threatened_personnel"}, keys)
+
+    assert missing("依据 evaluate_effect 与 escape_route") == ["escape_route", "evaluate_effect"]
+    # escape_route 是已调用工具结果里的字段；evaluate_effect 写明“未做”
+    assert missing("escape_route reachable=false；处置效果评估（evaluate_effect）未做：无处置起始时刻", {"escape_route"}) == []
 
 
 def test_preset_name_is_not_a_server_citation(tree):
