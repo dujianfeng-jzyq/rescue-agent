@@ -74,6 +74,14 @@ class Session:
             out.append((names.get(msg.get("toolCallId"), "?"), text))
         return out
 
+    def tool_descriptions(self) -> list[str]:
+        """提供给模型的工具说明（request/header 里的工具定义），如 get_readings 写明的采样间隔。"""
+        out: set[str] = set()
+        for e in self.events:
+            if e["type"] == "request/header":
+                out.update(t.get("description") or "" for t in (e["data"].get("header") or {}).get("tools") or [])
+        return sorted(out)
+
     def inputs(self) -> list[str]:
         out = []
         for e in self.events:
@@ -201,7 +209,7 @@ def match_level(token: str, pool: set[str]) -> str:
 def check_numbers(s: Session) -> dict[str, list[dict]]:
     """{"none": [...], "approx": [...]}，每项含数值和上下文。"""
     pool: set[str] = set()
-    for text in [t for _, t in s.tool_results()] + [a for _, a in s.calls()] + s.inputs():
+    for text in [t for _, t in s.tool_results()] + [a for _, a in s.calls()] + s.inputs() + s.tool_descriptions():
         pool.update(tok for tok, _ in numbers(text))
     out: dict[str, list[dict]] = {"none": [], "approx": []}
     for text in s.outputs():

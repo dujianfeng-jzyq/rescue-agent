@@ -169,3 +169,10 @@ def test_llm_error_is_reported(tmp_path):
     _write(tmp_path, ROOT_ID, [{"type": "turn/start"}, _user("请研判 1201 工作面"), {"type": "turn/end", "data": {"reason": {"kind": "error", "error": {"message": "Connection error."}}}}], "rescue-commander")
     r = grade.grade(grade.load_tree(ROOT_ID, tmp_path), {"no_actions": True})
     assert r["llm_errors"] == ["Connection error."]
+
+
+def test_tool_descriptions_are_material(tmp_path):
+    header = {"type": "request/header", "data": {"header": {"tools": [{"name": "mcp__mine_data__get_readings", "description": "束管 1 小时一个点，测温 30 分钟。"}]}}}
+    events = [{"type": "turn/start"}, header, _user("请研判"), *_assistant("束管采样间隔 1 小时、测温 30 分钟"), {"type": "turn/end"}]
+    _write(tmp_path, ROOT_ID, events, "rescue-commander")
+    assert grade.grade(grade.load_tree(ROOT_ID, tmp_path), {"numbers_grounded": True})["checks"]["numbers_grounded"]["ok"]
