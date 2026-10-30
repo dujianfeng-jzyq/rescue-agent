@@ -24,4 +24,4 @@ if [ "${1:-}" = "--local-llm" ]; then
   shift
 fi
 
-exec dsh rescue --no-open "${EXTRA[@]}" "$@"
+exec dsh rescue "${EXTRA[@]}" --no-open "$@"   # --patch 是启动器参数，必须在 app 参数之前
