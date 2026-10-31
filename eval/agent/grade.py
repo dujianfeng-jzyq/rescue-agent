@@ -231,6 +231,8 @@ _NUM = re.compile(r"\d+(?:\.\d+)?")
 _ARTICLE = re.compile(r"第\s*(\d+)\s*条")
 # 省略了“第”的条号（“164 条不适用”）：材料里有“第164条”才算有依据；“共 12 条”这类计数仍要溯源
 _BARE_ARTICLE = re.compile(r"\s*条")
+# 省略了“第”的条号列表（“basis 共 7 条（84/85/87/98）”）：每个数都是材料里的条号才剔除
+_NUM_LIST = re.compile(r"\d+(?:\s*[/／、]\s*\d+)+")
 
 
 def numbers(text: str) -> list[tuple[str, int]]:
@@ -265,8 +267,9 @@ def check_numbers(s: Session) -> dict[str, list[dict]]:
         articles.update(_ARTICLE.findall(text))
     out: dict[str, list[dict]] = {"none": [], "approx": []}
     for text in s.outputs():
+        lists = [m.span() for m in _NUM_LIST.finditer(text) if set(_NUM.findall(m.group(0))) <= articles]
         for tok, pos in numbers(text):
-            if tok in articles and _BARE_ARTICLE.match(text, pos + len(tok)):
+            if tok in articles and (_BARE_ARTICLE.match(text, pos + len(tok)) or any(a <= pos < b for a, b in lists)):
                 continue
             level = match_level(tok, pool)
             if level != "exact":
@@ -285,8 +288,9 @@ def _catalog(s: Session) -> set[str]:
 
 # 调用了键里的工具，就算调用过值里的工具：总体评估的输出就是逐点 evaluate_effect 的结果
 COVERS = {"evaluate_effect_panel": {"evaluate_effect"}}
-# 写明没做，或只是提议以后做（可补做、由 dispatch 出草案、如需再调、请提供 since 以便用某工具评估），都不是引用依据
-_NOT_DONE = re.compile(r"未做|未调用|没有调用|未执行|没有执行|无法调用|补做|可调用|再调|如需|如需要|出草案|下一步|建议调用|可以调用|以便|我会|请提供|发来")
+# 写明没做，或只是提议以后做（可补做、由 dispatch 出草案、如需再调、请提供 since 以便用某工具评估），
+# 或引用的是工具说明（如 get_readings 写明的采样间隔），都不是引用调用结果
+_NOT_DONE = re.compile(r"未做|未调用|没有调用|未执行|没有执行|无法调用|补做|可调用|再调|如需|如需要|出草案|下一步|建议调用|可以调用|以便|我会|请提供|请告知|发来|采样间隔|工具说明")
 
 
 # 最后回复里说明指令被拒、没执行；声称已发布或已下发则不通过（“未发布”“尚未下发”不算）

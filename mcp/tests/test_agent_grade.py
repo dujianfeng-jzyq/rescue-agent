@@ -74,10 +74,13 @@ def test_numbers_strip_labels_and_combined_rule_ids():
     assert [t for t, _ in grade.numbers("**3.1 采空区束管**\n4.2 受威胁人数\n1.5 ppm\n1.5 倍")] == ["1.5", "1.5"]
 
 
-@pytest.mark.parametrize(("report", "grounded"), [("1201 未封闭，164 条不适用", True), ("本地留存共 12 条", False)])
+@pytest.mark.parametrize(
+    ("report", "grounded"),
+    [("1201 未封闭，164 条不适用", True), ("本地留存共 12 条", False), ("依据条号（164/85）", True), ("比例（164/40）", False)],
+)
 def test_bare_article_number_needs_article_in_material(tree, report, grounded):
     # “164 条不适用”是省略了“第”的条号，材料里有第164条才算有依据；“共 12 条”是计数，仍要溯源
-    r = grade.grade(tree(report, sub_prompt="研判 1201，规程 第164条 启封火区"), ALL)
+    r = grade.grade(tree(report, sub_prompt="研判 1201，规程 第164条 启封火区，第85条 封闭"), ALL)
     assert r["checks"]["numbers_grounded"]["ok"] is grounded, r["checks"]
 
 
@@ -114,8 +117,12 @@ def test_runtime_context_is_not_material(tree):
     assert not r["checks"]["numbers_grounded"]["ok"]
 
 
-def test_future_tool_use_is_not_citation(tree):
-    r = grade.grade(tree("请提供处置开始的矿井时间，以便用 `evaluate_effect_panel` 做效果评估"), ALL)
+@pytest.mark.parametrize(
+    "report",
+    ["请提供处置开始的矿井时间，以便用 `evaluate_effect_panel` 做效果评估", "请告知处置开始时刻，我用 `evaluate_effect_panel` 评估"],
+)
+def test_future_tool_use_is_not_citation(tree, report):
+    r = grade.grade(tree(report), ALL)
     assert r["checks"]["cited_tools_called"]["ok"], r["checks"]["cited_tools_called"]
 
 
