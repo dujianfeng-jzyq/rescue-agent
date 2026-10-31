@@ -177,16 +177,19 @@ _STRIP = [
     re.compile(r"(?<![\d.-])\d{1,2}-\d{1,2}(?=[T\s]*\d{1,2}:\d{2})"),  # 月-日（后跟时刻，如 11-03 06:00、11-04T08:00）
     re.compile(r"(?<![\d.\-–])(?:0?[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?![\d.%℃]|\s*(?:ppm|%|℃|°C|m\b|人))"),  # 月-日（如“11-04 报警记录”）
     re.compile(r"(?<![\d.])\d{1,2}:\d{2}(?::\d{2})?(?![\d.])"),  # 时刻
-    re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_‐‑‒–—][A-Za-z0-9]+)+"),  # 编号：BT-1201-G1、P-13、call_xxx（含 U+2011 等连字符）
+    re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_‐‑‒–—][A-Za-z0-9]+)+(?:[/／][A-Za-z0-9]+(?![.\d]))*"),  # 编号：BT-1201-G1、P-13、call_xxx（含 U+2011 等连字符）、合写的 RL-057/053
     re.compile(r"(?<![A-Za-z0-9])[A-Za-z]+\d+[A-Za-z0-9]*"),  # G1、C2H4、CO2、s2
     re.compile(r"第\s*\d+(?:\s*[、,，/／→~～至-]\s*\d+)*\s*[条节章步轮项]"),  # 条号、节号：第85条、第 75/164 条、第84→85→87条
-    re.compile(r"(?:主题|步骤|表|图|附件|阶段)\s*\d+"),  # 编号标签：主题5、表2
+    re.compile(r"(?:主题|问题|步骤|表|图|附件|阶段)\s*\d+(?:\.\d+)*"),  # 编号标签：主题5、表2、问题 1.2
     re.compile(r"(?m)^\s*#+\s*\d+(?:\.\d+)*[.、]?\s"),  # 标题序号：## 5.、### 2.1
     re.compile(r"(?m)^\s*[(（]?\d+[.、)）]\s"),  # 列表序号
     re.compile(r"(?m)^\s*\|\s*\d+\s*(?=\|)"),  # 表格首列序号：| 7 |
     re.compile(r"#\d+"),  # 验证项、用例编号
 ]
 _NUM = re.compile(r"\d+(?:\.\d+)?")
+_ARTICLE = re.compile(r"第\s*(\d+)\s*条")
+# 省略了“第”的条号（“164 条不适用”）：材料里有“第164条”才算有依据；“共 12 条”这类计数仍要溯源
+_BARE_ARTICLE = re.compile(r"\s*条")
 
 
 def numbers(text: str) -> list[tuple[str, int]]:
@@ -215,11 +218,15 @@ def match_level(token: str, pool: set[str]) -> str:
 def check_numbers(s: Session) -> dict[str, list[dict]]:
     """{"none": [...], "approx": [...]}，每项含数值和上下文。"""
     pool: set[str] = set()
+    articles: set[str] = set()
     for text in [t for _, t in s.tool_results()] + [a for _, a in s.calls()] + s.inputs() + s.tool_descriptions():
         pool.update(tok for tok, _ in numbers(text))
+        articles.update(_ARTICLE.findall(text))
     out: dict[str, list[dict]] = {"none": [], "approx": []}
     for text in s.outputs():
         for tok, pos in numbers(text):
+            if tok in articles and _BARE_ARTICLE.match(text, pos + len(tok)):
+                continue
             level = match_level(tok, pool)
             if level != "exact":
                 out[level].append({"value": tok, "context": text[max(0, pos - 30) : pos + 30].replace("\n", " ")})
@@ -237,8 +244,8 @@ def _catalog(s: Session) -> set[str]:
 
 # 调用了键里的工具，就算调用过值里的工具：总体评估的输出就是逐点 evaluate_effect 的结果
 COVERS = {"evaluate_effect_panel": {"evaluate_effect"}}
-# 写明没做，或只是提议以后做（可补做、由 dispatch 出草案、如需再调），都不是引用依据
-_NOT_DONE = re.compile(r"未做|未调用|没有调用|未执行|没有执行|无法调用|补做|可调用|再调|如需|如需要|出草案|下一步|建议调用|可以调用")
+# 写明没做，或只是提议以后做（可补做、由 dispatch 出草案、如需再调、请提供 since 以便用某工具评估），都不是引用依据
+_NOT_DONE = re.compile(r"未做|未调用|没有调用|未执行|没有执行|无法调用|补做|可调用|再调|如需|如需要|出草案|下一步|建议调用|可以调用|以便|我会|请提供|发来")
 
 
 def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str] = frozenset()) -> list[str]:

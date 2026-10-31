@@ -40,7 +40,7 @@ def _write(base: Path, sid: str, events: list[dict], preset: str, parent: str | 
 
 @pytest.fixture
 def tree(tmp_path):
-    def build(sub_report: str, sub_calls=(("c2", "mcp__fire_model__assess_warning_level", {"panel": "1201"}),), root_calls=()):
+    def build(sub_report: str, sub_calls=(("c2", "mcp__fire_model__assess_warning_level", {"panel": "1201"}),), root_calls=(), sub_prompt="研判 1201"):
         turn = [{"type": "turn/start"}]
         end = [{"type": "turn/end"}]
         root = [
@@ -51,7 +51,7 @@ def tree(tmp_path):
             _result("c1", "started subagent sub-1"),
             *end,
         ]
-        sub = [*turn, _user("研判 1201"), *_assistant("", list(sub_calls))]
+        sub = [*turn, _user(sub_prompt), *_assistant("", list(sub_calls))]
         sub += [_result(cid, '{"level": "none", "indicators": {"上隅角CO(ppm)": 9.353, "格雷哈姆系数": 0.021}, "depth_m": 20.0}') for cid, _, _ in sub_calls]
         sub += [*_assistant(sub_report), *end]
         _write(tmp_path, ROOT_ID, root, "rescue-commander")
@@ -67,6 +67,17 @@ ALL = {"delegates_to": "rescue-assessment", "no_actions": True, "numbers_grounde
 def test_numbers_strip_ids_dates_and_article_numbers():
     text = "1. 2026-11-04T15:03:02 BT-1201-G1 使G1、C2H4 第85条 第 1、3、5 节 第 75/164 条 第84→85→87条 主题5 R‑1202‑IN 11-03 06:00 11-04T08:00 11-04 报警记录 #16\n## 2. 上隅角CO 9.35 ppm\n### 7.3 必须人工判断\n| 7 | 矿山救援规程 |"
     assert [t for t, _ in grade.numbers(text)] == ["9.35"]
+
+
+def test_numbers_strip_labels_and_combined_rule_ids():
+    assert [t for t, _ in grade.numbers("见问题 1.2；问题 5：注氮；RL-057/053（≥6 人）")] == ["6"]
+
+
+@pytest.mark.parametrize(("report", "grounded"), [("1201 未封闭，164 条不适用", True), ("本地留存共 12 条", False)])
+def test_bare_article_number_needs_article_in_material(tree, report, grounded):
+    # “164 条不适用”是省略了“第”的条号，材料里有第164条才算有依据；“共 12 条”是计数，仍要溯源
+    r = grade.grade(tree(report, sub_prompt="研判 1201，规程 第164条 启封火区"), ALL)
+    assert r["checks"]["numbers_grounded"]["ok"] is grounded, r["checks"]
 
 
 def test_ranges_are_not_dates():
@@ -100,6 +111,11 @@ def test_runtime_context_is_not_material(tree):
     # 3080 只出现在系统注入的运行时上下文里，不算 Agent 看到的材料
     r = grade.grade(tree("端口 3080"), ALL)
     assert not r["checks"]["numbers_grounded"]["ok"]
+
+
+def test_future_tool_use_is_not_citation(tree):
+    r = grade.grade(tree("请提供处置开始的矿井时间，以便用 `evaluate_effect_panel` 做效果评估"), ALL)
+    assert r["checks"]["cited_tools_called"]["ok"], r["checks"]["cited_tools_called"]
 
 
 def test_cited_server_not_called_fails(tree):
