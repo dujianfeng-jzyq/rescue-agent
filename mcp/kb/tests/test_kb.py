@@ -25,6 +25,8 @@ def test_not_configured_falls_back_to_local_articles(monkeypatch):
     r = kb.search("regulations", "封闭 惰性气体")
     assert r["status"] == "local-fallback"
     assert r["results"][0]["article"] == "第85条"
+    cov = r["local_coverage"]
+    assert cov["count"] == len(LOCAL_ARTICLES) == len(cov["articles"]) and "矿山救援规程 第85条" in cov["articles"]
 
 
 class _FakeRagflow(BaseHTTPRequestHandler):

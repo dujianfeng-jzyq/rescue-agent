@@ -35,6 +35,8 @@ whenToUse: 需要判断工作面采空区是否有自燃征兆、给出或复核
 
 - 结论照抄 `overall_name` 和 `basis`（单点用 `effect_name`），不要自己比较读数下结论；“观测时间不足”时如实说明，不要提前下结论。
 - 判断依据写清楚“哪个测点、处置时刻的值（`value_at_since`）、现在的值（`latest`）、变化量（`change_since`）、处置前后速率”，都照抄工具返回。
+- 已观测多久、何时复评照抄 `observed_h`、`next_review_at`、`observed_h_at_next_review`，不要自己用时刻相减或相加。
+- 降幅逐点照抄 `rate_reduction_pct`，不要合并成“降幅 56%–88%”这样的区间。
 - 结论为“恶化”时，建议升级为应急响应。
 
 ## 输出

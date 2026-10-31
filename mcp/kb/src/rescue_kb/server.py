@@ -41,7 +41,7 @@ SYNONYMS = {
 INSTRUCTIONS = (
     "知识检索服务：法规规程、矿井预案、文献案例。每条结果都带文档名和条号（如有），"
     "方案中引用依据时必须照抄 document 和 article 字段。source 为 local-fallback 表示知识库暂不可用、"
-    "使用本地留存条款，需在结论中注明。"
+    "使用本地留存条款，需在结论中注明；本地留存了多少条、哪几条照抄 local_coverage，不要自己数。"
 )
 
 
@@ -116,9 +116,12 @@ class KnowledgeBase:
     def search(self, kind: str, query: str, limit: int = 6) -> dict[str, Any]:
         results = list(self._cached(kind, query, limit))
         status = "ok" if self.cfg and _datasets(kind) else "not-configured"
+        out: dict[str, Any] = {"query": query, "status": status, "results": results}
         if results and all(r["source"] == "local-fallback" for r in results):
-            status = "local-fallback"
-        return {"query": query, "status": status, "results": results}
+            out["status"] = "local-fallback"
+            # 说明降级时能引用哪些条款，由代码给出，Agent 不用自己数
+            out["local_coverage"] = {"count": len(LOCAL_ARTICLES), "articles": [f"{a['document']} {a['article']}" for a in LOCAL_ARTICLES]}
+        return out
 
 
 def build_server(kb: KnowledgeBase | None = None) -> MCPServer:

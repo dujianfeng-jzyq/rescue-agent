@@ -302,12 +302,17 @@ def _panel_effect(act: bool, after_h: float) -> dict:
 
 
 def test_panel_effect_s2_with_and_without_treatment():
+    from datetime import datetime, timedelta
+
     r = _panel_effect(True, 24)
     assert r["overall"] == "continuing", r
     # 发火指标测点：采空区束管 CO、采空区测温、非进风侧安全监控 CO（不含进风巷 SM-1201-IN）
     assert {(p["sensor_id"], p["measurand"]) for p in r["points"]} >= {("BT-1201-G1", "CO"), ("TP-1201-G1", "TEMP"), ("SM-1201-UC", "CO")}
     assert "SM-1201-IN" not in {p["sensor_id"] for p in r["points"]}
     assert sum(r["counts"].values()) == r["evaluated"] == len(r["points"])
+    # 时长和复评时刻由工具给出（处置后 24 小时、复评间隔 12 小时）
+    assert r["observed_h"] == 24.0 and r["observed_h_at_next_review"] == 36.0
+    assert datetime.fromisoformat(r["next_review_at"]) - datetime.fromisoformat(r["as_of"]) == timedelta(hours=12)
     assert _panel_effect(False, 24)["overall"] == "worsening"
     assert _panel_effect(True, 6)["overall"] == "insufficient"
 
@@ -329,4 +334,4 @@ def test_panel_overall_rule(effects, expected):
     keys = ("value_at_since", "latest", "change_since", "rate_before_per_hour", "rate_after_per_hour", "rate_reduction_pct")
     points = [{"sensor_id": f"S{i}", "measurand": "CO", "effect": e, "effect_name": EFFECT_NAMES[e], "new_marker_gases": [], **dict.fromkeys(keys)} for i, e in enumerate(effects)]
     t = datetime(2026, 11, 4, 8)
-    assert overall(points, t, t)["overall"] == expected
+    assert overall(points, t, t, 12)["overall"] == expected

@@ -6,7 +6,7 @@ stage、effect 两节确定性给出，Agent 照抄。判据和数值都是演�
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from rescue_contract.models import Reading
@@ -123,9 +123,10 @@ def evaluate(
     }
 
 
-def overall(points: list[dict[str, Any]], since: datetime, now: datetime) -> dict[str, Any]:
+def overall(points: list[dict[str, Any]], since: datetime, now: datetime, review_interval_h: float) -> dict[str, Any]:
     """汇总逐测点效果。规则（演示占位，需审定）：任一恶化→恶化；全部已受控→已受控；否则需继续处置。
-    观测时间不足（insufficient）的测点单列，不参与总体结论。"""
+    观测时间不足（insufficient）的测点单列，不参与总体结论。
+    同时给出已观测时长和下次复评时刻（现在 + review_interval_h），Agent 不用自己推算。"""
     counts = {EFFECT_NAMES[k]: sum(p["effect"] == k for p in points) for k in ("controlled", "continuing", "worsening", "insufficient")}
     judged = [p for p in points if p["effect"] != "insufficient"]
     if not judged:
@@ -141,6 +142,9 @@ def overall(points: list[dict[str, Any]], since: datetime, now: datetime) -> dic
     return {
         "since": since.isoformat(),
         "as_of": now.isoformat(),
+        "observed_h": round((now - since).total_seconds() / 3600, 1),
+        "next_review_at": (now + timedelta(hours=review_interval_h)).isoformat(),
+        "observed_h_at_next_review": round((now - since).total_seconds() / 3600 + review_interval_h, 1),
         "overall": result,
         "overall_name": EFFECT_NAMES[result],
         "basis": basis,
