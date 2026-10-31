@@ -159,8 +159,9 @@ def build_server(kb: KnowledgeBase | None = None) -> MCPServer:
     @server.tool()
     def check_plan_redlines(tool: str, plan: Plan) -> dict[str, Any]:
         """对结构化方案做红线自查（只读，不发布）。tool 取 issue_firefighting_plan / issue_sealing_plan / approve_unsealing。
-        返回 ok 和问题清单（含条号）。注意：自查不检查数据时效，发布时 actions 服务还会检查。"""
+        返回 ok 和问题清单（含条号）；检查了几条规则照抄 rules_checked_count，不要自己数。
+        注意：自查不检查数据时效，发布时 actions 服务还会检查。"""
         result = precheck(tool, {"plan": plan.model_dump(mode="json")}, None)
-        return {**result, "rules_checked": [f"{r.rule_id} {r.article} {r.summary}" for r in RULES]}
+        return {**result, "rules_checked": [f"{r.rule_id} {r.article} {r.summary}" for r in RULES], "rules_checked_count": len(RULES)}
 
     return server

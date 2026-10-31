@@ -111,3 +111,4 @@ def test_check_plan_redlines_tool_flags_missing_inerting():
     r = asyncio.run(go())
     assert not r.is_error and r.structured_content["ok"] is False
     assert any("第85条" in p for p in r.structured_content["problems"])
+    assert r.structured_content["rules_checked_count"] == len(RULES) == len(r.structured_content["rules_checked"])
