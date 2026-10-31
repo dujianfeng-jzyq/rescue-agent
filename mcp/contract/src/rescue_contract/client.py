@@ -22,6 +22,7 @@ from .models import (
     MineClock,
     MineNetwork,
     PersonLocation,
+    PersonnelSnapshot,
     Reading,
     RescueTeam,
     ResourceItem,
@@ -105,8 +106,11 @@ class MineData:
     async def latest(self, sensor_ids: list[str]) -> list[Reading]:
         return [Reading.model_validate(x) for x in await self._call("get_latest", {"sensor_ids": sensor_ids})]
 
+    async def personnel_snapshot(self) -> PersonnelSnapshot:
+        return PersonnelSnapshot.model_validate(await self._call("get_personnel", {}))
+
     async def personnel(self) -> list[PersonLocation]:
-        return [PersonLocation.model_validate(x) for x in await self._call("get_personnel", {})]
+        return (await self.personnel_snapshot()).people
 
     async def inventory(self) -> list[ResourceItem]:
         return [ResourceItem.model_validate(x) for x in await self._call("get_inventory", {})]

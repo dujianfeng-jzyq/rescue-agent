@@ -20,7 +20,7 @@ from rescue_contract.models import (
     MineClock,
     MineEvent,
     MineNetwork,
-    PersonLocation,
+    PersonnelSnapshot,
     Reading,
     RescueTeam,
     ResourceItem,
@@ -116,9 +116,10 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         return sim.engine.fire_areas()
 
     @server.tool()
-    def get_personnel() -> list[PersonLocation]:
-        """井下人员实时位置（人员定位系统）。已升井人员不在列表中。"""
-        return sim.engine.personnel()
+    def get_personnel() -> PersonnelSnapshot:
+        """井下人员实时位置（人员定位系统）。已升井人员不在名单中。
+        井下总人数、各班组人数、各巷道人数照抄 total、by_team、by_roadway，不要自己数名单。"""
+        return PersonnelSnapshot.of(sim.engine.personnel())
 
     @server.tool()
     def get_inventory() -> list[ResourceItem]:

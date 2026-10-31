@@ -14,7 +14,7 @@ from datetime import timedelta
 from typing import Any
 
 from .client import MineData, connect
-from .models import FireAreaStatus, Quality
+from .models import FireAreaStatus, PersonnelSnapshot, Quality
 
 REQUIRED_TOOLS = {
     "get_clock",
@@ -95,8 +95,11 @@ async def check_personnel_and_resources(md: MineData) -> None:
     net = await md.network()
     roadway_ids = {r.id for r in net.roadways}
     node_ids = {n.id for n in net.nodes}
-    for p in await md.personnel():
+    snap = await md.personnel_snapshot()
+    for p in snap.people:
         _check(p.roadway_id in roadway_ids, f"人员 {p.person_id} 位置 {p.roadway_id} 不在网络中")
+    # 人数必须与名单一致（适配器用 PersonnelSnapshot.of 构造即可）
+    _check(snap == PersonnelSnapshot.of(snap.people), "get_personnel 的 total、by_team、by_roadway 与人员名单不一致")
     for item in await md.inventory():
         _check(item.depot_node in node_ids, f"物资 {item.name} 存放节点不在网络中")
         _check(item.quantity >= 0, f"物资 {item.name} 数量为负")

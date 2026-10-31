@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, WithJsonSchema
 
-CONTRACT_VERSION = "0.2.0"
+CONTRACT_VERSION = "0.3.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -153,6 +153,39 @@ class PersonLocation(_Model):
     team: str | None = None
     roadway_id: str
     ts: MineTime
+
+
+class TeamCount(_Model):
+    team: str | None
+    count: int
+
+
+class RoadwayCount(_Model):
+    roadway_id: str
+    count: int
+
+
+class PersonnelSnapshot(_Model):
+    """get_personnel 的返回：人员名单和人数。人数由 of() 统一计算，Agent 照抄，不要自己数名单。"""
+
+    total: int
+    by_team: list[TeamCount]
+    by_roadway: list[RoadwayCount]
+    people: list[PersonLocation]
+
+    @classmethod
+    def of(cls, people: list[PersonLocation]) -> PersonnelSnapshot:
+        teams: dict[str | None, int] = {}
+        roadways: dict[str, int] = {}
+        for p in people:
+            teams[p.team] = teams.get(p.team, 0) + 1
+            roadways[p.roadway_id] = roadways.get(p.roadway_id, 0) + 1
+        return cls(
+            total=len(people),
+            by_team=[TeamCount(team=t, count=n) for t, n in sorted(teams.items(), key=lambda kv: kv[0] or "")],
+            by_roadway=[RoadwayCount(roadway_id=r, count=n) for r, n in sorted(roadways.items())],
+            people=people,
+        )
 
 
 class ResourceItem(_Model):

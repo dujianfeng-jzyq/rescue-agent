@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "PersonLocation": {
+      "additionalProperties": false,
+      "properties": {
+        "person_id": {
+          "title": "Person Id",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "team": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Team"
+        },
+        "roadway_id": {
+          "title": "Roadway Id",
+          "type": "string"
+        },
+        "ts": {
+          "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+          "title": "Ts",
+          "type": "string"
+        }
+      },
+      "required": [
+        "person_id",
+        "role",
+        "roadway_id",
+        "ts"
+      ],
+      "title": "PersonLocation",
+      "type": "object"
+    },
+    "RoadwayCount": {
+      "additionalProperties": false,
+      "properties": {
+        "roadway_id": {
+          "title": "Roadway Id",
+          "type": "string"
+        },
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "roadway_id",
+        "count"
+      ],
+      "title": "RoadwayCount",
+      "type": "object"
+    },
+    "TeamCount": {
+      "additionalProperties": false,
+      "properties": {
+        "team": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Team"
+        },
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "team",
+        "count"
+      ],
+      "title": "TeamCount",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "get_personnel 的返回：人员名单和人数。人数由 of() 统一计算，Agent 照抄，不要自己数名单。",
+  "properties": {
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    },
+    "by_team": {
+      "items": {
+        "$ref": "#/$defs/TeamCount"
+      },
+      "title": "By Team",
+      "type": "array"
+    },
+    "by_roadway": {
+      "items": {
+        "$ref": "#/$defs/RoadwayCount"
+      },
+      "title": "By Roadway",
+      "type": "array"
+    },
+    "people": {
+      "items": {
+        "$ref": "#/$defs/PersonLocation"
+      },
+      "title": "People",
+      "type": "array"
+    }
+  },
+  "required": [
+    "total",
+    "by_team",
+    "by_roadway",
+    "people"
+  ],
+  "title": "PersonnelSnapshot",
+  "type": "object",
+  "$comment": "rescue-contract 0.3.0"
+}

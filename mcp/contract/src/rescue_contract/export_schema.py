@@ -18,6 +18,7 @@ EXPORTED = [
     "SensorPoint",
     "Reading",
     "PersonLocation",
+    "PersonnelSnapshot",
     "ResourceItem",
     "RescueTeam",
     "MineEvent",

@@ -54,7 +54,7 @@
 - 指令经 actions 确认后才作用于模拟器——和真实矿井“指令下达后由人执行”的关系一致。
 - 6 个标准场景同时是演示脚本、评测集、回归集（`scenarios/README.md`）。
 
-接入真实矿井：写一个实现相同 MCP 工具的适配器包（数据来自安全监控、束管、人员定位等系统；输入错误如未知测点要抛 `ToolError` 并写明原因，否则 Agent 看不到），先通过 `python -m rescue_contract.conformance <URL>`，再用 `RESCUE_MINE_DATA_MODULE` 替换；`RESCUE_SIM_CONTROL_URL` 置空。
+接入真实矿井：写一个实现相同 MCP 工具的适配器包（数据来自安全监控、束管、人员定位等系统；输入错误如未知测点要抛 `ToolError` 并写明原因，否则 Agent 看不到；`get_personnel` 用 `PersonnelSnapshot.of(名单)` 构造，人数由契约代码统一计算），先通过 `python -m rescue_contract.conformance <URL>`，再用 `RESCUE_MINE_DATA_MODULE` 替换；`RESCUE_SIM_CONTROL_URL` 置空。
 
 ## 5. 知识库
 

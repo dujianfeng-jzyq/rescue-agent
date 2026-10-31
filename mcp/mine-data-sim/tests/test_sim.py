@@ -79,11 +79,15 @@ def test_client_roundtrip_in_process():
         now = await md.now()
         latest = await md.latest(["SM-1201-UC"])
         people = await md.personnel()
-        return now, latest, people
+        snap = await md.personnel_snapshot()
+        return now, latest, people, snap
 
-    now, latest, people = asyncio.run(go())
+    now, latest, people, snap = asyncio.run(go())
     assert latest and all(r.ts <= now for r in latest)
     assert people
+    # 人数由工具给出，与名单一致
+    assert snap.people == people and snap.total == len(people)
+    assert sum(t.count for t in snap.by_team) == sum(r.count for r in snap.by_roadway) == snap.total
 
 
 # ── 火区台账 ──
