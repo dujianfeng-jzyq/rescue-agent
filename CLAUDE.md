@@ -18,7 +18,8 @@ make lint                     # ruff
 make check                    # 提交前：lint + 测试 + patch 离线校验 + 基线评测
 make up / make down / make smoke   # 启停 6 个 MCP 服务并冒烟
 make eval                     # 确定性基线评测（不经过大模型）
-make eval-agent ARGS="--url '<DSH 地址带 token>' --model deepseek-official/deepseek-flash --repeat 3"   # 智能体端到端评测（需先 make dev）
+make eval-agent ARGS="--url '<DSH 地址带 token>' --model deepseek-official/deepseek-flash --repeat 3"   # 智能体端到端评测（需先 make dev-eval）
+make dev-eval                 # 同 make dev，但指令台账和审计写到 var/eval/（评测用例会放行指令）
 make schema                   # 契约模型改动后重新导出 JSON Schema（CI 会检查）
 python3 scripts/sim.py state|reset <场景>|advance <小时>|apply <处置>   # 模拟控制台
 make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API_KEY）
@@ -34,7 +35,7 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
 - `skills/<角色>/<技能>/SKILL.md`：给 Agent 的流程知识。草稿，待专家审定。
 - `scenarios/*.yaml`：标准场景 = 演示脚本 = 评测集 = 回归集。
 - `eval/baseline.py` + `expectations.yaml`：模型层回归基线。
-- `eval/agent/`：智能体端到端评测。`cases.yaml` 用例，`run.py` 经 DSH 网页端（Playwright）提问，`grade.py` 读 `.dsh-home/sessions` 会话日志判定（可 `grade.py <会话 id>` 离线判定、`run.py --regrade` 按新规则重判）。
+- `eval/agent/`：智能体端到端评测。`cases.yaml` 用例（`approvals` 指定人工确认时放行哪些指令，其余拒绝），`run.py` 经 DSH 网页端（Playwright）提问并点确认，`grade.py` 读 `.dsh-home/sessions` 会话日志判定（可 `grade.py <会话 id>` 离线判定、`run.py --regrade` 按新规则重判）。
 
 ## 必须遵守的约定
 
@@ -53,5 +54,7 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
 - 已完成：契约（0.3.0，含火区台账；`get_personnel` 返回人数汇总）与红线引擎、模拟矿井（6 场景）、6 个服务、DSH bundle、技能草稿、基线评测、CI。
 - 真实 DSH 0.2.1-rc.4 验证清单 17 项全部通过（`docs/validation-checklist.md`），`pnpm-lock.yaml` 已提交。其中 #15 的自动压缩未触发，靠手动 `/compact`；网页端权限选择器只保留审批为 ask 的预设。
 - `fire_model` 除预警等级外，还给出自燃发展阶段（`assess_warning_level` 的 stage）和处置效果（`evaluate_effect_panel` 总体结论、`evaluate_effect` 单点）；判据在 `thresholds.yaml` 的 stage、effect 两节，均为占位值。
-- 智能体端到端评测（DeepSeek deepseek-flash，各 3 次，2026-10-30）：`s2-assess-1201` 2/3、`s2-effect-after-inerting` 3/3、`s4-escalate-1201` 1/3。剩余问题：Agent 自己数自己列出的条文或事项（“上述 7 条”“4 项”），自己归纳界限（“已超 31 ppm”），偶尔中途向人提问而不收尾。本地 qwen35-122b-a10b 不适合担任救援 Agent（不委派、编造阈值），不再纳入评测。
-- 待办：专家审定阈值（含阶段、效果判据）/场景/技能；评测补充用例（封闭方案、人工确认被拒）；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；kb 接入 RAGFlow（目前只有本地降级）。
+- 智能体端到端评测（DeepSeek deepseek-flash，各 3 次，2026-10-30）：`s2-assess-1201` 2/3、`s2-effect-after-inerting` 3/3、`s4-escalate-1201` 1/3。剩余问题：Agent 自己数自己列出的条文或事项（“上述 7 条”“4 项”），自己归纳界限（“已超 31 ppm”），偶尔中途向人提问而不收尾。
+  `s4-warning-rejected`（拒绝确认）：弹确认、被拒后不重复提交、如实说明均 3/3，全部通过 0/3（数值溯源）；`s4-sealing-plan`（放行封闭方案）1/3 走通发布，另 2 次停下问人（合规判不通过、爆炸危险性取值）。
+  暴露的工具缺口：调度 Agent 自己算物资缺口（需求 − 库存）和密闭墙/注浆材料用量；`assess_explosion_risk` 只算甲烷，CO、乙烯检出时 Agent 无法确定 `explosion_risk`。本地 qwen35-122b-a10b 不适合担任救援 Agent（不委派、编造阈值），不再纳入评测。
+- 待办：专家审定阈值（含阶段、效果判据）/场景/技能；dispatch 补物资缺口与封闭材料计算；多组分爆炸危险性；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；kb 接入 RAGFlow（目前只有本地降级）。

@@ -14,6 +14,8 @@ DSH 0.2.1-rc.4 的 headless / ACP 入口都不支持 Agent 预设，所以经网
 每次运行的判定写入 var/eval/agent/<时间>/results.jsonl。
 
 注意：评测会重置模拟矿井场景（manual 时钟），并在 DSH 里留下评测会话。不要在演示进行中运行。
+用例的 approvals 会放行指令（如封闭方案），放行的指令写入指令台账和审计日志：跑这类用例要用 `make dev-eval`
+启动，把台账和审计写到 var/eval/ 下，不要写进复盘用的 var/actions-ledger.jsonl、var/audit/。
 """
 
 from __future__ import annotations
@@ -122,11 +124,13 @@ def find_root(prompt: str, since_ms: int, timeout_s: float) -> str:
     raise TimeoutError("没有找到评测会话")
 
 
-def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float) -> tuple[grade.Session, str]:
+def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float, approvals: dict[str, str] | None = None) -> tuple[grade.Session, str]:
     """全部会话的回合都结束、且 quiet_s 秒内没有新事件，视为结束（settled）；
     根会话停在 ask_user_question 等人回答时也视为结束（asked_user）。
 
-    卡在人工确认（调用了 actions 却没有结果）时点“拒绝”，避免无人值守时一直挂着；这本身会被 no_actions 判为失败。"""
+    人工确认按 approvals（actions 工具短名 → allow / reject）点 Allow once 或 Reject；没列出的工具一律拒绝，
+    无人值守时不会一直挂着，也不会误放行。"""
+    approvals = approvals or {}
     deadline = time.time() + timeout_s
     last_count, last_change = -1, time.time()
     while time.time() < deadline:
@@ -135,13 +139,14 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float) -> 
         count = sum(len(s.events) for s in sessions)
         if count != last_count:
             last_count, last_change = count, time.time()
-        pending = [
-            n for s in sessions for n, cid in _unanswered(s) if n.startswith("mcp__actions__")
-        ]
-        if pending and time.time() - last_change > 10:
-            btn = page.get_by_role("button", name="Reject")
+        waiting = [a for a in root.approvals() if a["outcome"] is None]
+        if waiting:
+            name = "Allow once" if approvals.get(waiting[0]["tool"]) == "allow" else "Reject"
+            btn = page.get_by_role("button", name=name)
             if btn.count():
                 btn.first.click()
+                time.sleep(3)  # 等 approval/decided 写入日志，避免重复点击
+                continue
         if all(s.turns_settled() for s in sessions) and time.time() - last_change >= quiet_s:
             return root, "settled"
         # 指挥 Agent 停下来问人（ask_user_question）也是正常收尾：评测不代答，按已有输出判定
@@ -170,7 +175,7 @@ def run_one(page: Page, case: dict, model: str | None, timeout_s: float, quiet_s
     t0 = int(time.time() * 1000)
     send(page, prompt)
     root_id = find_root(prompt, t0 - 5000, 120)
-    root, status = wait_settled(root_id, page, timeout_s, quiet_s)
+    root, status = wait_settled(root_id, page, timeout_s, quiet_s, case.get("approvals"))
     r = grade.grade(root, case["checks"])
     r.update(case=case["id"], requested_model=model, mine_now=mine_now, seconds=round(time.time() - t0 / 1000))
     if r["llm_errors"]:

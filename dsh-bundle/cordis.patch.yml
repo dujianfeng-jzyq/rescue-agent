@@ -63,6 +63,6 @@
     - id: rescue-audit
       name: '@rescue/dsh-bundle/audit'
       config:
-        path: !!js "(process.env.RESCUE_HOME ?? process.cwd()) + '/var/audit/tool-actions.jsonl'"
+        path: !!js "process.env.RESCUE_AUDIT_LOG ?? (process.env.RESCUE_HOME ?? process.cwd()) + '/var/audit/tool-actions.jsonl'"
         gatedServer: actions
         exemptPrefixes: []

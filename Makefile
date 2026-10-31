@@ -1,5 +1,5 @@
 # 常用命令入口。具体说明见 README.md。
-.PHONY: setup setup-py dev up down smoke test test-py test-ts lint check eval eval-agent schema sim-state clean
+.PHONY: setup setup-py dev dev-eval up down smoke test test-py test-ts lint check eval eval-agent schema sim-state clean
 
 UV := uv run --project mcp
 
@@ -10,6 +10,8 @@ setup-py:         ## 只装 Python 部分
 
 dev:              ## 启动 MCP 服务 + DSH 网页端
 	scripts/dev.sh
+dev-eval:         ## 智能体评测用：同 dev，但指令台账和审计日志写到 var/eval/ 下（评测会放行指令）
+	RESCUE_ACTIONS_LEDGER=$(CURDIR)/var/eval/actions-ledger.jsonl RESCUE_AUDIT_LOG=$(CURDIR)/var/eval/audit/tool-actions.jsonl scripts/dev.sh
 up:               ## 只启动 MCP 服务（含模拟矿井）
 	scripts/mcp-up.sh
 down:
