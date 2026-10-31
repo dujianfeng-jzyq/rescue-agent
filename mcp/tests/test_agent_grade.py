@@ -65,7 +65,7 @@ ALL = {"delegates_to": "rescue-assessment", "no_actions": True, "numbers_grounde
 
 
 def test_numbers_strip_ids_dates_and_article_numbers():
-    text = "1. 2026-11-04T15:03:02 BT-1201-G1 使G1、C2H4 第85条 第 1、3、5 节 第 75/164 条 第84→85→87条 主题5 R‑1202‑IN 11-03 06:00 11-04T08:00 11-04 报警记录 #16\n## 2. 上隅角CO 9.35 ppm\n### 7.3 必须人工判断\n| 7 | 矿山救援规程 |"
+    text = "1. 2026-11-04T15:03:02 BT-1201-G1 使G1、C2H4 第85条 第 1、3、5 节 第 75/164 条 第84→85→87条 第 2、3 类 主题5 R‑1202‑IN 11-03 06:00 11-04T08:00 11-04 报警记录 #16\n## 2. 上隅角CO 9.35 ppm\n### 7.3 必须人工判断\n### 8) 判定依据\n**5）矿山救援规程 第85条**\n6）封闭\n| 7 | 矿山救援规程 |"
     assert [t for t, _ in grade.numbers(text)] == ["9.35"]
 
 

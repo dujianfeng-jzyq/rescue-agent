@@ -50,8 +50,8 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
 
 ## 当前状态（2026-10-30）
 
-- 已完成：契约（0.2.0，含火区台账）与红线引擎、模拟矿井（6 场景）、6 个服务、DSH bundle、技能草稿、基线评测、CI。
+- 已完成：契约（0.3.0，含火区台账；`get_personnel` 返回人数汇总）与红线引擎、模拟矿井（6 场景）、6 个服务、DSH bundle、技能草稿、基线评测、CI。
 - 真实 DSH 0.2.1-rc.4 验证清单 17 项全部通过（`docs/validation-checklist.md`），`pnpm-lock.yaml` 已提交。其中 #15 的自动压缩未触发，靠手动 `/compact`；网页端权限选择器只保留审批为 ask 的预设。
 - `fire_model` 除预警等级外，还给出自燃发展阶段（`assess_warning_level` 的 stage）和处置效果（`evaluate_effect_panel` 总体结论、`evaluate_effect` 单点）；判据在 `thresholds.yaml` 的 stage、effect 两节，均为占位值。
-- 智能体端到端评测（DeepSeek deepseek-flash，各 3 次）：`s2-assess-1201` 全部通过 3/3，`s2-effect-after-inerting` 2/3（剩余问题是 Agent 偶尔自行推算时长或取整）。本地 qwen35-122b-a10b 不适合担任救援 Agent（不委派、编造阈值），不再纳入评测。
-- 待办：专家审定阈值（含阶段、效果判据）/场景/技能；评测补充用例（升级应急响应、封闭方案、人工确认被拒）；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；kb 接入 RAGFlow（目前只有本地降级）。
+- 智能体端到端评测（DeepSeek deepseek-flash，各 3 次，2026-10-30）：`s2-assess-1201` 2/3、`s2-effect-after-inerting` 3/3、`s4-escalate-1201` 1/3。剩余问题：Agent 自己数自己列出的条文或事项（“上述 7 条”“4 项”），自己归纳界限（“已超 31 ppm”），偶尔中途向人提问而不收尾。本地 qwen35-122b-a10b 不适合担任救援 Agent（不委派、编造阈值），不再纳入评测。
+- 待办：专家审定阈值（含阶段、效果判据）/场景/技能；评测补充用例（封闭方案、人工确认被拒）；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；kb 接入 RAGFlow（目前只有本地降级）。
