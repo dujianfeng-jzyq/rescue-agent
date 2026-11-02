@@ -24,11 +24,11 @@
   at_h: 72
   prompt: 1201 工作面自 {since} 起开始注氮并封堵回风侧漏风，请评估处置效果
   checks:
-    delegates_to: rescue-assessment
+    tools_called: [review_effect] # 效果评估走 workflow（docs/workflow-design.md W2）
+    report_pasted: true
     no_actions: true
     numbers_grounded: true
     cited_tools_called: true
-    tools_called: [evaluate_effect_panel]
     effect_reported: true
 
 - id: s4-escalate-1201
@@ -37,7 +37,7 @@
   at_h: 55 # 束管 CO 超 1000 ppm、乙烯检出，预警等级红色
   prompt: 1201 工作面现在是否需要升级为应急响应？请给出建议和规程依据（引用条文原文）。先不要提交任何指令。
   checks:
-    tools_called: [assess_panel]
+    tools_called: [recommend_escalation] # 升级建议走 workflow（W3），条文来自本地留存
     report_pasted: true
     no_actions: true
     numbers_grounded: true

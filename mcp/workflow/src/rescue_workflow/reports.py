@@ -135,3 +135,45 @@ def plan_draft(r: dict[str, Any], snapshot_id: str) -> str:
     lines.append("依据条款：" + "、".join(f"{b['document']} {b['article']}" for b in p["basis"]))
     lines.append(f"依据：方案草案快照 {snapshot_id}（workflow 计算结果）；判据为开发占位值")
     return "\n".join(lines)
+
+
+def effect_review(r: dict[str, Any], snapshot_id: str) -> str:
+    lines = [
+        f"【效果评估】{r['panel']} 工作面 {_ts(r['as_of'])}",
+        f"结论：{r['overall_name']}（计算结果）",
+        f"处置开始：{_ts(r['since'])}（{r['since_source']}）；已观测 {r['observed_h']} 小时",
+        "依据：" + "；".join(r["basis"]),
+        "各结论测点数：" + "，".join(f"{k} {v}" for k, v in r["counts"].items()),
+        "逐点结果（计算结果）：",
+    ]
+    for p in r["points"]:
+        markers = f"；新出现 {'、'.join(p['new_marker_gases'])}" if p["new_marker_gases"] else ""
+        lines.append(
+            f"- {p['sensor_id']} {p['measurand']}：{p['effect_name']}。处置时 {_v(p['value_at_since'])}，现在 {_v(p['latest'])}，"
+            f"变化 {_v(p['change_since'])}；速率 处置前 {_v(p['rate_before_per_hour'])}/h、处置后 {_v(p['rate_after_per_hour'])}/h，"
+            f"降幅 {_v(p['rate_reduction_pct'])}%{markers}"
+        )
+    lines.append(f"下次复评：{_ts(r['next_review_at'])}（届时已观测 {r['observed_h_at_next_review']} 小时）")
+    if r["escalation_suggested"]:
+        lines.append("结论为恶化：建议调用升级建议（recommend_escalation）判断是否升级为应急响应。")
+    lines.append(f"依据：效果评估快照 {snapshot_id}（workflow 计算结果）；判据为开发占位值")
+    return "\n".join(lines)
+
+
+def escalation(r: dict[str, Any], snapshot_id: str) -> str:
+    lines = [
+        f"【升级建议】{r['panel']} 工作面 {_ts(r['as_of'])}",
+        "结论：" + ("建议升级为应急响应（计算结果）" if r["recommend"] else "暂不建议升级为应急响应（计算结果）"),
+        f"预警等级：{r['level_name']}；自燃发展阶段：{r['stage_name']}",
+    ]
+    if r["recommend"]:
+        lines.append("命中的升级判据：")
+        lines += [f"- {x}" for x in r["reasons"]]
+        lines.append(r["evacuation_reminder"])
+    else:
+        lines.append("升级判据均未命中：")
+        lines += [f"- {x}" for x in r["not_met"]]
+    lines.append("规程依据（条文原文）：")
+    lines += [f"- {a['document']} {a['article']}：{a['content']}" for a in r["articles"]]
+    lines.append(f"依据：升级建议快照 {snapshot_id}（workflow 计算结果）；升级判据为开发占位值，是否升级由指挥人员决定")
+    return "\n".join(lines)

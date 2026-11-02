@@ -20,7 +20,7 @@
 - explosion_reported: true  总指挥协调的最后回复里写了 assess_explosion_risk（或 _sample）最近一次给出的分区名 zone_name
 - chart_shown: true         总指挥协调的最后回复里原样放了某次爆炸三角形结果的 chart.markdown 里的图片（![..](svg_path)）
                             和 SVG 下载链接（网页端据此显示图片、提供下载）
-- kb_cited: true            调用过 kb，且总指挥协调的最后回复里出现 kb 返回过的某个条号（如 第73条；忽略空格）
+- kb_cited: true            调用过 kb 或 workflow，且总指挥协调的最后回复里出现它们返回过的某个条号（如 第73条；忽略空格）
 - approval_asked: [<工具>]   这些 actions 工具都弹出过人工确认（红线预检已通过）
 - actions_issued: [<工具>]   这些 actions 工具都发布成功（确认放行后返回 status=issued 的回执）
 - no_retry_after_reject: true  人工确认被拒之后，总指挥协调没有再调用任何 actions 工具（评测里没有人再给指示，
@@ -457,6 +457,7 @@ def grade(root: Session, checks: dict) -> dict:
             if name == "mcp__fire_model__assess_warning_level" and text.lstrip().startswith("{")
         ]
         names += [r["result"]["warning"].get("stage_name") for t, r in wf if t == "assess_panel" and "result" in r]
+        names += [r["result"].get("stage_name") for t, r in wf if t == "recommend_escalation" and "result" in r]
         want = next((n for n in reversed(names) if n), None)
         final = root.final_text()
         results["stage_reported"] = {"ok": want is not None and want in final, "detail": {"tool": want}}

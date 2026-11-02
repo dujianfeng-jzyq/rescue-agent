@@ -11,13 +11,13 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from rescue_contract.client import MineData
-from rescue_contract.models import HumanInput, Snapshot, SnapshotKind
+from rescue_contract.models import HumanInput, MineTime, Snapshot, SnapshotKind
 from rescue_contract.serving import DEFAULT_PORTS
 from rescue_contract.snapshots import SnapshotStore, new_id
 from rescue_contract.validation import precheck
 from rescue_fire_model import explosion
 
-from . import assess, plan, reports
+from . import assess, escalation, plan, reports
 
 INSTRUCTIONS = (
     "工作流服务：研判、效果评估、升级建议、方案草案等标准流程按固定步骤由代码完成，结果写成带编号的研判快照。"
@@ -77,6 +77,39 @@ def build_server(mine_data_target: Any | None = None, store: SnapshotStore | Non
             result,
             reports.assessment,
         )
+
+    @server.tool()
+    async def review_effect(panel: str = "1201", since: MineTime | None = None) -> dict[str, Any]:
+        """处置效果评估（评估效果一律先调它）：对工作面全部发火指标测点比较处置前后的上升速率，给出总体结论
+        （已受控 / 需继续处置 / 恶化 / 观测时间不足）、各结论测点数、逐点结果和下次复评时刻，写成效果评估快照。
+        since 为处置开始的矿井时间；不给时取指令台账里本工作面最近一次已下发防灭火方案的下发时间。
+        回答时把 report_markdown 原样单独成段放进回答；结论为恶化时再调 recommend_escalation。"""
+        result = await escalation.review_effect(md, panel, since)
+        latest = snapshots.latest(SnapshotKind.ASSESSMENT, panel)
+        snap = save(
+            SnapshotKind.EFFECT, panel, result["as_of"], {"panel": panel, "since": result["since"]}, result,
+            reports.effect_review, [latest.snapshot_id] if latest else [],
+        )  # fmt: skip
+        return {"snapshot_id": snap.snapshot_id, "report_markdown": snap.report_markdown, "result": result}
+
+    @server.tool()
+    async def recommend_escalation(panel: str = "1201") -> dict[str, Any]:
+        """是否升级为应急响应的建议（回答“要不要升级”一律先调它）：重新生成研判快照，结合最近一次效果评估，
+        按预设判据（thresholds.yaml 的 escalation 节，占位值）给出 recommend、命中的判据和规程条文原文，写成升级建议快照。
+        回答时把 report_markdown 原样单独成段放进回答；条文已在报告里，不必再检索。
+        提交 actions 的 escalate_emergency 时 snapshot_id 照抄这里返回的值（只有建议升级的快照才能提交）。"""
+        a = await new_assessment(panel, include_personnel=True)
+        eff = snapshots.latest(SnapshotKind.EFFECT, panel)
+        result = escalation.recommend(a.result, eff.result if eff else None)
+        result["effect_snapshot_id"] = eff.snapshot_id if eff else None
+        parents = [a.snapshot_id] + ([eff.snapshot_id] if eff else [])
+        snap = save(SnapshotKind.ESCALATION, panel, result["as_of"], {"panel": panel}, result, reports.escalation, parents)
+        return {
+            "snapshot_id": snap.snapshot_id,
+            "assessment_snapshot_id": a.snapshot_id,
+            "report_markdown": a.report_markdown + "\n\n" + snap.report_markdown,
+            "result": result,
+        }
 
     PLAN_TOOL = {"sealing": "issue_sealing_plan", "unsealing": "approve_unsealing", "firefighting": "issue_firefighting_plan"}
 

@@ -57,3 +57,13 @@ effect:
 context:
   methane_window_h: 1              # 甲烷速率的计算窗口
   methane_rising_rate_pct_h: 0.05  # 任一测点 1 小时速率超过此值（%/h）即视为“继续上升”
+
+# ── 升级为应急响应的建议（workflow 的 recommend_escalation 用；演示用占位值）──────────
+# TODO(专家): 按本矿火灾专项应急预案的启动条件替换；引用条文同样待审定。
+# 满足任一条件即建议升级。
+escalation:
+  level_at_least: red        # 预警等级达到即建议升级
+  stages: [intense]          # 自燃发展阶段属于其中之一即建议升级
+  effect_worsening: true     # 最近一次效果评估为“恶化”即建议升级
+  realtime_alarm: true       # 有实时红线报警即建议升级
+  articles: [第39条, 第40条, 第73条]   # 建议中引用的《矿山救援规程》条款（只从本地留存取）
