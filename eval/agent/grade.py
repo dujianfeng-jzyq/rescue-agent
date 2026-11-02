@@ -242,6 +242,8 @@ _SECTION = re.compile(
     r"(?m)^\s*(?:#+\s*)?(?:[-*]\s+)?(?:\*\*)?(\d+(?:\.\d+)+)(?:\*\*)?"
     r"(?=\s*$|\s*[（(]|\s+[-—–:：]|\*\*)(?!\*\*\s*(?:ppm|%|℃|°C|倍|m\b|人))"
 )
+# Markdown 标题开头的多级编号也是小节号，后面可以直接跟标题文字（“### 2.3 近 24 小时趋势”），但不能是单位
+_MD_SECTION = re.compile(r"(?m)^\s*#+\s*(\d+(?:\.\d+)+)\s+(?!(?:ppm|%|℃|°C|倍|m\b|人(?!员)))")
 
 
 _ESCAPED_WS = re.compile(r"\\[nrt]")
@@ -282,7 +284,7 @@ def check_numbers(s: Session) -> dict[str, list[dict]]:
     out: dict[str, list[dict]] = {"none": [], "approx": []}
     for text in s.outputs():
         lists = [m.span() for m in _NUM_LIST.finditer(text) if set(_NUM.findall(m.group(0))) <= articles]
-        sections = set(_SECTION.findall(text))
+        sections = set(_SECTION.findall(text)) | set(_MD_SECTION.findall(text))
         for tok, pos in numbers(text):
             if tok in sections:
                 continue
