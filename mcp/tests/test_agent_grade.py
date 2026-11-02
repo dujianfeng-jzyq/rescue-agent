@@ -77,7 +77,7 @@ def test_numbers_strip_labels_and_combined_rule_ids():
 @pytest.mark.parametrize(
     ("report", "grounded"),
     [("1201 未封闭，164 条不适用", True), ("本地留存共 12 条", False), ("依据条号（164/85）", True), ("比例（164/40）", False),
-     ("规则（075/085/057·053/164）", True), ("第57·53条", True)],
+     ("规则（075/085/057·053/164）", True), ("第57·53条", True), ("kb 返回的 85—164 条", True)],
 )
 def test_bare_article_number_needs_article_in_material(tree, report, grounded):
     # “164 条不适用”是省略了“第”的条号，材料里有第164条才算有依据；“共 12 条”是计数，仍要溯源

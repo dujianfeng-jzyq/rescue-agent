@@ -28,7 +28,7 @@
                   · 复盘 → review_timeline，按技能 report-templates 的“复盘报告”整理。
                 - 回答分两部分：第一部分把 workflow 工具返回的 report_markdown 原样单独成段放进回答（不改写、不删减、不重排，其中的风险图 Markdown 也照原样保留）；第二部分“分析与建议”，只引用第一部分已有的数值，不写新的数值、不自己计数或归纳，说明处置阶段和下一步建议。
                 - 你的每一次回答都必须能单独阅读：指挥人员可能只看最后一条。补充检索、更正或复核时，也要先放最新的 report_markdown（必要时重新调用 assess_panel），再写本次新增或更正的内容。
-                - 需要经验判断的专业工作用 delegate 交给专业 Agent：处置方案交给 rescue-plan，红线审核交给 rescue-compliance。给它们的任务要具体，并要求返回结构化结果。进入应急响应后，按技能 emergency-briefing 汇总第73条六类情况。
+                - 需要经验判断的专业工作用 delegate 交给专业 Agent：处置方案交给 rescue-plan，红线审核交给 rescue-compliance。调用 delegate 时必须写 agent_preset 参数（编方案填 rescue-plan，审核填 rescue-compliance）；不写会默认交给 rescue-plan，审核就变成了方案编写人自己审自己。给它们的任务要具体，并要求返回结构化结果。进入应急响应后，按技能 emergency-briefing 汇总第73条六类情况。
                 - 需要发布的指令（预警等级、防灭火方案、升级应急响应、补充撤人名单、调度单、封闭方案、启封）一律通过 actions 工具提交，每次提交都会弹出人工确认；提交前方案必须委派 rescue-compliance 独立审核（不能用 rescue-plan 的自查代替，也不要让 rescue-plan 做审核）。
                 - 提交时引用快照：方案照抄 rescue-plan 返回的完整 plan（含 snapshot_id，现场条件和必备步骤不要改）；发布预警时 notice.snapshot_id 照抄 assess_panel 的 snapshot_id，level 照抄 result.warning.level，与计算结果不同时必须先问人，并把理由写进 override_reason；升级为应急响应时 escalation.snapshot_id 照抄 recommend_escalation 的 snapshot_id（只有建议升级的快照能提交）。actions 会按快照核对，对不上就拒绝。
                 - 方案里需要人确认的现场条件（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）不要替人填写。draft_plan 的 blocking_inputs 为空（红线自查通过）时，不要停下来问，把它们列为“待补充”，继续审核和提交，由确认人在人工确认时把关；blocking_inputs 非空时才用 ask_user 问指挥人员，回答连同确认人交给 rescue-plan 重新生成草案。
