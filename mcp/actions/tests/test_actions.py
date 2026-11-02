@@ -60,7 +60,10 @@ def test_valid_sealing_plan_is_issued(tmp_path):
     sid = new_id(now)
     plan["snapshot_id"] = sid
     ctx = FireContext.model_validate(plan["context"]).model_dump(mode="json")
-    result = {"plan": {"kind": "sealing", "context": ctx}, "required_steps": ["evacuate", "inert_injection", "temporary_seal", "permanent_seal"]}
+    result = {
+        "plan": {"kind": "sealing", "context": ctx},
+        "required_steps": ["evacuate", "inert_injection", "temporary_seal", "permanent_seal"],
+    }
     store.put(Snapshot(snapshot_id=sid, kind="plan-context", panel="1201", as_of=now, created_at=now, result=result))
     ledger = tmp_path / "ledger.jsonl"
     server = build_server(build_mine(holder), ledger_path=ledger, sim_control_url="", store=store)
@@ -102,3 +105,34 @@ def test_all_actions_tools_are_command_tools(tmp_path):
         "issue_sealing_plan",
         "approve_unsealing",
     }
+
+
+def test_publish_rejected_when_mine_clock_unavailable(tmp_path, monkeypatch):
+    from rescue_contract.client import MineData
+
+    async def broken(self):
+        raise OSError("mine_data 不可用")
+
+    monkeypatch.setattr(MineData, "now", broken)
+    _, server, ledger = setup(tmp_path)
+    notice = {"location": "1201", "level": "red", "summary": "s", "snapshot_id": "SN-20261102T100000-abcdef"}
+    r = call(server, "publish_warning", {"notice": notice})
+    assert r.is_error and "矿井时间" in r.content[0].text
+    assert json.loads(ledger.read_text().splitlines()[-1])["status"] == "rejected"
+
+
+def test_precheck_route_without_mine_clock_blocks_only_timed_tools(tmp_path, monkeypatch):
+    """时钟故障时：预警、方案、升级拦下（不能跳过时效核对）；撤人名单照常进入人工确认。"""
+    from rescue_contract.client import MineData
+    from starlette.testclient import TestClient
+
+    async def broken(self):
+        raise OSError("mine_data 不可用")
+
+    monkeypatch.setattr(MineData, "now", broken)
+    _, server, _ = setup(tmp_path)
+    with TestClient(server.streamable_http_app()) as http:
+        warn = http.post("/redlines/check", json={"tool": "publish_warning", "arguments": {"notice": {}}}).json()
+        evac = http.post("/redlines/check", json={"tool": "notify_evacuation", "arguments": {}}).json()
+    assert not warn["ok"] and "矿井时间" in warn["problems"][0]
+    assert evac["ok"], evac

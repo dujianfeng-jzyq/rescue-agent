@@ -39,7 +39,7 @@ from rescue_contract.models import (
 )
 from rescue_contract.serving import auth_headers
 from rescue_contract.snapshots import SnapshotStore
-from rescue_contract.validation import check_dispatch, check_escalation, check_warning, precheck, validate_plan
+from rescue_contract.validation import PLAN_TOOLS, check_dispatch, check_escalation, check_warning, plan_notes, precheck, validate_plan
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -92,7 +92,9 @@ class Sim:
         if not self.base:
             return False
         body = json.dumps({"type": iv_type, "params": params or {}, "roadways": roadways or [], "source": "action"}).encode()
-        req = urllib.request.Request(f"{self.base}/interventions", data=body, headers={"Content-Type": "application/json", **auth_headers()}, method="POST")
+        req = urllib.request.Request(
+            f"{self.base}/interventions", data=body, headers={"Content-Type": "application/json", **auth_headers()}, method="POST"
+        )
         try:
             with urllib.request.urlopen(req, timeout=5):
                 return True
@@ -119,6 +121,19 @@ def build_server(
         except (MineDataError, OSError, Exception):  # noqa: BLE001
             return None
 
+    TIMED_TOOLS = {*PLAN_TOOLS, "publish_warning", "escalate_emergency"}
+    NO_CLOCK = "无法取得矿井时间，不能核对研判快照和现场条件的时效，指令未发布。请检查 mine_data 服务后重试。"
+
+    async def require_now(tool: str, payload: BaseModel) -> datetime:
+        """需要核对时效的指令：取不到矿井时间就拒绝（fail closed），不能跳过时效检查。"""
+        now = await mine_now()
+        if now is None:
+            ledger.append(
+                {"tool": tool, "status": "rejected", "at": None, "problems": [NO_CLOCK], "payload": payload.model_dump(mode="json")}
+            )
+            raise ToolError(NO_CLOCK)
+        return now
+
     async def issue(tool: str, payload: BaseModel, forward: bool = False, note: str | None = None) -> ActionReceipt:
         now = await mine_now() or datetime.now()
         receipt = ActionReceipt(
@@ -130,11 +145,19 @@ def build_server(
 
     async def reject_if(tool: str, payload: BaseModel, problems: list[str]) -> None:
         if problems:
-            ledger.append({"tool": tool, "status": "rejected", "at": await mine_now(), "problems": problems, "payload": payload.model_dump(mode="json")})
+            ledger.append(
+                {
+                    "tool": tool,
+                    "status": "rejected",
+                    "at": await mine_now(),
+                    "problems": problems,
+                    "payload": payload.model_dump(mode="json"),
+                }
+            )
             raise ToolError("指令未发布。\n" + "\n".join(problems))
 
     async def issue_plan(tool: str, plan: Plan) -> ActionReceipt:
-        now = await mine_now()
+        now = await require_now(tool, plan)
         problems = validate_plan(tool, plan, now, snapshots)
         if problems:
             ledger.append({"tool": tool, "status": "rejected", "at": now, "problems": problems, "payload": plan.model_dump(mode="json")})
@@ -143,7 +166,7 @@ def build_server(
         for step in sorted(plan.steps, key=lambda s: s.order):
             if step.type in SIM_STEP_TYPES:
                 forwarded = sim.apply(step.type.value, dict(step.params), step.roadways) or forwarded
-        return await issue(tool, plan, forward=forwarded)
+        return await issue(tool, plan, forward=forwarded, note="；".join(plan_notes(plan, snapshots)) or None)
 
     # ── 需要确认（DSH 审批插件拦截）──
 
@@ -151,7 +174,7 @@ def build_server(
     async def publish_warning(notice: WarningNotice) -> ActionReceipt:
         """发布自燃预警等级（确认人：通风部门负责人）。snapshot_id 照抄 workflow 的 assess_panel 返回值；
         等级必须与研判快照一致，人工改等级时在 override_reason 写明理由。"""
-        problems, notes = check_warning(notice, snapshots)
+        problems, notes = check_warning(notice, snapshots, await require_now("publish_warning", notice))
         await reject_if("publish_warning", notice, problems)
         return await issue("publish_warning", notice, note="；".join(notes) or None)
 
@@ -164,7 +187,9 @@ def build_server(
     @server.tool()
     async def escalate_emergency(escalation: Escalation) -> ActionReceipt:
         """建议升级为应急响应（确认人：总工程师或矿长）。snapshot_id 照抄 workflow 的 recommend_escalation 返回值。"""
-        await reject_if("escalate_emergency", escalation, check_escalation(escalation, snapshots))
+        await reject_if(
+            "escalate_emergency", escalation, check_escalation(escalation, snapshots, await require_now("escalate_emergency", escalation))
+        )
         return await issue("escalate_emergency", escalation)
 
     @server.tool()
@@ -203,7 +228,10 @@ def build_server(
     @server.custom_route("/redlines/check", methods=["POST"])
     async def redlines_check(req: Request) -> JSONResponse:
         body = await req.json()
-        result = precheck(body.get("tool", ""), body.get("arguments") or {}, await mine_now(), snapshots)
+        now = await mine_now()
+        if now is None and body.get("tool", "") in TIMED_TOOLS:  # 撤人名单、调度单不核对时效，时钟故障时不能拦
+            return JSONResponse({"ok": False, "problems": [NO_CLOCK], "notes": []})
+        result = precheck(body.get("tool", ""), body.get("arguments") or {}, now, snapshots)
         return JSONResponse(result)
 
     return server

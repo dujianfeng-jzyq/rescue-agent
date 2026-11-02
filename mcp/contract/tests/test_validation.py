@@ -131,3 +131,56 @@ def test_dispatch_order_lines_checked_when_snapshot_given(tmp_path):
     assert precheck("issue_dispatch_order", {"order": ok}, NOW, store)["ok"]
     assert not precheck("issue_dispatch_order", {"order": bad}, NOW, store)["ok"]
     assert precheck("issue_dispatch_order", {"order": {**ok, "snapshot_id": None}}, NOW, store)["ok"]
+
+
+# ── 预警、升级引用的快照也要核对时效 ──
+
+
+@pytest.mark.parametrize(
+    ("tool", "kind", "result", "key", "args"),
+    [
+        ("publish_warning", "assessment", {"warning": {"level": "red"}}, "notice", {"location": "1201", "level": "red", "summary": "s"}),
+        ("escalate_emergency", "escalation", {"recommend": True}, "escalation", {"reason": "r", "recommended_level": "应急响应"}),
+    ],
+)
+@pytest.mark.parametrize(("age_h", "ok"), [(1, True), (3, False), (-1, False)])
+def test_warning_and_escalation_snapshot_must_be_fresh(tmp_path, tool, kind, result, key, args, age_h, ok):
+    store = SnapshotStore(tmp_path)
+    as_of = NOW - timedelta(hours=age_h)
+    sid = new_id(as_of)
+    store.put(Snapshot(snapshot_id=sid, kind=kind, panel="1201", as_of=as_of, created_at=NOW, result=result))
+    r = precheck(tool, {key: {**args, "snapshot_id": sid}}, NOW, store)
+    assert r["ok"] is ok, r
+    if not ok:
+        assert ("过时" if age_h > 0 else "晚于") in r["problems"][0]
+    assert precheck(tool, {key: {**args, "snapshot_id": sid}}, None, store)["ok"]  # 自查不核对时效
+
+
+# ── 人工确认弹窗：逐项列出人工输入和未确认的现场条件 ──
+
+
+def test_plan_notes_list_human_inputs_and_missing_fields(tmp_path):
+    store = SnapshotStore(tmp_path)
+    sid = new_id(NOW)
+    ctx = {**CTX, "fire_source_confirmed": True, "area_temperature_c": 32.0}
+    human = [
+        {"field": "fire_source_confirmed", "value": True, "confirmed_by": "救护队带队指挥员", "note": None},
+        {"field": "area_temperature_c", "value": 32.0, "confirmed_by": "通风区长", "note": None},
+    ]
+    result = {"plan": {"kind": "sealing", "context": ctx}, "required_steps": REQUIRED}
+    store.put(
+        Snapshot(
+            snapshot_id=sid, kind="plan-context", panel="1201", as_of=NOW, created_at=NOW, inputs={"human_inputs": human}, result=result
+        )
+    )
+    r = precheck("issue_sealing_plan", {"plan": _plan(sid, **ctx)}, NOW, store)
+    assert r["ok"], r
+    given, missing = r["notes"]
+    assert "火源是否明确=是（确认人：救护队带队指挥员）" in given and "灾区温度（℃）=32.0（确认人：通风区长）" in given
+    assert "能见度" in missing and "回风道是否畅通" in missing and "火源" not in missing
+
+
+def test_plan_notes_without_human_inputs_list_all_missing(tmp_path):
+    store, sid = _store(tmp_path)
+    r = precheck("issue_sealing_plan", {"plan": _plan(sid)}, NOW, store)
+    assert r["ok"] and len(r["notes"]) == 1 and "未经人工确认" in r["notes"][0], r

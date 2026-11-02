@@ -12,6 +12,7 @@ from typing import Any
 from mcp.server.mcpserver.exceptions import ToolError
 from rescue_contract.client import MineData
 from rescue_contract.models import (
+    HUMAN_INPUT_LABELS,
     AirwayKind,
     Citation,
     FireAreaStatus,
@@ -34,13 +35,7 @@ from . import config
 
 TITLES = {"sealing": "采空区火区封闭方案", "unsealing": "采空区火区启封方案", "firefighting": "采空区自燃防灭火方案"}
 PREFIX = {"sealing": "SP", "unsealing": "UP", "firefighting": "FP"}
-HUMAN_FIELDS = {
-    "area_temperature_c": "灾区温度（℃）",
-    "visibility_m": "能见度（米）",
-    "fire_source_confirmed": "火源是否明确",
-    "water_supply_sufficient": "水源、人力和物力是否充足",
-    "return_airway_clear": "回风道是否畅通",
-}
+HUMAN_FIELDS = HUMAN_INPUT_LABELS
 EDITABLE = [
     "steps[].description（措施说明）",
     "steps[].roadways（巷道，密闭位置按第86条选择并写明需现场确认）",
@@ -177,7 +172,9 @@ async def draft(
                     raise ToolError(str(exc)) from exc
                 params["rate_m3_h"] = inert_calc["required_n2_m3_h"]
             else:
-                missing.append("注氮流量：给出漏风量 leak_m3_min 和目标氧浓度 target_o2_pct 后重新调用 draft_plan，由代码按注氮稀释公式估算，不要自己算")
+                missing.append(
+                    "注氮流量：给出漏风量 leak_m3_min 和目标氧浓度 target_o2_pct 后重新调用 draft_plan，由代码按注氮稀释公式估算，不要自己算"
+                )
         steps.append(
             PlanStep(
                 order=i + 1,

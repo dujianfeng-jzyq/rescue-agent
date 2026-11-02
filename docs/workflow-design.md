@@ -208,6 +208,8 @@ class Snapshot(_Model):
 2. `publish_warning`：`notice.level` 必须等于所引用 assessment 快照的 `level`；不相等时 `override_reason` 必须非空。确认弹窗要显示“与计算结果不一致：计算 X，提交 Y，理由 …”，需要改 `dsh-bundle/src/approval/policy.ts` 的 `askVerdict`，让它显示预检返回的 `notes`。
 3. `escalate_emergency`：`escalation.snapshot_id` 必须存在，且 kind=escalation。
 4. `issue_dispatch_order`：如果引用了 dispatch 快照，逐行核对物资和数量。没有引用时放行，与现在一致，后续再收紧。
+5. （2026-11-02 补充）`publish_warning`、`escalate_emergency` 引用的快照也按 `CONTEXT_MAX_AGE` 核对时效（之前只有方案核对）。actions 发布和审批预检取不到矿井时间时，方案、预警、升级一律拒绝，不跳过时效检查；撤人名单、调度单不核对时效，时钟故障时照常进入人工确认。
+6. （2026-11-02 补充）方案预检通过时，`notes` 逐项列出现场条件里的人工输入（值和确认人，取自草案快照）以及系统没有数据、也未经人工确认的项，显示在人工确认弹窗里，并写进台账回执的 `note`。人工输入经智能体转述，系统无法核实确认人，只能由确认人在弹窗里把关。
 
 测试：`contract/tests/test_validation.py` 为每一种不一致各写一个用例；`dsh-bundle/test/policy.test.ts` 补充 notes 的显示。
 

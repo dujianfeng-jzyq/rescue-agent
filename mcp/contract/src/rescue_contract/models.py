@@ -348,6 +348,16 @@ class HumanInput(_Model):
     note: str | None = None
 
 
+# 人工确认项的中文名：方案草案的待补充清单、人工确认弹窗的说明共用
+HUMAN_INPUT_LABELS: dict[str, str] = {
+    "area_temperature_c": "灾区温度（℃）",
+    "visibility_m": "能见度（米）",
+    "fire_source_confirmed": "火源是否明确",
+    "water_supply_sufficient": "水源、人力和物力是否充足",
+    "return_airway_clear": "回风道是否畅通",
+}
+
+
 # ── 其他需确认的指令 ────────────────────────────────────────────────────────
 
 
