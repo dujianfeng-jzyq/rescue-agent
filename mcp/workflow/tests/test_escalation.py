@@ -31,6 +31,10 @@ def test_effect_after_inerting_needs_continuing(store):
     assert out["result"]["overall_name"] == "需继续处置"  # 场景 s2 的设计结论
     assert out["result"]["since_source"] == "指挥人员给出"
     assert store.get(out["snapshot_id"]).kind == "effect"
+    by_type = out["result"]["counts_by_type"]
+    assert sum(g["total"] for g in by_type) == out["result"]["evaluated"]
+    assert {g["type"] for g in by_type} == {"采空区束管", "采空区测温", "安全监控"}
+    assert "采空区束管 CO 共" in out["report_markdown"]
 
 
 def test_effect_since_from_ledger(store, tmp_path):

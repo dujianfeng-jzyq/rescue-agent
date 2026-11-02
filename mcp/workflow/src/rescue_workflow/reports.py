@@ -144,6 +144,14 @@ def effect_review(r: dict[str, Any], snapshot_id: str) -> str:
         f"处置开始：{_ts(r['since'])}（{r['since_source']}）；已观测 {r['observed_h']} 小时",
         "依据：" + "；".join(r["basis"]),
         "各结论测点数：" + "，".join(f"{k} {v}" for k, v in r["counts"].items()),
+        *(
+            [
+                f"- {g['type']} {g['measurand']} 共 {g['total']} 个：" + "，".join(f"{k} {v}" for k, v in g["counts"].items())
+                for g in r["counts_by_type"]
+            ]
+            if r.get("counts_by_type")
+            else []
+        ),
         "逐点结果（计算结果）：",
     ]
     for p in r["points"]:

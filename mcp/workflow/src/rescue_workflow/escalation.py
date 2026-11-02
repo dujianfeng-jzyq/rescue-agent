@@ -23,9 +23,24 @@ async def review_effect(md: MineData, panel: str, since: datetime | None) -> dic
         since = ledger.issued_at(rec)
         source = f"指令台账：{rec.get('action_id')} 防灭火方案 {(rec.get('payload') or {}).get('plan_id')} 的下发时间"
     out = await effect.panel_effect(md, panel, since)
+    out["counts_by_type"] = await counts_by_type(md, out["points"])
     out["since_source"] = source
     out["escalation_suggested"] = out["overall"] == "worsening"
     return out
+
+
+SOURCE_NAMES = {"bundle_tube": "采空区束管", "temperature": "采空区测温", "safety_monitor": "安全监控"}
+
+
+async def counts_by_type(md: MineData, points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """按测点类型和参数分组的各结论测点数（智能体不要自己数测点）。"""
+    source = {s.id: s.source.value for s in await md.sensors()}
+    groups: dict[tuple[str, str], dict[str, int]] = {}
+    for p in points:
+        key = (SOURCE_NAMES.get(source.get(p["sensor_id"], ""), "其他"), p["measurand"])
+        g = groups.setdefault(key, {})
+        g[p["effect_name"]] = g.get(p["effect_name"], 0) + 1
+    return [{"type": t, "measurand": m, "total": sum(c.values()), "counts": c} for (t, m), c in groups.items()]
 
 
 def articles(nums: list[str]) -> list[dict[str, str]]:
