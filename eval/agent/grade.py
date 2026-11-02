@@ -244,8 +244,13 @@ _SECTION = re.compile(
 )
 
 
+_ESCAPED_WS = re.compile(r"\\[nrt]")
+
+
 def numbers(text: str) -> list[tuple[str, int]]:
     """(数值原文, 在去掉编号等之后的文本中的位置)。"""
+    # 工具结果是 JSON 文本，换行是字面的 \n：不先换成空格，“\n0.0024”会被当成编号 n0 剥掉（RAGFlow laws 切法里很常见）
+    text = _ESCAPED_WS.sub("  ", text)
     for rx in _STRIP:
         text = rx.sub(lambda m: " " * len(m.group(0)), text)
     return [(m.group(0), m.start()) for m in _NUM.finditer(text)]

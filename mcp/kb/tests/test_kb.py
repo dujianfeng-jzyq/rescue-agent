@@ -160,9 +160,19 @@ def test_find_article_matches_chinese_numerals_and_slices_chunk():
     assert r["content"].startswith("第二百七十七条") and "第二百七十八条" not in r["content"] and "第二百七十六条" not in r["content"]
 
 
+def test_find_article_laws_chunks_without_space_after_heading():
+    # RAGFlow 的 laws 切法：条号后面直接接正文，前面可能是节标题
+    hits = [_hit("第三节井下火灾防治\n第二百七十七条任何人发现井下火灾时,视火灾性质……\n矿值班调度……\n第二百七十八条井下……")]
+    r = find_article(hits, "煤矿安全规程", "277")
+    assert r["article"] == "第二百七十七条"
+    assert r["content"].startswith("第二百七十七条任何人") and "矿值班调度" in r["content"] and "第二百七十八条" not in r["content"]
+
+
 def test_find_article_ignores_inline_references_and_other_documents():
     inline = [_hit("第十条　依照第二百七十七条规定启封火区。")]
     assert find_article(inline, "煤矿安全规程", "第277条") is None
+    wrapped = [_hit("第十条　PDF 断行时引用会落到行首，应当依照\n第二百七十七条规定启封火区。")]
+    assert find_article(wrapped, "煤矿安全规程", "第277条") is None
     other = [_hit("第二百七十七条　……", document="金属非金属矿山安全规程.pdf")]
     assert find_article(other, "煤矿安全规程", "第277条") is None
 
@@ -224,7 +234,7 @@ class _ChunksRagflow(BaseHTTPRequestHandler):
     FULL = {  # c10 排在前面：关键词也会命中它（正文引用了第二百七十七条），要靠标题判断跳过
         "c10": "第十条　依照第二百七十七条规定启封火区。",
         "c276": "第二百七十六条　火区封闭后……",
-        "c277": "第二百七十七条　封闭的火区，只有经取样化验证实火已熄灭后，方可启封。",
+        "c277": "第三节井下火灾防治\n第二百七十七条封闭的火区，只有经取样化验证实火已熄灭后，方可启封。",  # laws 切法：条号后无空格
     }
 
     def do_GET(self):
@@ -241,7 +251,8 @@ class _ChunksRagflow(BaseHTTPRequestHandler):
         elif u.path == "/api/v1/datasets/ds-reg/documents/d1/chunks":
             kw = q["keywords"]
             ids = [cid for cid, text in self.FULL.items() if kw in text]
-            data = {"chunks": [{"id": cid, "content": f"<em>{kw}</em>片段去掉了标点"} for cid in ids]}
+            # 真实的高亮会把关键词拆成几段，中间插“...”
+            data = {"chunks": [{"id": cid, "content": f"片段<em>{kw[:2]}</em>...<em>{kw[2:]}</em>去掉了标点"} for cid in ids]}
         else:
             self.send_response(404)
             self.end_headers()
@@ -268,7 +279,7 @@ def test_get_article_looks_up_document_chunks_directly(monkeypatch):
         srv.shutdown()
     # 按 id 取回原文（不是高亮片段），第十条里对第二百七十七条的引用不算
     assert out["source"] == "ragflow" and out["document"] == "煤矿安全规程__abc.pdf" and out["article"] == "第二百七十七条"
-    assert out["content"] == _ChunksRagflow.FULL["c277"]
+    assert out["content"] == "第二百七十七条封闭的火区，只有经取样化验证实火已熄灭后，方可启封。"  # 从条文标题截起，不带节标题
     assert "/api/v1/retrieval" not in _ChunksRagflow.paths
 
 

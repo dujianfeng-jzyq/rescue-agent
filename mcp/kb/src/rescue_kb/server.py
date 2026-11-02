@@ -29,7 +29,13 @@ log = logging.getLogger("rescue.kb")
 LOCAL_ARTICLES = yaml.safe_load(Path(__file__).with_name("local_articles.yaml").read_text(encoding="utf-8"))
 # 条文标题：条号在开头或前面是空白，后面跟空白（RAGFlow 原文多为“第八十五条　封闭火区……”）。
 # 正文里的引用（“依照第七十五条规定”）前后不是空白，不算标题
-_HEADING_RE = re.compile(r"(?:^|(?<=\s))第\s*([0-9]+|[一二三四五六七八九十百千零〇两]+)\s*条(?=\s)")
+# 条文标题：行首的“第X条”（RAGFlow 的 laws 切法后面直接接正文，没有空格），排除行首断行带出的引用（“第X条规定”“第X条的”）；
+# 或行中空白后的“第X条”且后面也是空白。行中紧跟文字的（“依照第七十五条规定”）是引用，不算。
+_NUM = r"第\s*([0-9]+|[一二三四五六七八九十百千零〇两]+)\s*条"
+_HEADING_RE = re.compile(
+    rf"(?m:^)[ \t\u3000]*{_NUM}(?!规定|[的、，,和或至及中所第])"
+    rf"|(?<=\s){_NUM}(?=\s)"
+)
 _CN_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 _CN_UNITS = {"十": 10, "百": 100, "千": 1000}
 
@@ -88,7 +94,7 @@ def find_article(hits: list[dict[str, Any]], document: str, article: str) -> dic
             continue
         heads = _headings(h["content"])
         for i, m in enumerate(heads):
-            if article_number(m.group(1)) == want:
+            if article_number(m.group(0)) == want:
                 end = heads[i + 1].start() if i + 1 < len(heads) else len(h["content"])
                 return {**h, "article": m.group(0).strip(), "content": h["content"][m.start() : end].strip()}
     return None

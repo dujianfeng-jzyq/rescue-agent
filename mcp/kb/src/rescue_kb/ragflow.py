@@ -76,7 +76,7 @@ def _request(cfg: RagflowConfig, method: str, path: str, body: dict | None = Non
             if attempt == cfg.retries:
                 raise RagflowError(f"RAGFlow 不可用：{exc}") from exc
             log.info("RAGFlow 请求失败，第 %d 次重试：%s", attempt + 1, exc)
-            time.sleep(0.5)
+            time.sleep(0.5 * 2**attempt)  # 连着断开时多等一会儿：0.5、1、2 秒
     if payload.get("code") not in (0, None):
         raise RagflowError(f"RAGFlow 返回错误：{payload.get('message')}")
     return payload
@@ -92,11 +92,13 @@ def find_documents(cfg: RagflowConfig, dataset_id: str, name: str, limit: int = 
 def keyword_chunks(cfg: RagflowConfig, dataset_id: str, document_id: str, keywords: str, limit: int = 10) -> list[str]:
     """在一个文档里按关键词找切片，返回片段里确实含这个关键词的切片 id。
     带 keywords 时返回的 content 是去掉标点、加了 <em> 的高亮片段，不能当原文用；
-    关键词检索是分词模糊匹配，“第九千九百九十九条”也会命中一堆切片，所以按片段过滤。"""
+    关键词检索是分词模糊匹配，“第九千九百九十九条”也会命中一堆切片，所以按片段过滤；
+    高亮会把一个词拆成几段、中间插“...”（“<em>第八</em>...<em>十五条</em>”），过滤前去掉。
+    拼错了也无妨：取回原文后还要按条文标题核对。"""
     q = urllib.parse.urlencode({"page": 1, "page_size": limit, "keywords": keywords})
     chunks = (_request(cfg, "GET", f"/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks?{q}").get("data") or {}).get("chunks") or []
     want = re.sub(r"\s+", "", keywords)
-    return [c["id"] for c in chunks if c.get("id") and want in re.sub(r"<[^>]+>|\s+", "", c.get("content") or "")]
+    return [c["id"] for c in chunks if c.get("id") and want in re.sub(r"<[^>]+>|\s+|\.\.\.|…", "", c.get("content") or "")]
 
 
 def chunk_content(cfg: RagflowConfig, dataset_id: str, document_id: str, chunk_id: str) -> str | None:

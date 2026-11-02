@@ -100,6 +100,12 @@ def test_section_numbers_are_not_values(tree, report, grounded):
     assert r["checks"]["numbers_grounded"]["ok"] is grounded, r["checks"]
 
 
+def test_escaped_newlines_do_not_glue_onto_numbers():
+    # 工具结果是 JSON 文本，换行是字面的 \n（RAGFlow laws 切法的条文里常见）
+    raw = json.dumps({"content": "一氧化碳CO \n0.0024\n3.3响应启动\n人\n—284 —\n员撤出"}, ensure_ascii=False)
+    assert [t for t, _ in grade.numbers(raw)] == ["0.0024", "3.3", "284"]
+
+
 def test_ranges_are_not_dates():
     # 83–90%、3-6 m 这类数值范围不能被当成月-日剔除
     assert [t for t, _ in grade.numbers("N2 83-90%，深度 3-6 m")] == ["83", "90", "3", "6"]
