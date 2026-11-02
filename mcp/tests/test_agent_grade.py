@@ -367,7 +367,7 @@ def test_workflow_call_covers_internal_tools(tmp_path):
         ("若复评结论转为“恶化”，再按流程调用 `recommend_escalation` 判断是否升级。", True),  # 以后视情况调用
         ("是否升级为应急响应，可调 recommend_escalation 取条文依据后再由总工程师决定。", True),
         ("升级后委派起草方案，物资按需走 recommend_escalation → issue_dispatch_order。", True),
-        ("升级建议见 `recommend_escalation` 的结论：建议升级。", False),  # 冒称引用了没调用的工具
+        ("升级建议见 `recommend_escalation` 的结论：建议升级。", True),  # workflow 工具名不查（结果是否引用由 report_pasted 查）
     ],
 )
 def test_conditional_future_call_is_not_a_citation(tmp_path, line, ok):
@@ -375,3 +375,12 @@ def test_conditional_future_call_is_not_a_citation(tmp_path, line, ok):
     tree.events.insert(0, {"type": "request/header", "data": {"header": {"tools": [{"name": "mcp__workflow__recommend_escalation", "description": ""}]}}})
     r = grade.grade(tree, {"cited_tools_called": True})
     assert r["checks"]["cited_tools_called"]["ok"] is ok, r["checks"]
+
+
+def test_uncalled_service_still_flagged(tmp_path):
+    """声称依据 ventnet 的计算却没调用（也没调用覆盖它的 workflow 工具），仍判点名未调用。"""
+    events = [{"type": "turn/start"}, _user("q"), {"type": "request/header", "data": {"header": {"tools": [{"name": "mcp__ventnet__threatened_personnel", "description": ""}]}}}]
+    events += [*_assistant("依据 ventnet 的计算，受威胁人员如下。"), {"type": "turn/end"}]
+    _write(tmp_path, ROOT_ID, events, "rescue-commander")
+    r = grade.grade(grade.load_tree(ROOT_ID, tmp_path), {"cited_tools_called": True})
+    assert not r["checks"]["cited_tools_called"]["ok"]

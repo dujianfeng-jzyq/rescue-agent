@@ -340,7 +340,9 @@ def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str
         if server not in called_servers and any(not _NOT_DONE.search(text[max(0, m.start() - 40) : m.end() + 40]) for m in hits):
             missing.append(server)
     for tool, full in tools.items():
-        if full.startswith("mcp__actions__") or tool in result_keys:  # 发布类工具通常是在建议下发指令；同名字段不是引用
+        # 发布类工具通常是在建议下发指令；workflow 工具是标准流程名，点名多是“下一步”的提议（它的结果是否被引用由
+        # report_pasted 检查）；同名字段不是引用
+        if full.startswith(("mcp__actions__", "mcp__workflow__")) or tool in result_keys:
             continue
         if tool in called_tools:
             continue
@@ -511,7 +513,7 @@ def grade(root: Session, checks: dict) -> dict:
         hit = sorted(a for a in articles if a in final)
         results["kb_cited"] = {"ok": bool(hit), "detail": {"kb_articles": sorted(articles), "cited": hit}}
 
-    if checks.get("report_pasted"):
+    if checks.get("report_pasted"):  # 也是 workflow 工具结果是否被如实引用的检查（cited_tools_called 不查 workflow 工具名）
         reports = [r["report_markdown"] for _, r in wf if r.get("report_markdown")]
         final = _norm_lines(root.final_text())
         pasted = [i for i, rep in enumerate(reports) if _norm_lines(rep) in final]
