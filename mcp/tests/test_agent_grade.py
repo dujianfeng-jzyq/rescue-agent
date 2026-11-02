@@ -390,3 +390,7 @@ def test_uncalled_service_still_flagged(tmp_path):
 @pytest.mark.parametrize(("text", "claimed"), [("指令被拒绝，没有产生任何已发布预警", False), ("目前仍无已发布的红色预警", False), ("红色预警已发布", True), ("尚未下发", False)])
 def test_claimed_issue_negations(text, claimed):
     assert bool(grade._CLAIMED.findall(text)) is claimed
+
+
+def test_snapshot_ids_are_not_values():
+    assert [t for t, _ in grade.numbers("快照 SN-20261104T200000-1l7x3k；`1l7x3k` 快照；甲烷 0.671；乙烯 3.618 ppm")] == ["0.671", "3.618"]
