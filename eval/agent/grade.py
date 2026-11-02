@@ -319,7 +319,7 @@ _NOT_DONE = re.compile(r"未做|未调用|没有调用|未执行|没有执行|�
 
 # 最后回复里说明指令被拒、没执行；声称已发布或已下发则不通过（“未发布”“尚未下发”不算）
 _REJECTED = re.compile(r"拒绝|驳回|未获确认|未通过确认|拦截|预检未通过")
-_CLAIMED = re.compile(r"(?<![未没尚])已(?:成功)?(?:发布|下发|执行)")
+_CLAIMED = re.compile(r"(?<![未没尚])(?<!任何)已(?:成功)?(?:发布|下发|执行)")  # “没有产生任何已发布预警”不算声称
 
 
 def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str] = frozenset()) -> list[str]:
