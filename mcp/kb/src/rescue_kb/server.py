@@ -18,15 +18,80 @@ from typing import Any
 
 import yaml
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from rescue_contract.models import Plan
 from rescue_contract.redlines import RULES
 from rescue_contract.validation import precheck
 
-from .ragflow import RagflowConfig, RagflowError, retrieve
+from .ragflow import RagflowConfig, RagflowError, chunk_content, find_documents, keyword_chunks, retrieve
 
 log = logging.getLogger("rescue.kb")
 LOCAL_ARTICLES = yaml.safe_load(Path(__file__).with_name("local_articles.yaml").read_text(encoding="utf-8"))
-ARTICLE_RE = re.compile(r"第[0-9一二三四五六七八九十百零]+条")
+# 条文标题：条号在开头或前面是空白，后面跟空白（RAGFlow 原文多为“第八十五条　封闭火区……”）。
+# 正文里的引用（“依照第七十五条规定”）前后不是空白，不算标题
+_HEADING_RE = re.compile(r"(?:^|(?<=\s))第\s*([0-9]+|[一二三四五六七八九十百千零〇两]+)\s*条(?=\s)")
+_CN_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+_CN_UNITS = {"十": 10, "百": 100, "千": 1000}
+
+
+def _cn_to_int(s: str) -> int | None:
+    total, cur = 0, None
+    for ch in s:
+        if ch in _CN_DIGITS:
+            cur = _CN_DIGITS[ch]
+        elif ch in _CN_UNITS:
+            total += (1 if cur is None else cur) * _CN_UNITS[ch]  # “十五”的“十”前面省略了“一”
+            cur = None
+        else:
+            return None
+    return total + (cur or 0)
+
+
+def article_number(article: str | None) -> int | None:
+    """条号转成整数：“第85条”“第 85 条”“第八十五条”“85”都得 85；认不出返回 None。"""
+    if not article:
+        return None
+    body = re.sub(r"\s+", "", article).removeprefix("第").removesuffix("条")
+    if body.isdigit():
+        return int(body)
+    return _cn_to_int(body) if body else None
+
+
+def _cn_article(n: int) -> str:
+    """整数转中文条号（1–9999），用于检索时同时带上原文写法。"""
+    digits = "零一二三四五六七八九"
+    parts, zero = [], False
+    for unit, name in ((1000, "千"), (100, "百"), (10, "十"), (1, "")):
+        d = n // unit % 10
+        if d:
+            if zero and parts:
+                parts.append("零")
+            parts.append(("" if (d == 1 and unit == 10 and not parts) else digits[d]) + name)
+            zero = False
+        elif parts:
+            zero = True
+    return f"第{''.join(parts)}条"
+
+
+def _headings(content: str) -> list[re.Match[str]]:
+    return list(_HEADING_RE.finditer(content))
+
+
+def find_article(hits: list[dict[str, Any]], document: str, article: str) -> dict[str, Any] | None:
+    """在检索结果里找指定文档的指定条：按条号数值比较（阿拉伯数字和中文数字都认），
+    一个切片里有多条时截取该条到下一条之前的原文。"""
+    want = article_number(article)
+    if want is None:
+        return None
+    for h in hits:
+        if h.get("source") != "ragflow" or document not in (h.get("document") or ""):
+            continue
+        heads = _headings(h["content"])
+        for i, m in enumerate(heads):
+            if article_number(m.group(1)) == want:
+                end = heads[i + 1].start() if i + 1 < len(heads) else len(h["content"])
+                return {**h, "article": m.group(0).strip(), "content": h["content"][m.start() : end].strip()}
+    return None
 
 # 查询改写：补充行业同义词。TODO(专家): 持续补充
 SYNONYMS = {
@@ -81,11 +146,11 @@ def _format(chunks) -> list[dict[str, Any]]:
         if key in seen:
             continue
         seen.add(key)
-        m = ARTICLE_RE.search(c.content)
+        heads = _headings(c.content)
         out.append(
             {
                 "document": c.document,
-                "article": m.group(0) if m else None,
+                "article": heads[0].group(0).strip() if heads else None,
                 "content": c.content,
                 "similarity": round(c.similarity, 3) if c.similarity is not None else None,
                 "source": "ragflow",
@@ -112,6 +177,31 @@ class KnowledgeBase:
         if kind == "regulations":
             return tuple(_local_search(query, limit))
         return ()
+
+    def lookup_article(self, document: str, n: int) -> dict[str, Any] | None:
+        """直接在 RAGFlow 里找条文：按文档名找文档，在文档里按条号关键词（中文、阿拉伯两种写法）找切片，
+        再按切片 id 取原文、按条文标题确认。语义检索很难按条号命中，所以不用它。失败返回 None。"""
+        if not self.cfg:
+            return None
+        try:
+            for ds in _datasets("regulations"):
+                for doc_id, name in find_documents(self.cfg, ds, document):
+                    if document not in name:
+                        continue
+                    seen: set[str] = set()
+                    for kw in (_cn_article(n), f"第{n}条"):
+                        for cid in keyword_chunks(self.cfg, ds, doc_id, kw):
+                            if cid in seen:
+                                continue
+                            seen.add(cid)
+                            content = chunk_content(self.cfg, ds, doc_id, cid)
+                            hit = {"document": name, "article": None, "content": content or "", "similarity": None, "source": "ragflow"}
+                            found = find_article([hit], document, f"第{n}条")
+                            if found:
+                                return found
+        except RagflowError as exc:
+            log.warning("kb.get_article 直接查找失败，改用检索：%s", exc)
+        return None
 
     def search(self, kind: str, query: str, limit: int = 6) -> dict[str, Any]:
         results = list(self._cached(kind, query, limit))
@@ -147,14 +237,18 @@ def build_server(kb: KnowledgeBase | None = None) -> MCPServer:
     def get_article(document: str, article: str) -> dict[str, Any]:
         """按文档名和条号取条款原文，例如 document="矿山救援规程", article="第85条"。
         红线相关条款优先使用本地留存版本，保证知识库不可用时也能引用。"""
+        want = article_number(article)
+        if want is None:
+            raise ToolError(f"认不出条号“{article}”，请写成“第85条”或“第八十五条”")
         for a in LOCAL_ARTICLES:
-            if a["document"] == document and a["article"] == article:
-                return {"document": document, "article": article, "content": a["text"], "source": "local-fallback"}
-        hits = kb.search("regulations", f"{document} {article}", 10)["results"]
-        for h in hits:
-            if h.get("article") == article and document in h["document"]:
-                return h
-        return {"document": document, "article": article, "content": None, "source": "not-found"}
+            if a["document"] == document and article_number(a["article"]) == want:
+                return {"document": document, "article": a["article"], "content": a["text"], "source": "local-fallback"}
+        found = kb.lookup_article(document, want)
+        if found is None:
+            # 直接查找失败（如 RAGFlow 断开）时退回语义检索；原文多用中文数字，两种写法都带上
+            hits = kb.search("regulations", f"{document} {_cn_article(want)} 第{want}条", 10)["results"]
+            found = find_article(hits, document, article)
+        return found or {"document": document, "article": article, "content": None, "source": "not-found"}
 
     @server.tool()
     def check_plan_redlines(tool: str, plan: Plan) -> dict[str, Any]:

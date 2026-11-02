@@ -10,7 +10,10 @@ import http.client
 import json
 import logging
 import os
+import re
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
@@ -33,6 +36,7 @@ class RagflowConfig:
     similarity_threshold: float = 0.2
     page_size: int = 6
     timeout_s: float = 15
+    retries: int = 3  # 连接被断开、超时时重试的次数（只对 GET 和检索，都是只读请求）
 
     @classmethod
     def from_env(cls) -> RagflowConfig | None:
@@ -45,11 +49,60 @@ class RagflowConfig:
             similarity_threshold=float(os.environ.get("KB_SIMILARITY_THRESHOLD", 0.2)),
             page_size=int(os.environ.get("KB_PAGE_SIZE", 6)),
             timeout_s=float(os.environ.get("KB_TIMEOUT_S", 15)),
+            retries=int(os.environ.get("KB_RETRIES", 3)),
         )
 
 
 class RagflowError(RuntimeError):
     pass
+
+
+def _request(cfg: RagflowConfig, method: str, path: str, body: dict | None = None) -> dict:
+    req = urllib.request.Request(
+        f"{cfg.base_url}{path}",
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"},
+        method=method,
+    )
+    for attempt in range(cfg.retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=cfg.timeout_s) as resp:
+                payload = json.loads(resp.read())
+            break
+        except urllib.error.HTTPError as exc:  # 服务端明确拒绝（4xx/5xx），重试没有意义
+            raise RagflowError(f"RAGFlow 不可用：{exc}") from exc
+        # 连接被断开（空响应）时 urllib 抛 RemoteDisconnected，不包装成 URLError，所以按 OSError 统一捕获
+        except (OSError, http.client.HTTPException, json.JSONDecodeError) as exc:
+            if attempt == cfg.retries:
+                raise RagflowError(f"RAGFlow 不可用：{exc}") from exc
+            log.info("RAGFlow 请求失败，第 %d 次重试：%s", attempt + 1, exc)
+            time.sleep(0.5)
+    if payload.get("code") not in (0, None):
+        raise RagflowError(f"RAGFlow 返回错误：{payload.get('message')}")
+    return payload
+
+
+def find_documents(cfg: RagflowConfig, dataset_id: str, name: str, limit: int = 30) -> list[tuple[str, str]]:
+    """按文档名关键词列出文档，返回 [(document_id, 文档名)]。"""
+    q = urllib.parse.urlencode({"page": 1, "page_size": limit, "keywords": name})
+    docs = (_request(cfg, "GET", f"/api/v1/datasets/{dataset_id}/documents?{q}").get("data") or {}).get("docs") or []
+    return [(d["id"], d.get("name") or "") for d in docs]
+
+
+def keyword_chunks(cfg: RagflowConfig, dataset_id: str, document_id: str, keywords: str, limit: int = 10) -> list[str]:
+    """在一个文档里按关键词找切片，返回片段里确实含这个关键词的切片 id。
+    带 keywords 时返回的 content 是去掉标点、加了 <em> 的高亮片段，不能当原文用；
+    关键词检索是分词模糊匹配，“第九千九百九十九条”也会命中一堆切片，所以按片段过滤。"""
+    q = urllib.parse.urlencode({"page": 1, "page_size": limit, "keywords": keywords})
+    chunks = (_request(cfg, "GET", f"/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks?{q}").get("data") or {}).get("chunks") or []
+    want = re.sub(r"\s+", "", keywords)
+    return [c["id"] for c in chunks if c.get("id") and want in re.sub(r"<[^>]+>|\s+", "", c.get("content") or "")]
+
+
+def chunk_content(cfg: RagflowConfig, dataset_id: str, document_id: str, chunk_id: str) -> str | None:
+    q = urllib.parse.urlencode({"id": chunk_id})
+    chunks = (_request(cfg, "GET", f"/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks?{q}").get("data") or {}).get("chunks") or []
+    return chunks[0].get("content") if chunks else None
 
 
 def retrieve(cfg: RagflowConfig, question: str, dataset_ids: list[str], page_size: int | None = None) -> list[Chunk]:
@@ -62,20 +115,7 @@ def retrieve(cfg: RagflowConfig, question: str, dataset_ids: list[str], page_siz
         "keyword": True,
         "highlight": False,
     }
-    req = urllib.request.Request(
-        f"{cfg.base_url}/api/v1/retrieval",
-        data=json.dumps(body).encode(),
-        headers={"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=cfg.timeout_s) as resp:
-            payload = json.loads(resp.read())
-    # 连接被断开（空响应）时 urllib 抛 RemoteDisconnected，不包装成 URLError，所以按 OSError 统一捕获
-    except (OSError, http.client.HTTPException, json.JSONDecodeError) as exc:
-        raise RagflowError(f"RAGFlow 不可用：{exc}") from exc
-    if payload.get("code") not in (0, None):
-        raise RagflowError(f"RAGFlow 返回错误：{payload.get('message')}")
+    payload = _request(cfg, "POST", "/api/v1/retrieval", body)
     chunks = (payload.get("data") or {}).get("chunks") or []
     return [
         Chunk(

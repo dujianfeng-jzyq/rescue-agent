@@ -10,6 +10,8 @@ import pytest
 from mcp.client import Client
 from rescue_dispatch.server import build_server as dispatch
 from rescue_fire_model.server import build_server as fire_model
+from rescue_kb.server import KnowledgeBase
+from rescue_kb.server import build_server as kb
 from rescue_mine_data_sim.server import SimHolder
 from rescue_mine_data_sim.server import build_server as mine_data
 from rescue_ventnet.server import build_server as ventnet
@@ -31,6 +33,7 @@ CASES = [
     (lambda: fire_model(_mine()), "assess_explosion_risk", {"sensor_id": "SM-1201-UC"}, "不测 CO2"),
     (lambda: fire_model(_mine()), "assess_explosion_risk_sample", {"ch4_pct": 80, "o2_pct": 30, "co2_pct": 1, "temperature_c": 25}, "超过 100%"),
     (lambda: fire_model(_mine()), "assess_explosion_risk_sample", {"ch4_pct": 3, "o2_pct": 10, "co2_pct": 1, "temperature_c": 300}, "适用范围"),
+    (lambda: kb(KnowledgeBase(cfg=None)), "get_article", {"document": "煤矿安全规程", "article": "附录A"}, "认不出条号"),
     (lambda: fire_model(_mine()), "evaluate_effect", {"sensor_id": "BT-1201-G1", "since": "2026-11-04T08:00:00", "measurand": "CH4"}, "不是发火指标"),
 ]
 
