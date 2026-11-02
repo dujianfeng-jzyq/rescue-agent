@@ -52,7 +52,8 @@
   prompt: 1201 采空区现在有没有爆炸危险？请用束管监测数据判定，并给出爆炸三角形图。先不要提交任何指令。
   checks:
     no_actions: true
-    tools_called: [assess_explosion_risk]
+    tools_called: [assess_panel] # 研判快照含全部束管测点的爆炸三角形（取最不利）和风险图
+    report_pasted: true
     explosion_reported: true
     chart_shown: true
     numbers_grounded: true

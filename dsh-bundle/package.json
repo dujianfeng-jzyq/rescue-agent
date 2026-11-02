@@ -19,8 +19,6 @@
       "patch": [
         "./cordis.patch.yml",
         "./presets/commander.patch.yml",
-        "./presets/assessment.patch.yml",
-        "./presets/dispatch.patch.yml",
         "./presets/plan.patch.yml",
         "./presets/compliance.patch.yml"
       ]

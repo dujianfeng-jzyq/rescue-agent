@@ -2,6 +2,13 @@
 
 > 状态：已定稿，按本文实施（2026-11-02）。决策和理由见 `docs/decisions/0006-workflow-vs-agent.md`；DSH 自带工作流的试验记录见 `docs/validation-checklist.md` #18。
 > 本文出现的新判据和参数都是**开发占位值**，需专家审定，不能说它们是正确值。
+>
+> **实施记录（2026-11-02，分支 workflow）**：P1–P5 已实现。与下文设计不同的几处：
+> - 契约分两次升级：P1 为 0.5.0（Snapshot），P2 为 0.6.0（`snapshot_id`、`HumanInput` 等）。
+> - W4 每次都重新生成研判快照，不复用 30 分钟内的旧快照（取数快，避免现场条件和甲烷取数时刻不一致）。
+> - W6 把方案的 `context` 与**快照里保存的现场条件**逐字段比较（快照只能由 workflow 写入，等价于重算）。
+> - W7 的入参是 rescue-plan 改好的完整方案（先按快照核对），密闭道数由代码按密闭步骤填写的巷道数计算。
+> - P4 和 P5 合并为一次提交。
 
 ## 1. 目标
 
@@ -97,7 +104,7 @@ class Snapshot(_Model):
 | `FireContext` | 不变 | 由 W4 生成，actions 重算比对 |
 | 新增 `HumanInput` | `field`、`value`、`confirmed_by`、`note` | 系统里没有数据、只能由人确认的现场条件 |
 
-修改后：`CONTRACT_VERSION = "0.5.0"`，运行 `make schema`；`contract/tests` 中所有构造 `Plan` 的地方补上新字段。
+修改后：`CONTRACT_VERSION = "0.6.0"`（快照模型在 0.5.0 先行加入），运行 `make schema`；`contract/tests` 中所有构造 `Plan` 的地方补上新字段。
 
 ## 5. 工作流清单
 

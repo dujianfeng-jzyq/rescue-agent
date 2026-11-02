@@ -35,7 +35,13 @@ def test_effect_after_inerting_needs_continuing(store):
 
 def test_effect_since_from_ledger(store, tmp_path):
     holder, since = inerted_s2()
-    rec = {"action_id": "A-1", "tool": "issue_firefighting_plan", "status": "issued", "issued_at": since.isoformat(), "payload": {"plan_id": "FP-1201-1", "panel": "1201"}}
+    rec = {
+        "action_id": "A-1",
+        "tool": "issue_firefighting_plan",
+        "status": "issued",
+        "issued_at": since.isoformat(),
+        "payload": {"plan_id": "FP-1201-1", "panel": "1201"},
+    }
     (tmp_path / "ledger.jsonl").write_text(json.dumps(rec) + "\n")
     out = run(holder, store, "review_effect")
     assert out["result"]["since"] == since.isoformat()

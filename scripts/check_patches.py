@@ -202,7 +202,7 @@ def main() -> int:
         if p.get("approval") != "ask":
             errors.append(f"cordis.patch.yml: 权限预设 {name} 的 approval 必须是 ask")
 
-    expected = {"rescue-commander", "rescue-assessment", "rescue-dispatch", "rescue-plan", "rescue-compliance"}
+    expected = {"rescue-commander", "rescue-plan", "rescue-compliance"}  # 研判、调度改由 workflow 完成（ADR 0006）
     if preset_ids != expected:
         errors.append(f"预设集合不符：{sorted(preset_ids)}")
 

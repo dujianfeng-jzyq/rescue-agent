@@ -99,6 +99,8 @@ async def assess_panel(
     md: MineData, panel: str, xc: explosion.Constants, public_url: str, include_personnel: bool = False
 ) -> dict[str, Any]:
     cfg = config.load()["assessment"]
+    if not any(panel in s.id for s in await md.sensors()):  # 编号写错时不能返回“预警等级 无”，那会被读成“没事”
+        raise ToolError(f"找不到工作面 {panel} 的测点，请核对工作面编号")
     now = await md.now()
     alarm_list = await realtime_alarms(md, panel)
     w = await warning.assess(md, panel)

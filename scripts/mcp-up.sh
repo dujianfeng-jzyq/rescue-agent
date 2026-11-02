@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 启动全部 MCP 服务（后台运行），日志在 var/log/，PID 在 var/run/。
+# 启动全部 MCP 服务和值守进程（后台运行），日志在 var/log/，PID 在 var/run/。
 #
 #   scripts/mcp-up.sh            启动全部
 #   scripts/mcp-up.sh kb actions 只启动指定服务
@@ -13,6 +13,7 @@ cd "$ROOT"
 export RESCUE_HOME="${RESCUE_HOME:-$ROOT}"
 export RESCUE_ACTIONS_LEDGER="${RESCUE_ACTIONS_LEDGER:-$ROOT/var/actions-ledger.jsonl}"
 export RESCUE_SNAPSHOT_DIR="${RESCUE_SNAPSHOT_DIR:-$ROOT/var/snapshots}"   # workflow 写、actions 和 kb 读，必须同一目录
+export RESCUE_MONITOR_DIR="${RESCUE_MONITOR_DIR:-$ROOT/var/monitor}"         # 值守事件
 
 PY="${RESCUE_PYTHON:-uv run --project $ROOT/mcp python}"
 mkdir -p var/log var/run
@@ -25,8 +26,9 @@ declare -A MODULES=(
   [kb]=rescue_kb
   [actions]=rescue_actions
   [workflow]=rescue_workflow
+  [monitor]=rescue_workflow.monitor   # 值守进程（不是 MCP 服务，没有端口）
 )
-ORDER=(mine_data ventnet fire_model dispatch kb actions workflow)
+ORDER=(mine_data ventnet fire_model dispatch kb actions workflow monitor)
 TARGETS=("${@:-${ORDER[@]}}")
 
 # 接入真实矿井时，用 RESCUE_MINE_DATA_MODULE 指向该矿的适配器模块
@@ -46,6 +48,12 @@ done
 
 # 等待健康检查
 for key in "${TARGETS[@]}"; do
+  if [ "$key" = monitor ]; then   # 值守进程没有端口：确认进程还活着
+    sleep 1
+    if kill -0 "$(cat var/run/monitor.pid)" 2>/dev/null; then echo "  ✓ monitor  值守事件 $RESCUE_MONITOR_DIR/events.jsonl"; continue; fi
+    echo "  ✗ monitor 未就绪，查看 var/log/monitor.log" >&2
+    exit 1
+  fi
   var="RESCUE_$(echo "$key" | tr '[:lower:]' '[:upper:]')_PORT"
   case $key in
     mine_data) port=${!var:-8101} ;; ventnet) port=${!var:-8102} ;; fire_model) port=${!var:-8103} ;;

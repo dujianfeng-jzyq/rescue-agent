@@ -15,6 +15,7 @@ from rescue_kb.server import build_server as kb
 from rescue_mine_data_sim.server import SimHolder
 from rescue_mine_data_sim.server import build_server as mine_data
 from rescue_ventnet.server import build_server as ventnet
+from rescue_workflow.server import build_server as workflow
 
 
 def _mine():
@@ -35,12 +36,17 @@ CASES = [
     (lambda: fire_model(_mine()), "assess_explosion_risk_sample", {"ch4_pct": 3, "o2_pct": 10, "co2_pct": 1, "temperature_c": 300}, "适用范围"),
     (lambda: kb(KnowledgeBase(cfg=None)), "get_article", {"document": "煤矿安全规程", "article": "附录A"}, "认不出条号"),
     (lambda: fire_model(_mine()), "evaluate_effect", {"sensor_id": "BT-1201-G1", "since": "2026-11-04T08:00:00", "measurand": "CH4"}, "不是发火指标"),
+    (lambda: workflow(_mine()), "draft_plan", {"kind": "evacuation"}, "kind 取"),
+    (lambda: workflow(_mine()), "review_effect", {}, "since"),
+    (lambda: workflow(_mine()), "assess_panel", {"panel": "9999"}, "找不到"),
 ]
 
 
 @pytest.mark.parametrize(("build", "tool", "args", "expect"), CASES, ids=[f"{c[1]}-{c[3]}" for c in CASES])
 def test_input_errors_reach_the_agent(build, tool, args, expect, tmp_path, monkeypatch):
     monkeypatch.setenv("RESCUE_CHART_DIR", str(tmp_path))  # 爆炸三角形工具成功时会存图
+    monkeypatch.setenv("RESCUE_SNAPSHOT_DIR", str(tmp_path / "snapshots"))
+    monkeypatch.setenv("RESCUE_ACTIONS_LEDGER", str(tmp_path / "ledger.jsonl"))
     async def go():
         async with Client(build()) as c:
             return await c.call_tool(tool, args)

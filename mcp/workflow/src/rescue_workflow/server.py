@@ -10,14 +10,15 @@ from datetime import datetime
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from rescue_contract.client import MineData
-from rescue_contract.models import HumanInput, MineTime, Snapshot, SnapshotKind
+from rescue_contract.models import HumanInput, MineTime, Plan, Snapshot, SnapshotKind
 from rescue_contract.serving import DEFAULT_PORTS
 from rescue_contract.snapshots import SnapshotStore, new_id
-from rescue_contract.validation import precheck
+from rescue_contract.validation import check_plan_snapshot, precheck
 from rescue_fire_model import explosion
 
-from . import assess, escalation, plan, reports
+from . import assess, dispatch_plan, escalation, monitor, plan, reports, timeline
 
 INSTRUCTIONS = (
     "工作流服务：研判、效果评估、升级建议、方案草案等标准流程按固定步骤由代码完成，结果写成带编号的研判快照。"
@@ -110,6 +111,46 @@ def build_server(mine_data_target: Any | None = None, store: SnapshotStore | Non
             "report_markdown": a.report_markdown + "\n\n" + snap.report_markdown,
             "result": result,
         }
+
+    @server.tool()
+    async def draft_dispatch_for_plan(plan: Plan, destination_node: str | None = None) -> dict[str, Any]:
+        """按方案生成调度单草案（方案需要物资时调它）：plan 为 rescue-plan 返回的完整方案（必须与草案快照一致）。
+        代码按密闭步骤填写的巷道数算密闭材料、按注浆步骤算注浆材料、比较库存和制氮产能，库存够的物资生成调度单草案，
+        写成调度草案快照。下发时 issue_dispatch_order 的 order 照抄返回的 order（含 snapshot_id），明细按快照核对。
+        destination_node 不给时取本工作面进风巷靠工作面一端。缺口物资需人工联系外部来源。"""
+        problems = check_plan_snapshot(plan, snapshots)
+        if problems:
+            raise ToolError("方案与草案快照不一致，不能据此调度：\n" + "\n".join(problems))
+        panel = plan.panel or snapshots.get(plan.snapshot_id).panel
+        result = await dispatch_plan.draft(md, plan, panel, destination_node)
+
+        def bind(r: dict, sid: str) -> None:
+            if r["order"] is not None:
+                r["order"]["snapshot_id"] = sid
+
+        as_of = snapshots.get(plan.snapshot_id).as_of.isoformat()
+        snap = save(SnapshotKind.DISPATCH, panel, as_of, {"plan": plan.model_dump(mode="json"), "destination_node": destination_node}, result,
+                    reports.dispatch_draft, [plan.snapshot_id], bind)  # fmt: skip
+        return {
+            "snapshot_id": snap.snapshot_id,
+            "order": snap.result["order"],
+            "report_markdown": snap.report_markdown,
+            "result": snap.result,
+        }
+
+    @server.tool()
+    async def get_monitor_events(panel: str = "1201", since: MineTime | None = None) -> dict[str, Any]:
+        """值守事件（值守进程不经过大模型定时检查：新报警、预警等级或自燃阶段变化、启封后按班复评）。
+        每次开始工作可先看一眼；每条事件带研判快照编号，详情用 assess_panel 重新研判。"""
+        events = monitor.read_events(since, panel)
+        return {"panel": panel, "count": len(events), "events": events}
+
+    @server.tool()
+    async def review_timeline(panel: str = "1201", start: MineTime | None = None, end: MineTime | None = None) -> dict[str, Any]:
+        """复盘时间线：指令台账（发布、被服务端拒绝）、值守事件、研判快照按矿井时间排序，审计日志按系统时间单列。
+        用作复盘报告的事实部分，report_markdown 原样放进回答。"""
+        result = timeline.build(panel, snapshots, start, end)
+        return {"report_markdown": reports.timeline(result), "result": result}
 
     PLAN_TOOL = {"sealing": "issue_sealing_plan", "unsealing": "approve_unsealing", "firefighting": "issue_firefighting_plan"}
 

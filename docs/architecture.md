@@ -20,11 +20,21 @@
 
 | 预设 | 挂载 MCP | 其他 | 说明 |
 | --- | --- | --- | --- |
-| rescue-commander（默认） | mine_data, fire_model, actions, workflow | delegate、ask_user、todo | 唯一能下指令的 Agent；标准流程调 workflow |
-| rescue-assessment | mine_data, fire_model, ventnet, kb | — | 预警研判、指挥部研判报告 |
-| rescue-dispatch | mine_data, dispatch | — | 物资、队伍、调度单草案 |
+| rescue-commander（默认） | mine_data, fire_model, actions, workflow | delegate（plan、compliance）、ask_user、todo；技能 assessment + shared | 唯一能下指令的 Agent；研判、效果评估、升级建议、调度草案、值守事件、复盘都调 workflow |
 | rescue-plan | mine_data, ventnet, kb, workflow | — | 在 draft_plan 草案上补充需要经验判断的部分，含红线自查 |
 | rescue-compliance | kb | — | 条文检索、方案合规审查 |
+
+研判和调度原来各有一个专业 Agent（rescue-assessment、rescue-dispatch），改由 workflow 的工具按固定步骤完成后移除（ADR 0006）。
+
+| workflow 工具 | 做什么 | 写的快照 |
+| --- | --- | --- |
+| `assess_panel` | 报警、等级、阶段、趋势、全部束管爆炸三角形、受威胁人员 | assessment |
+| `review_effect` | 处置前后对比（since 默认取台账里最近一次防灭火方案） | effect |
+| `recommend_escalation` | 是否建议升级为应急响应，附条文原文 | assessment + escalation |
+| `draft_plan` | 方案现场条件和必备步骤，红线自查 | assessment + plan-context |
+| `draft_dispatch_for_plan` | 按方案算物资、比库存、出调度单草案 | dispatch |
+| `get_monitor_events` | 读值守事件（值守进程 `python -m rescue_workflow.monitor` 写） | — |
+| `review_timeline` | 台账、值守、快照合成复盘时间线 | — |
 
 ## 3. 一次指令的路径
 

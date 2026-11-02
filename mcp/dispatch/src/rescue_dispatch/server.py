@@ -114,6 +114,32 @@ def grout_volume(strike_m: float, face_m: float, cfg: dict | None = None) -> dic
     }
 
 
+def plan_order(net: MineNetwork, stock: list[ResourceItem], items: list[ItemRequest], destination_node: str, purpose: str) -> DispatchOrder:
+    """为每项物资选择库存充足且路程最短的存放点（按距离贪心），给出预计到达时间。输入问题抛 ValueError。"""
+    g = _graph(net)
+    if destination_node not in g:
+        raise ValueError(f"目的地节点不存在或不可达：{destination_node}")
+    lines = []
+    for req in items:
+        candidates = [s for s in stock if s.item_type == req.item_type and s.quantity >= req.quantity]
+        if not candidates:
+            have = sum(s.quantity for s in stock if s.item_type == req.item_type)
+            raise ValueError(f"{req.item_type} 库存不足：需要 {req.quantity}，现有 {have}")
+        best = min(candidates, key=lambda s: nx.shortest_path_length(g, s.depot_node, destination_node, weight="length"))
+        dist = nx.shortest_path_length(g, best.depot_node, destination_node, weight="length")
+        lines.append(
+            DispatchLine(
+                item_type=req.item_type,
+                quantity=req.quantity,
+                unit=best.unit,
+                from_node=best.depot_node,
+                to_node=destination_node,
+                eta_min=round(dist / TRANSPORT_SPEED_M_S / 60, 1),
+            )
+        )
+    return DispatchOrder(order_id=f"DO-{uuid.uuid4().hex[:8]}", purpose=purpose, lines=lines)
+
+
 def build_server(mine_data_target: Any | None = None) -> MCPServer:
     md = MineData(mine_data_target) if mine_data_target is not None else MineData.from_env()
     server = MCPServer("dispatch", instructions=INSTRUCTIONS)
@@ -207,29 +233,9 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
     @server.tool()
     async def draft_dispatch_order(items: list[ItemRequest], destination_node: str, purpose: str) -> DispatchOrder:
         """生成调度单草案：为每项物资选择库存充足且路程最短的存放点，给出路线距离和预计到达时间。"""
-        net = await md.network()
-        g = _graph(net)
-        if destination_node not in g:
-            raise ToolError(f"目的地节点不存在或不可达：{destination_node}")
-        stock = await md.inventory()
-        lines = []
-        for req in items:
-            candidates = [s for s in stock if s.item_type == req.item_type and s.quantity >= req.quantity]
-            if not candidates:
-                have = sum(s.quantity for s in stock if s.item_type == req.item_type)
-                raise ToolError(f"{req.item_type} 库存不足：需要 {req.quantity}，现有 {have}")
-            best = min(candidates, key=lambda s: nx.shortest_path_length(g, s.depot_node, destination_node, weight="length"))
-            dist = nx.shortest_path_length(g, best.depot_node, destination_node, weight="length")
-            lines.append(
-                DispatchLine(
-                    item_type=req.item_type,
-                    quantity=req.quantity,
-                    unit=best.unit,
-                    from_node=best.depot_node,
-                    to_node=destination_node,
-                    eta_min=round(dist / TRANSPORT_SPEED_M_S / 60, 1),
-                )
-            )
-        return DispatchOrder(order_id=f"DO-{uuid.uuid4().hex[:8]}", purpose=purpose, lines=lines)
+        try:
+            return plan_order(await md.network(), await md.inventory(), items, destination_node, purpose)
+        except ValueError as exc:  # 只有 ToolError 的说明能传给 Agent
+            raise ToolError(str(exc)) from exc
 
     return server

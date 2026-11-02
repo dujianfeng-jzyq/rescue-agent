@@ -10,8 +10,8 @@ setup-py:         ## 只装 Python 部分
 
 dev:              ## 启动 MCP 服务 + DSH 网页端
 	scripts/dev.sh
-dev-eval:         ## 智能体评测用：同 dev，但指令台账、研判快照和审计日志写到 var/eval/ 下（评测会放行指令）
-	RESCUE_ACTIONS_LEDGER=$(CURDIR)/var/eval/actions-ledger.jsonl RESCUE_SNAPSHOT_DIR=$(CURDIR)/var/eval/snapshots RESCUE_AUDIT_LOG=$(CURDIR)/var/eval/audit/tool-actions.jsonl scripts/dev.sh
+dev-eval:         ## 智能体评测用：同 dev，但指令台账、研判快照、值守事件和审计日志写到 var/eval/ 下（评测会放行指令）
+	RESCUE_ACTIONS_LEDGER=$(CURDIR)/var/eval/actions-ledger.jsonl RESCUE_SNAPSHOT_DIR=$(CURDIR)/var/eval/snapshots RESCUE_MONITOR_DIR=$(CURDIR)/var/eval/monitor RESCUE_AUDIT_LOG=$(CURDIR)/var/eval/audit/tool-actions.jsonl scripts/dev.sh
 up:               ## 只启动 MCP 服务（含模拟矿井）
 	scripts/mcp-up.sh
 down:

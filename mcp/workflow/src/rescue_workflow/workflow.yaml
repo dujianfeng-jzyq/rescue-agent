@@ -25,3 +25,10 @@ plan:
     sealing: [第84条, 第85条, 第86条]
     unsealing: [第164条]
     firefighting: [第98条]
+
+monitor:
+  panels: ["1201"]
+  interval_min: 10        # 按矿井时间每隔多久检查一次（模拟器加速时以 get_clock 为准）
+  poll_s: 2               # 真实时间多久读一次矿井时钟
+  shift_h: 8              # 启封后按班复评的班次长度
+  unseal_watch_h: 72      # 启封后按班复评持续多久（第164条：启封后 3 日内每班检查）

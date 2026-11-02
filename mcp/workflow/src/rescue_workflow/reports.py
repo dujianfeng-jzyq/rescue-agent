@@ -177,3 +177,44 @@ def escalation(r: dict[str, Any], snapshot_id: str) -> str:
     lines += [f"- {a['document']} {a['article']}：{a['content']}" for a in r["articles"]]
     lines.append(f"依据：升级建议快照 {snapshot_id}（workflow 计算结果）；升级判据为开发占位值，是否升级由指挥人员决定")
     return "\n".join(lines)
+
+
+def dispatch_draft(r: dict[str, Any], snapshot_id: str) -> str:
+    lines = [f"【调度单草案】方案 {r['plan_id']}，目的地 {r['destination_node']}（{r['destination_from']}）"]
+    if r["order"]:
+        lines.append(f"调度单 {r['order']['order_id']}（草案，下发须经人工确认）：")
+        for ln in r["order"]["lines"]:
+            lines.append(
+                f"- {ln['item_type']} {ln['quantity']} {ln['unit']}：{ln['from_node']} → {ln['to_node']}，预计 {_v(ln['eta_min'])} 分钟"
+            )
+    else:
+        lines.append("调度单：没有可从库存调运的物资")
+    lines.append("需求与库存（计算结果）：")
+    for s in r["supply"]:
+        lines.append(
+            f"- {s['item_type']}：需要 {s['required']}，现有 {s['on_hand']}，缺口 {s['shortage']}"
+            + ("" if s["in_ledger"] else "（台账没有这类物资）")
+        )
+    if r["nitrogen_capacity"]:
+        c = r["nitrogen_capacity"]
+        lines.append(f"制氮产能：需要 {c['required']} m³/h，现有 {c['on_hand']} m³/h，缺口 {c['shortage']}")
+    if r["shortages"]:
+        lines.append("库存不足的物资需人工联系外部来源：" + "、".join(s["item_type"] for s in r["shortages"]))
+    if r["notes"]:
+        lines.append("说明：")
+        lines += [f"- {n}" for n in r["notes"]]
+    lines.append(f"依据：调度草案快照 {snapshot_id}（workflow 计算结果）；用量参数为开发占位值")
+    return "\n".join(lines)
+
+
+def timeline(r: dict[str, Any], snapshot_id: str | None = None) -> str:
+    span = f"{_ts(r['start']) if r['start'] else '开始'} 至 {_ts(r['end']) if r['end'] else '现在'}"
+    lines = [f"【复盘时间线】{r['panel']} 工作面 {span}（矿井时间）"]
+    lines += [f"- {_ts(x['mine_time'])} [{x['source']}] {x['event']}" + (f"（{x['ref']}）" if x["ref"] else "") for x in r["timeline"]]
+    if not r["timeline"]:
+        lines.append("- 无记录")
+    if r["audit"]:
+        lines.append("审计记录（系统时间，含被拦截和被拒绝的调用）：")
+        for a in r["audit"]:
+            lines.append(f"- {a['system_time']} {a['tool']} {a['outcome']}" + (f"：{a['note']}" if a["note"] else ""))
+    return "\n".join(lines)
