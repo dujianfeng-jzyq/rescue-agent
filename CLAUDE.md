@@ -58,4 +58,5 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
   `s4-warning-rejected`（拒绝确认）：弹确认、被拒后不重复提交、如实说明均 3/3，全部通过 0/3（数值溯源）；`s4-sealing-plan`（放行封闭方案）：dispatch 补工具后 3/3 走通发布（确认放行、回执 issued），全部通过 0/3，剩余为 Agent 自己数条数、归纳界限（“低于 12%”）和笔误（1201 写成 1210）。
   `dispatch` 的缺口（check_supply、estimate_inert_gas 的 supply）、路程（route）、密闭材料（estimate_seal_materials）、注浆量（estimate_grout）由代码计算，参数在 `dispatch/.../params.yaml`，均为占位值。
   `assess_explosion_risk` 按束管测点做多组分（含 H2，契约 0.4.0 新增）、温度补偿的爆炸三角形（来自 explosion-triangle-synthesis 技能，分区判据已重新设计），`assess_explosion_risk_sample` 用于人工化验单；参数在 `fire-model/.../explosion.yaml`，为占位值。每次计算生成风险图（SVG）和 JSON（`var/charts/`），结果里的 `chart.markdown` 放进回答后网页端显示图片（经 DSH 的 /api/file），下载走 fire_model 的 `/charts/`（凭随机文件名，不校验令牌）。评测用例 `s4-explosion-risk`。本地 qwen35-122b-a10b 不适合担任救援 Agent（不委派、编造阈值），不再纳入评测。
-- 待办：专家审定阈值（含阶段、效果判据）/场景/技能；专家审定 dispatch 用量参数；专家审定爆炸三角形参数和分区判据；评测运行器按用例预设回答 Agent 的提问；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；kb 接入 RAGFlow（目前只有本地降级）。
+- kb 已接入 RAGFlow（法规标准、预案、案例三个 dataset，见 `.env`），RAGFlow 不可用或断开时降级到本地红线条文。`s4-escalate-1201`（2026-11-02，3 次）：kb_cited 3/3，条文主要来自 RAGFlow；全部通过 1/3，剩余为指挥 Agent 自己归纳界限（“超过 84 ℃”）、漏写自燃阶段、点名未调用的工具。
+- 待办：专家审定阈值（含阶段、效果判据）/场景/技能；专家审定 dispatch 用量参数；专家审定爆炸三角形参数和分区判据；评测运行器按用例预设回答 Agent 的提问；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；清理 RAGFlow 规程库里与煤矿无关的文档（消防装备、防汛地震预案、安全标志等稀释检索结果），核对可疑条号（如《煤矿安全规程》“第七百六十六条”）。

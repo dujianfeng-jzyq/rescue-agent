@@ -84,6 +84,22 @@ def test_bare_article_number_needs_article_in_material(tree, report, grounded):
     assert r["checks"]["numbers_grounded"]["ok"] is grounded, r["checks"]
 
 
+@pytest.mark.parametrize(
+    ("report", "grounded"),
+    [
+        # 小节号单独成行（加粗、带括注、跟破折号），正文里“见1.6”“同2.4”引用同一小节
+        ("**1.2**\n- document：煤矿防灭火细则\n**1.4（正文未返回）**\n**1.6**\n见1.6；同1.2全文照抄", True),
+        ("2.4 — 撤人判据\n### 4.1\n见 2.4、4.1", True),
+        # 没有作为小节标题出现过的数仍要溯源；加粗数值后跟单位不是小节号
+        ("**1.2**\n见1.6", False),
+        ("**1.5** ppm\n见1.5", False),
+    ],
+)
+def test_section_numbers_are_not_values(tree, report, grounded):
+    r = grade.grade(tree(report), ALL)
+    assert r["checks"]["numbers_grounded"]["ok"] is grounded, r["checks"]
+
+
 def test_ranges_are_not_dates():
     # 83–90%、3-6 m 这类数值范围不能被当成月-日剔除
     assert [t for t, _ in grade.numbers("N2 83-90%，深度 3-6 m")] == ["83", "90", "3", "6"]
