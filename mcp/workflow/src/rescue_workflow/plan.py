@@ -177,7 +177,7 @@ async def draft(
                     raise ToolError(str(exc)) from exc
                 params["rate_m3_h"] = inert_calc["required_n2_m3_h"]
             else:
-                missing.append("注氮流量：给出漏风量 leak_m3_min 和目标氧浓度 target_o2_pct 后由代码估算（dispatch 公式），不要自己算")
+                missing.append("注氮流量：给出漏风量 leak_m3_min 和目标氧浓度 target_o2_pct 后重新调用 draft_plan，由代码按注氮稀释公式估算，不要自己算")
         steps.append(
             PlanStep(
                 order=i + 1,
