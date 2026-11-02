@@ -38,7 +38,8 @@ from rescue_contract.models import (
     WarningNotice,
 )
 from rescue_contract.serving import auth_headers
-from rescue_contract.validation import precheck, validate_plan
+from rescue_contract.snapshots import SnapshotStore
+from rescue_contract.validation import check_dispatch, check_escalation, check_warning, precheck, validate_plan
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -100,10 +101,16 @@ class Sim:
             return False
 
 
-def build_server(mine_data_target: Any | None = None, ledger_path: Path | None = None, sim_control_url: str | None = None) -> MCPServer:
+def build_server(
+    mine_data_target: Any | None = None,
+    ledger_path: Path | None = None,
+    sim_control_url: str | None = None,
+    store: SnapshotStore | None = None,
+) -> MCPServer:
     md = MineData(mine_data_target) if mine_data_target is not None else MineData.from_env()
     ledger = Ledger(ledger_path or Path(os.environ.get("RESCUE_ACTIONS_LEDGER", "var/actions-ledger.jsonl")))
     sim = Sim(sim_control_url if sim_control_url is not None else os.environ.get("RESCUE_SIM_CONTROL_URL"))
+    snapshots = store or SnapshotStore()
     server = MCPServer("actions", instructions=INSTRUCTIONS)
 
     async def mine_now() -> datetime | None:
@@ -121,9 +128,14 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
         log.info("action %s %s", tool, receipt.action_id)
         return receipt
 
+    async def reject_if(tool: str, payload: BaseModel, problems: list[str]) -> None:
+        if problems:
+            ledger.append({"tool": tool, "status": "rejected", "at": await mine_now(), "problems": problems, "payload": payload.model_dump(mode="json")})
+            raise ToolError("指令未发布。\n" + "\n".join(problems))
+
     async def issue_plan(tool: str, plan: Plan) -> ActionReceipt:
         now = await mine_now()
-        problems = validate_plan(tool, plan, now)
+        problems = validate_plan(tool, plan, now, snapshots)
         if problems:
             ledger.append({"tool": tool, "status": "rejected", "at": now, "problems": problems, "payload": plan.model_dump(mode="json")})
             raise ToolError("指令未发布。\n" + "\n".join(problems))
@@ -137,17 +149,22 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
 
     @server.tool()
     async def publish_warning(notice: WarningNotice) -> ActionReceipt:
-        """发布自燃预警等级（确认人：通风部门负责人）。"""
-        return await issue("publish_warning", notice)
+        """发布自燃预警等级（确认人：通风部门负责人）。snapshot_id 照抄 workflow 的 assess_panel 返回值；
+        等级必须与研判快照一致，人工改等级时在 override_reason 写明理由。"""
+        problems, notes = check_warning(notice, snapshots)
+        await reject_if("publish_warning", notice, problems)
+        return await issue("publish_warning", notice, note="；".join(notes) or None)
 
     @server.tool()
     async def issue_firefighting_plan(plan: Plan) -> ActionReceipt:
-        """下发防灭火方案（确认人：总工程师）。执行前强制红线校验。"""
+        """下发防灭火方案（确认人：总工程师）。方案必须基于 workflow 的 draft_plan（snapshot_id 照抄），
+        现场条件和必备步骤按快照核对；执行前强制红线校验。"""
         return await issue_plan("issue_firefighting_plan", plan)
 
     @server.tool()
     async def escalate_emergency(escalation: Escalation) -> ActionReceipt:
-        """建议升级为应急响应（确认人：总工程师或矿长）。"""
+        """建议升级为应急响应（确认人：总工程师或矿长）。snapshot_id 照抄 workflow 的 recommend_escalation 返回值。"""
+        await reject_if("escalate_emergency", escalation, check_escalation(escalation, snapshots))
         return await issue("escalate_emergency", escalation)
 
     @server.tool()
@@ -164,17 +181,21 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
 
     @server.tool()
     async def issue_dispatch_order(order: DispatchOrder) -> ActionReceipt:
-        """下发物资调度单（确认人：指挥部指定负责人）。草案由 dispatch 服务生成。"""
+        """下发物资调度单（确认人：指挥部指定负责人）。草案由 workflow 的 draft_dispatch_for_plan 生成时，
+        snapshot_id 照抄，明细按快照核对。"""
+        await reject_if("issue_dispatch_order", order, check_dispatch(order, snapshots))
         return await issue("issue_dispatch_order", order)
 
     @server.tool()
     async def issue_sealing_plan(plan: Plan) -> ActionReceipt:
-        """下发封闭或灭火方案（确认人：总指挥 + 救护队带队指挥员）。执行前强制红线校验。"""
+        """下发封闭或灭火方案（确认人：总指挥 + 救护队带队指挥员）。方案必须基于 workflow 的 draft_plan
+        （snapshot_id 照抄），现场条件和必备步骤按快照核对；执行前强制红线校验。"""
         return await issue_plan("issue_sealing_plan", plan)
 
     @server.tool()
     async def approve_unsealing(plan: Plan) -> ActionReceipt:
-        """批准启封方案（确认人：总指挥）。执行前强制红线校验。"""
+        """批准启封方案（确认人：总指挥）。方案必须基于 workflow 的 draft_plan（snapshot_id 照抄），
+        现场条件和必备步骤按快照核对；执行前强制红线校验。"""
         return await issue_plan("approve_unsealing", plan)
 
     # ── DSH 审批插件的预检接口（HTTP，不是 MCP 工具）──
@@ -182,7 +203,7 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
     @server.custom_route("/redlines/check", methods=["POST"])
     async def redlines_check(req: Request) -> JSONResponse:
         body = await req.json()
-        result = precheck(body.get("tool", ""), body.get("arguments") or {}, await mine_now())
+        result = precheck(body.get("tool", ""), body.get("arguments") or {}, await mine_now(), snapshots)
         return JSONResponse(result)
 
     return server

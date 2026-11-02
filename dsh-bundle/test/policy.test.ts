@@ -54,6 +54,14 @@ describe('precheck', () => {
     assert.deepEqual((calls[0] as { body: unknown }).body, { tool: 'issue_sealing_plan', arguments: { plan: {} } })
   })
 
+  it('预检说明（如人工改等级的理由）显示在确认提示里', async () => {
+    const { fetch } = fakeFetch(() => ({ json: { ok: true, problems: [], notes: ['与计算结果不一致：计算 红色，提交 橙色，理由：已撤人'] } }))
+    const v = await precheck('publish_warning', { notice: {} }, config, signal, fetch)
+    assert.equal(v.kind, 'ask')
+    assert.match(v.kind === 'ask' ? v.reason : '', /计算 红色，提交 橙色/)
+    assert.match(v.kind === 'ask' ? v.displayReason.zh : '', /理由：已撤人/)
+  })
+
   it('红线违规 → deny，并带出条号', async () => {
     const { fetch } = fakeFetch(() => ({ json: { ok: false, problems: ['- [第85条] 步骤2：缺少注惰'] } }))
     const v = await precheck('issue_sealing_plan', {}, config, signal, fetch)

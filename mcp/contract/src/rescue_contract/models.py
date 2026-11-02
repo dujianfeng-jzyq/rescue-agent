@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, WithJsonSchema
 
-CONTRACT_VERSION = "0.5.0"
+CONTRACT_VERSION = "0.6.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -334,6 +334,18 @@ class Plan(_Model):
     context: FireContext
     steps: list[PlanStep] = Field(min_length=1)
     basis: list[Citation] = Field(default_factory=list)
+    # 方案草案快照（workflow 的 draft_plan 生成）。发布时必须有：context 和必备步骤按它核对
+    snapshot_id: str | None = None
+    panel: str | None = None  # 工作面编号，用于在指令台账里按工作面查找
+
+
+class HumanInput(_Model):
+    """系统里没有数据、只能由人确认的现场条件（写明确认人）。"""
+
+    field: Literal["area_temperature_c", "visibility_m", "fire_source_confirmed", "water_supply_sufficient", "return_airway_clear"]
+    value: float | bool
+    confirmed_by: str = Field(min_length=1)  # 确认人（姓名或岗位）
+    note: str | None = None
 
 
 # ── 其他需确认的指令 ────────────────────────────────────────────────────────
@@ -352,6 +364,8 @@ class WarningNotice(_Model):
     level: WarningLevel
     summary: str
     basis: list[Citation] = Field(default_factory=list)
+    snapshot_id: str | None = None  # 研判快照；发布时必须有，等级按它核对
+    override_reason: str | None = None  # 等级与研判快照不同时必须写明理由（人工改等级）
 
 
 class DispatchLine(_Model):
@@ -367,6 +381,7 @@ class DispatchOrder(_Model):
     order_id: str
     purpose: str
     lines: list[DispatchLine] = Field(min_length=1)
+    snapshot_id: str | None = None  # 调度草案快照（workflow 的 draft_dispatch_for_plan）；有则逐行核对
 
 
 class EvacuationNotice(_Model):
@@ -380,6 +395,7 @@ class Escalation(_Model):
     reason: str
     recommended_level: str
     basis: list[Citation] = Field(default_factory=list)
+    snapshot_id: str | None = None  # 升级建议快照（workflow 的 recommend_escalation）；发布时必须有
 
 
 # ── 研判快照（workflow 服务生成，指令发布时按编号核对；见 docs/workflow-design.md）──

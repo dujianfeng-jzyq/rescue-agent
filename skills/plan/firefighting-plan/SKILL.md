@@ -28,26 +28,11 @@ whenToUse: 需要为采空区自燃预警编写或修改防灭火方案时。
 
 ## 结构化方案（Plan）
 
-```json
-{
-  "plan_id": "FP-<日期>-<序号>",
-  "kind": "firefighting",
-  "title": "1201 采空区自燃防灭火方案",
-  "context": {
-    "fire_type": "goaf_spontaneous_combustion",
-    "as_of": "<get_clock 的时间>",
-    "methane_pct": "<get_latest 的 CH4 值>", "methane_rising": "<gas_trend 判断，未知填 null>", "o2_pct": null,
-    "explosion_risk": "<assess_explosion_risk 的结果>"
-  },
-  "steps": [
-    {"order": 1, "type": "leak_sealing", "description": "...", "roadways": ["R-1201-RET"], "params": {"reduction": "<预计减少漏风比例，无依据时不填>"}},
-    {"order": 2, "type": "inert_injection", "description": "...", "params": {"rate_m3_h": "<estimate_inert_gas 的结果>"}},
-    {"order": 3, "type": "monitor", "description": "按本矿预测预报制度的频次取束管气样，重点看 BT-1201-G1/G2 的 CO 和乙烯"}
-  ],
-  "basis": [{"document": "<kb 返回的 document>", "article": "<条号>", "source": "ragflow"}]
-}
-```
+方案骨架由 workflow 的 `draft_plan`（kind = `firefighting`）生成，**不要从头手写**：
 
-- 示例里尖括号是占位，写方案时换成对应工具的实际返回值（数值写成数字）。`context` 只填工具给出的值；没有的填 `null`。红线规则对未知值按“不放行”处理，所以与进入灾区相关的条件（温度、甲烷）务必先查清。
-- `basis` 每条都要来自 kb 检索结果，照抄 document 和 article。
-- 写完调用 `kb.check_plan_redlines`（tool = `issue_firefighting_plan`）自查。
+- 它给出 `snapshot_id`、`context`（甲烷、是否上升、氧浓度、爆炸危险性等，由代码取自研判快照和监测数据）和必备步骤 `leak_sealing → inert_injection → monitor`（顺序不能调换，可在中间插入步骤）。
+- 注氮流量：给出漏风量 `leak_m3_min` 和目标氧浓度 `target_o2_pct` 时，`draft_plan` 用 dispatch 的公式估算并填进 `params.rate_m3_h`；没有就在“待补充”里写“需人工给出”，不要自己算。
+- 你可以改：步骤说明、巷道、可选措施（`grouting`、`inhibitor_spray`、`pressure_balancing`，按上表）、`basis`、`title`。
+- 不能改：`context`、`snapshot_id`、`panel`、`kind`、必备步骤。改了 actions 发布时会拒绝；需要人确认的现场条件用 `human_inputs`（写明确认人）重新调用 `draft_plan`。
+- `basis` 每条都要来自 kb 检索结果或 `draft_plan` 带上的固定条款，照抄 document 和 article。
+- 改完调用 `kb.check_plan_redlines`（tool = `issue_firefighting_plan`）自查，它同时核对方案与草案快照。

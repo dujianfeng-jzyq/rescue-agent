@@ -108,7 +108,9 @@ def test_report_template_matches_skill(store):
     skill = (Path(__file__).resolve().parents[3] / "skills" / "shared" / "report-templates" / "SKILL.md").read_text(encoding="utf-8")
     section = skill.split("## 预警研判报告", 1)[1].split("\n## ", 1)[0]
     template = section.split("```", 2)[1]
-    labels = [line.split("<", 1)[0].split("：", 1)[0] for line in template.strip().splitlines() if "：" in line and not line.startswith("- ")]
+    labels = [
+        line.split("<", 1)[0].split("：", 1)[0] for line in template.strip().splitlines() if "：" in line and not line.startswith("- ")
+    ]
     text = assess("s4-escalation", 55, store)["report_markdown"]
     for label in labels:
         assert label in text, label

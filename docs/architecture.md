@@ -10,18 +10,20 @@
 | 流程知识 | 技能（`skills/`） | SOP、报告格式、何时调用哪个工具、红线说明 | 数值、阈值、规则判定 |
 | 横切控制 | DSH 原生插件（`dsh-bundle/src/`） | 红线预检 + 人工确认、审计 | 业务逻辑 |
 | 业务能力 | MCP 服务（`mcp/`） | 数据接入、计算模型、知识检索、指令出口 | 对话、提示词 |
+| 确定性流程 | workflow 服务（`mcp/workflow`） | 研判、效果评估、升级建议、方案草案等标准流程的固定步骤，研判快照，值守 | 对话、需要经验判断的内容 |
 | 契约 | Python 包 `rescue_contract` | 数据模型、红线引擎、方案校验 | 任何具体矿井的数据 |
 
 原则：**会算错的东西放在可测试的代码里，会说错的东西放在技能里，会做错的东西放在插件里拦住。**
+步骤固定、产出是数值或结论、会成为红线输入的流程，由 workflow 服务按固定步骤完成并写成研判快照；智能体只做理解提问、开放问答、经验判断和异常处理（ADR 0006，`docs/workflow-design.md`）。
 
 ## 2. Agent 与工具
 
 | 预设 | 挂载 MCP | 其他 | 说明 |
 | --- | --- | --- | --- |
-| rescue-commander（默认） | mine_data, fire_model, actions | delegate、ask_user、todo | 唯一能下指令的 Agent |
+| rescue-commander（默认） | mine_data, fire_model, actions, workflow | delegate、ask_user、todo | 唯一能下指令的 Agent；标准流程调 workflow |
 | rescue-assessment | mine_data, fire_model, ventnet, kb | — | 预警研判、指挥部研判报告 |
 | rescue-dispatch | mine_data, dispatch | — | 物资、队伍、调度单草案 |
-| rescue-plan | mine_data, ventnet, kb | — | 防灭火 / 封闭 / 启封方案，含红线自查 |
+| rescue-plan | mine_data, ventnet, kb, workflow | — | 在 draft_plan 草案上补充需要经验判断的部分，含红线自查 |
 | rescue-compliance | kb | — | 条文检索、方案合规审查 |
 
 ## 3. 一次指令的路径
@@ -31,7 +33,7 @@
   │
   ├─ DSH tools/pre-execute ── rescue-approval
   │     1. POST actions:/redlines/check {tool, arguments}
-  │        └ rescue_contract.validation.precheck：方案类型 + 数据时效(≤2h) + 红线引擎
+  │        └ rescue_contract.validation.precheck：方案类型 + 数据时效(≤2h) + 研判快照核对 + 红线引擎
   │        不通过 → deny(RESCUE_RED_LINE)；不可达/超时 → deny(RESCUE_PRECHECK_UNAVAILABLE)
   │     2. 通过 → ask：界面弹出确认（展示方案摘要和确认人角色）
   │
@@ -44,7 +46,11 @@
   └─ DSH tools/result ── rescue-audit 写 var/audit/tool-actions.jsonl（issued / denied / failed）
 ```
 
-方案起草时，rescue-plan 先调 `kb.check_plan_redlines` 自查（同一个引擎），所以正常流程里第①道很少触发；它是兜底。
+方案起草时，rescue-plan 先调 workflow 的 `draft_plan` 取得由代码生成的现场条件和必备步骤（写成方案草案快照），改完再调 `kb.check_plan_redlines` 自查（同一个引擎、同一套快照核对），所以正常流程里第①道很少触发；它是兜底。
+
+**研判快照核对**：方案的 `snapshot_id` 必须指向 draft_plan 生成的快照，`context` 逐字段相等、必备步骤齐全且顺序不变；
+预警的等级必须等于研判快照的等级（不同时要写 `override_reason`，确认弹窗里显示）；升级必须引用建议升级的快照；
+调度单引用了调度草案快照时逐行核对。快照在 `var/snapshots/`（`RESCUE_SNAPSHOT_DIR`），workflow 写，actions 和 kb 读。
 
 ## 4. 模拟矿井
 
@@ -69,6 +75,7 @@
 | 文件 | 写入方 | 用途 |
 | --- | --- | --- |
 | `var/actions-ledger.jsonl` | actions | 已发布指令台账 |
+| `var/snapshots/*.json` | workflow | 研判快照（只新增不修改），指令发布时按编号核对 |
 | `var/audit/tool-actions.jsonl` | rescue-audit | 所有指令类工具调用结果（含被拦截、被拒绝） |
 | `var/log/*.log`、`var/run/*.pid` | mcp-up.sh | 服务日志与进程 |
 | `var/eval/baseline.json` | eval/baseline.py | 基线评测明细 |

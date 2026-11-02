@@ -80,6 +80,30 @@
       },
       "title": "Basis",
       "type": "array"
+    },
+    "snapshot_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Snapshot Id"
+    },
+    "override_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Override Reason"
     }
   },
   "required": [
@@ -89,5 +113,5 @@
   ],
   "title": "WarningNotice",
   "type": "object",
-  "$comment": "rescue-contract 0.5.0"
+  "$comment": "rescue-contract 0.6.0"
 }

@@ -49,6 +49,8 @@ export type Verdict =
 export interface PrecheckResponse {
   ok: boolean
   problems: string[]
+  /** 给确认人看的说明（如预警等级与研判快照不同时的人工理由）。 */
+  notes?: string[]
 }
 
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>
@@ -61,15 +63,16 @@ export function classify(toolName: string, config: Pick<ApprovalConfig, 'gatedSe
   return { gated: true, rawName }
 }
 
-export function askVerdict(rawName: string, config: Pick<ApprovalConfig, 'confirmers'>): Verdict {
+export function askVerdict(rawName: string, config: Pick<ApprovalConfig, 'confirmers'>, notes: string[] = []): Verdict {
   const who = config.confirmers[rawName] ?? '指挥部授权人员'
   const what = ACTION_NAMES[rawName] ?? rawName
+  const extra = notes.length ? `\n请注意：${notes.join('；')}` : ''
   return {
     kind: 'ask',
-    reason: `${what}：需由【${who}】确认后执行（红线预检已通过）`,
+    reason: `${what}：需由【${who}】确认后执行（红线预检已通过）${extra}`,
     displayReason: {
-      en: `${what} requires confirmation by ${who}. Red-line pre-check passed.`,
-      zh: `${what}：需由【${who}】确认后执行。红线预检已通过。`,
+      en: `${what} requires confirmation by ${who}. Red-line pre-check passed.${notes.length ? ` Note: ${notes.join('; ')}` : ''}`,
+      zh: `${what}：需由【${who}】确认后执行。红线预检已通过。${extra}`,
     },
   }
 }
@@ -109,5 +112,6 @@ export async function precheck(
   if (!body.ok) {
     return { kind: 'deny', code: 'RESCUE_RED_LINE', reason: `红线预检未通过，指令已拦截：\n${body.problems.join('\n')}` }
   }
-  return askVerdict(rawName, config)
+  const notes = Array.isArray(body.notes) ? body.notes.filter((n): n is string => typeof n === 'string') : []
+  return askVerdict(rawName, config, notes)
 }

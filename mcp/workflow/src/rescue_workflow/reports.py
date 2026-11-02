@@ -73,3 +73,65 @@ def assessment(r: dict[str, Any], snapshot_id: str) -> str:
     if x.get("chart_markdown"):
         out += "\n\n" + x["chart_markdown"]
     return out
+
+
+STEP_NAMES = {
+    "monitor": "检测观测", "evacuate": "撤人", "power_cutoff": "切断电源", "inert_injection": "注惰",
+    "grouting": "注浆", "inhibitor_spray": "喷洒阻化剂", "leak_sealing": "堵漏", "pressure_balancing": "均压",
+    "temporary_seal": "临时密闭", "permanent_seal": "永久密闭", "unseal": "启封",
+}  # fmt: skip
+RISK_NAMES = {
+    "explosive": "处于爆炸范围",
+    "may_become_explosive": "可能进入爆炸范围",
+    "not_explosive": "当前不在爆炸范围",
+    "unknown": "无法判定（按有爆炸危险对待）",
+}
+
+
+def _yn(v: Any) -> str:
+    return "缺失" if v is None else ("是" if v else "否")
+
+
+def plan_draft(r: dict[str, Any], snapshot_id: str) -> str:
+    p, c = r["plan"], r["plan"]["context"]
+    human = {h["field"]: h for h in r["human_inputs"]}
+
+    def manual(field: str, label: str, fmt=_v) -> str:
+        if field in human:
+            h = human[field]
+            return f"- {label}：{fmt(h['value'])}（人工确认：{h['confirmed_by']}）"
+        return f"- {label}：缺失（需现场确认）"
+
+    lines = [
+        f"【方案草案】{p['plan_id']} {p['title']}",
+        "现场条件（代码生成，不能修改）：",
+        f"- 甲烷浓度（%）：{_v(c['methane_pct'])}；是否继续上升：{_yn(c['methane_rising'])}",
+        f"- 火区氧浓度（%）：{_v(c['o2_pct'])}",
+        f"- 爆炸危险性：{RISK_NAMES[c['explosion_risk']]}",
+        f"- 火区封闭时间：{_ts(c['sealed_at'])}",
+        manual("area_temperature_c", "灾区温度（℃）"),
+        manual("visibility_m", "能见度（米）"),
+        manual("fire_source_confirmed", "火源是否明确", _yn),
+        manual("water_supply_sufficient", "水源、人力和物力是否充足", _yn),
+        manual("return_airway_clear", "回风道是否畅通", _yn),
+        "必备步骤（不能删除或调换顺序，可在中间增加步骤）：",
+    ]
+    for s in p["steps"]:
+        extra = []
+        if s["roadways"]:
+            extra.append("巷道 " + "、".join(s["roadways"]))
+        if "rate_m3_h" in s["params"]:
+            extra.append(f"注氮流量 {s['params']['rate_m3_h']} m³/h（估算）")
+        lines.append(
+            f"{s['order']}. {STEP_NAMES.get(s['type'], s['type'])}：{s['description']}" + (f"（{'；'.join(extra)}）" if extra else "")
+        )
+    if r["missing_inputs"]:
+        lines.append("待补充：")
+        lines += [f"- {m}" for m in r["missing_inputs"]]
+    chk = r.get("redline_check")
+    if chk is not None:
+        lines.append("红线自查：" + ("通过" if chk["ok"] else "未通过"))
+        lines += [f"- {x}" for x in chk["problems"]]
+    lines.append("依据条款：" + "、".join(f"{b['document']} {b['article']}" for b in p["basis"]))
+    lines.append(f"依据：方案草案快照 {snapshot_id}（workflow 计算结果）；判据为开发占位值")
+    return "\n".join(lines)

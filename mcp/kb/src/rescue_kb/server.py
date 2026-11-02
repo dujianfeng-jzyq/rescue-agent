@@ -21,6 +21,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from rescue_contract.models import Plan
 from rescue_contract.redlines import RULES
+from rescue_contract.snapshots import SnapshotStore
 from rescue_contract.validation import precheck
 
 from .ragflow import RagflowConfig, RagflowError, chunk_content, find_documents, keyword_chunks, retrieve
@@ -274,8 +275,8 @@ def build_server(kb: KnowledgeBase | None = None) -> MCPServer:
         """对结构化方案做红线自查（只读，不发布）。tool 取 issue_firefighting_plan / issue_sealing_plan / approve_unsealing。
         返回 ok 和问题清单（含条号）；检查了几条规则照抄 rules_checked_count，不要自己数。
         articles 是各规则所依据条款的本地留存原文：引用这些条款时直接照抄，不必再逐条调用 get_article。
-        注意：自查不检查数据时效，发布时 actions 服务还会检查。"""
-        result = precheck(tool, {"plan": plan.model_dump(mode="json")}, None)
+        也核对方案与 draft_plan 快照是否一致（现场条件、必备步骤）。注意：自查不检查数据时效，发布时 actions 服务还会检查。"""
+        result = precheck(tool, {"plan": plan.model_dump(mode="json")}, None, SnapshotStore())
         return {
             **result,
             "rules_checked": [f"{r.rule_id} {r.article} {r.summary}" for r in RULES],

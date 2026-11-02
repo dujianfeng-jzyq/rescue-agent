@@ -12,3 +12,16 @@ assessment:
   personnel_source_kind: working_face
   # 多个束管测点的爆炸危险性汇总：取最不利；任一测点算不出来时为 unknown（不放行）
   explosion_order: [explosive, may_become_explosive, not_explosive]
+
+plan:
+  # 各类方案的必备步骤及相对顺序（与技能 sealing-and-unsealing、firefighting-plan 一致）
+  # TODO(专家): 确认是否完整，尤其防灭火方案
+  required_steps:
+    sealing: [evacuate, inert_injection, temporary_seal, monitor, permanent_seal]
+    unsealing: [monitor, power_cutoff, evacuate, unseal, monitor]
+    firefighting: [leak_sealing, inert_injection, monitor]
+  # 方案依据的条款（只从本地留存取，不检索）
+  basis:
+    sealing: [第84条, 第85条, 第86条]
+    unsealing: [第164条]
+    firefighting: [第98条]

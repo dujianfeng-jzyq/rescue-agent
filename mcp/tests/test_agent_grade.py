@@ -331,6 +331,7 @@ def _wf_tree(tmp_path, final: str, action_args: dict | None = None):
     [
         (REPORT + "\n\n分析与建议：按预案准备升级。", True),
         ("  " + REPORT.replace("\n", "\n\n  ") + "\n\n分析：…", True),  # 缩进、空行不同不算改写
+        ("**" + REPORT.replace("\n", "**\n", 1) + "\n分析：…", True),  # 整行加粗只是排版
         (REPORT.replace("红色（危险）", "红色"), False),  # 改写了等级名
         ("结论：红色，加速氧化。", False),
     ],

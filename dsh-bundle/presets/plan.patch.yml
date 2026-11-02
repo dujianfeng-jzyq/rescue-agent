@@ -16,10 +16,13 @@
               prefix: |-
                 你是采空区火灾处置方案编写助手。你只编写方案草案，不发布。
 
-                - 方案必须是符合数据契约的结构化 Plan：kind、context（现场条件，取自研判结果，未知就留空）、按顺序编号的 steps（步骤类型、巷道、人数、待机小队、参数）、basis（依据）。
-                - 防灭火措施按技能 firefighting-plan 选择；封闭和启封按技能 sealing-and-unsealing。
-                - 每条措施都要能在 kb 中找到依据（search_regulations / search_mine_plans / get_article），basis 照抄 document 和 article。
-                - 写完先调用 kb 的 check_plan_redlines 自查；不通过就修改，直到通过或说明为什么需要人工决策。
+                - 编写方案一律先调用 workflow 的 draft_plan（kind：firefighting / sealing / unsealing）。它由代码生成现场条件 context、必备步骤和 snapshot_id，并做红线自查。
+                - 你只在它返回的 plan 上改 editable 列出的部分：步骤说明、巷道（密闭位置按第86条选择并写明需现场确认）、在必备步骤之间增加可选步骤（注浆、均压、阻化剂、堵漏、观测）并重排顺序号、进入灾区步骤的 team_size 和 standby_team、basis、title。
+                - 不要改 context、snapshot_id、panel、kind，不要删除或调换必备步骤：改了会在发布时被拒绝。需要人确认的现场条件（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）不要自己填，列进“待补充”交给总指挥协调向人确认；人给出后，用 human_inputs（写明 confirmed_by）重新调用 draft_plan。
+                - 注氮流量只用 draft_plan 按 leak_m3_min、target_o2_pct 估算的值；没有就写“需人工给出”，不要自己算。
+                - 防灭火措施按技能 firefighting-plan 选择；封闭和启封按技能 sealing-and-unsealing。basis 照抄 kb 返回的 document 和 article（draft_plan 已带上固定条款）。
+                - 改完调用 kb 的 check_plan_redlines 自查（它同时核对方案与草案快照）；不通过就修改，直到通过或说明为什么需要人工决策。
+                - 最后返回完整的 plan JSON（含 snapshot_id），以及 draft_plan 的 report_markdown 和你的修改说明，便于总指挥协调直接提交。
                 - 采空区火灾保持通风系统稳定，方案中不要出现反风、风流短路、停主要通风机。
 
                 通用规则（所有救援 Agent 都必须遵守）：
@@ -55,14 +58,14 @@
               headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
               toolCallTimeoutMs: 60000
               failOnStartupError: false
-          - id: mcp-fire-model # 封闭方案要用 assess_explosion_risk 确定 context.explosion_risk（只读）
+          - id: mcp-workflow # draft_plan：现场条件和必备步骤由代码生成（只读，只写快照）
             name: '@deepseek-ai/dsh-mcp-client'
             config:
-              serverName: fire_model
+              serverName: workflow
               transport: streamable-http
-              url: !!js "process.env.RESCUE_MCP_FIRE_MODEL_URL ?? 'http://127.0.0.1:8103/mcp'"
+              url: !!js "process.env.RESCUE_MCP_WORKFLOW_URL ?? 'http://127.0.0.1:8107/mcp'"
               headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
-              toolCallTimeoutMs: 60000
+              toolCallTimeoutMs: 120000
               failOnStartupError: false
           - id: mcp-kb
             name: '@deepseek-ai/dsh-mcp-client'

@@ -4,6 +4,8 @@ from datetime import timedelta
 
 from mcp.client import Client
 from rescue_actions.server import build_server
+from rescue_contract.models import FireContext, Snapshot
+from rescue_contract.snapshots import SnapshotStore, new_id
 from rescue_mine_data_sim.server import SimHolder
 from rescue_mine_data_sim.server import build_server as build_mine
 
@@ -50,8 +52,18 @@ def test_sealing_without_inerting_is_rejected_and_logged(tmp_path):
 
 
 def test_valid_sealing_plan_is_issued(tmp_path):
-    holder, server, ledger = setup(tmp_path)
-    plan = sealing_plan(holder.engine.now(), ["evacuate", "inert_injection", "temporary_seal", "permanent_seal"])
+    holder = SimHolder("s4-escalation", manual_clock=True)
+    holder.engine.clock.advance(50)
+    now = holder.engine.now()
+    plan = sealing_plan(now, ["evacuate", "inert_injection", "temporary_seal", "permanent_seal"])
+    store = SnapshotStore(tmp_path / "snapshots")
+    sid = new_id(now)
+    plan["snapshot_id"] = sid
+    ctx = FireContext.model_validate(plan["context"]).model_dump(mode="json")
+    result = {"plan": {"kind": "sealing", "context": ctx}, "required_steps": ["evacuate", "inert_injection", "temporary_seal", "permanent_seal"]}
+    store.put(Snapshot(snapshot_id=sid, kind="plan-context", panel="1201", as_of=now, created_at=now, result=result))
+    ledger = tmp_path / "ledger.jsonl"
+    server = build_server(build_mine(holder), ledger_path=ledger, sim_control_url="", store=store)
     r = call(server, "issue_sealing_plan", {"plan": plan})
     assert not r.is_error, r.content
     assert r.structured_content["status"] == "issued"

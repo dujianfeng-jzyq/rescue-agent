@@ -31,5 +31,5 @@
   ],
   "title": "ResourceItem",
   "type": "object",
-  "$comment": "rescue-contract 0.5.0"
+  "$comment": "rescue-contract 0.6.0"
 }
