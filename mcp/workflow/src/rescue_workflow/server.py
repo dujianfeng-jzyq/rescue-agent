@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
@@ -141,8 +141,10 @@ def build_server(mine_data_target: Any | None = None, store: SnapshotStore | Non
     @server.tool()
     async def get_monitor_events(panel: str = "1201", since: MineTime | None = None) -> dict[str, Any]:
         """值守事件（值守进程不经过大模型定时检查：新报警、预警等级或自燃阶段变化、启封后按班复评）。
-        每次开始工作可先看一眼；每条事件带研判快照编号，详情用 assess_panel 重新研判。"""
-        events = monitor.read_events(since, panel)
+        since 不给时取最近 24 小时（矿井时间）。每条事件带研判快照编号，详情用 assess_panel 重新研判。"""
+        now = await md.now()
+        start = since or now - timedelta(hours=24)
+        events = [e for e in monitor.read_events(start, panel) if datetime.fromisoformat(e["mine_time"]) <= now]
         return {"panel": panel, "count": len(events), "events": events}
 
     @server.tool()

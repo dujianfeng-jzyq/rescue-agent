@@ -93,6 +93,10 @@ class Monitor:
         """到了检查时刻就返回矿井时间，否则 None。"""
         now = await self.md.now()
         last = self.state.get("last_check")
+        if last is not None and now < datetime.fromisoformat(last):  # 矿井时钟倒退（模拟场景被重置）：从头值守
+            log.info("矿井时钟倒退（%s → %s），值守状态清零", last, now.isoformat())
+            self.state = {"last_check": None, "panels": {}}
+            return now
         if last is not None and now - datetime.fromisoformat(last) < timedelta(minutes=self.cfg["interval_min"]):
             return None
         return now

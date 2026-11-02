@@ -57,9 +57,25 @@ def test_timeline_merges_ledger_events_and_snapshots(store, tmp_path, monkeypatc
     monkeypatch.setenv("RESCUE_MONITOR_DIR", str(tmp_path / "monitor"))
     monkeypatch.setenv("RESCUE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
     asyncio.run(Monitor(MineData(build_mine(holder)), store, tmp_path / "monitor").tick(holder.engine.now()))
-    rec = {"action_id": "A-9", "tool": "issue_sealing_plan", "status": "issued", "issued_at": holder.engine.now().isoformat(), "payload": {"plan_id": "SP-1201-1", "panel": "1201"}}
+    rec = {
+        "action_id": "A-9",
+        "tool": "issue_sealing_plan",
+        "status": "issued",
+        "issued_at": holder.engine.now().isoformat(),
+        "payload": {"plan_id": "SP-1201-1", "panel": "1201"},
+    }
     (tmp_path / "ledger.jsonl").write_text(json.dumps(rec) + "\n")
-    (tmp_path / "audit.jsonl").write_text(json.dumps({"ts": "2026-11-02T16:24:15Z", "tool": "mcp__actions__publish_warning", "outcome": "denied", "detail": 'the user rejected tool "x"'}) + "\n")
+    (tmp_path / "audit.jsonl").write_text(
+        json.dumps(
+            {
+                "ts": "2026-11-02T16:24:15Z",
+                "tool": "mcp__actions__publish_warning",
+                "outcome": "denied",
+                "detail": 'the user rejected tool "x"',
+            }
+        )
+        + "\n"
+    )
     out = call(build_server(build_mine(holder), store), "review_timeline", {}).structured_content
     sources = {x["source"] for x in out["result"]["timeline"]}
     assert sources == {"指令台账", "值守", "研判快照"}
@@ -73,3 +89,16 @@ def test_get_monitor_events_tool(store, tmp_path, monkeypatch):
     asyncio.run(Monitor(MineData(build_mine(holder)), store, tmp_path / "monitor").tick(holder.engine.now()))
     out = call(build_server(build_mine(holder), store), "get_monitor_events", {}).structured_content
     assert out["count"] == len(out["events"]) >= 1
+
+
+def test_clock_rewind_resets_state_and_future_events_hidden(store, tmp_path, monkeypatch):
+    """评测和演示会重置模拟场景：时钟倒退时值守从头开始，读事件时不返回“未来”的事件。"""
+    monkeypatch.setenv("RESCUE_MONITOR_DIR", str(tmp_path / "monitor"))
+    later = sim("s4-escalation", 55)
+    mon = Monitor(MineData(build_mine(later)), store, tmp_path / "monitor")
+    asyncio.run(mon.tick(asyncio.run(mon.due())))
+    earlier = sim("s4-escalation", 20)
+    mon.md = MineData(build_mine(earlier))
+    assert asyncio.run(mon.due()) == earlier.engine.now() and mon.state["panels"] == {}
+    out = call(build_server(build_mine(earlier), store), "get_monitor_events", {}).structured_content
+    assert out["events"] == []
