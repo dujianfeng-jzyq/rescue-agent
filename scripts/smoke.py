@@ -30,7 +30,7 @@ REDLINE_URL = os.environ.get("RESCUE_REDLINE_CHECK_URL", "http://127.0.0.1:8106/
 CALLS = {
     "mine_data": [("get_clock", {}), ("get_latest", {"sensor_ids": ["SM-1201-UC"]})],
     "ventnet": [("threatened_personnel", {"source_roadway_id": "R-1201-FACE"})],
-    "fire_model": [("assess_warning_level", {}), ("check_realtime_alarms", {}), ("assess_explosion_risk", {"ch4_pct": 8, "o2_pct": 18})],
+    "fire_model": [("assess_warning_level", {}), ("check_realtime_alarms", {}), ("assess_explosion_risk", {"sensor_id": "BT-1201-G1"})],
     "dispatch": [("estimate_inert_gas", {"leak_m3_min": 40, "current_o2_pct": 9, "target_o2_pct": 6})],
     "kb": [("search_regulations", {"query": "封闭火区 惰性气体"})],
     "actions": [],  # 指令类工具不在冒烟测试里调用

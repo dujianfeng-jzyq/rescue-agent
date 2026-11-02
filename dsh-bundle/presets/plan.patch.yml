@@ -55,6 +55,15 @@
               headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
               toolCallTimeoutMs: 60000
               failOnStartupError: false
+          - id: mcp-fire-model # 封闭方案要用 assess_explosion_risk 确定 context.explosion_risk（只读）
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: fire_model
+              transport: streamable-http
+              url: !!js "process.env.RESCUE_MCP_FIRE_MODEL_URL ?? 'http://127.0.0.1:8103/mcp'"
+              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              toolCallTimeoutMs: 60000
+              failOnStartupError: false
           - id: mcp-kb
             name: '@deepseek-ai/dsh-mcp-client'
             config:

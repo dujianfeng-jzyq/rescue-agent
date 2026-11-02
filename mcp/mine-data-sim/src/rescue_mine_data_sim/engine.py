@@ -285,9 +285,11 @@ class SimEngine:
         c2h4 = 0.0 if T < 90 else min(0.8 * (math.exp(0.035 * (T - 90)) - 1), 800) * ox
         c2h2 = 0.0 if T < 220 else min(0.3 * (math.exp(0.02 * (T - 220)) - 1), 300) * ox
         co2 = 0.2 + min(0.004 * max(0.0, T - 30), 8.0) * ox
+        # H2：煤高温热解产物，占位曲线。TODO(专家): 用程序升温实验数据校准
+        h2 = 0.0 if T < 100 else min(1.5 * (math.exp(0.03 * (T - 100)) - 1), 3000) * ox
         n2_frac = (s.n2_m3_h * p.n2_penetration) / (p.leak_m3_min * 60 * s.leak_mult + s.n2_m3_h * p.n2_penetration + 1e-9)
         ch4 = p.ch4_goaf_pct * (1 - 0.3 * n2_frac)
-        return {Measurand.O2: o2, Measurand.CO: co, Measurand.C2H4: c2h4, Measurand.C2H2: c2h2, Measurand.CO2: co2, Measurand.CH4: ch4}
+        return {Measurand.O2: o2, Measurand.CO: co, Measurand.C2H4: c2h4, Measurand.C2H2: c2h2, Measurand.CO2: co2, Measurand.CH4: ch4, Measurand.H2: h2}
 
     def _true_value(self, sensor_id: str, m: Measurand, s: _State) -> float | None:
         p = self.scenario.params
@@ -306,6 +308,7 @@ class SimEngine:
                 Measurand.C2H2: 0.0,
                 Measurand.CO2: 0.15,
                 Measurand.CH4: p.ch4_goaf_pct * 0.8,
+                Measurand.H2: 0.0,
             }
             if m == Measurand.N2:
                 o2 = self._true_value(sensor_id, Measurand.O2, s) or 0
@@ -350,6 +353,10 @@ class SimEngine:
         return random.Random(zlib.crc32(key.encode())).gauss(0, 1)
 
     def _noisy(self, sensor_id: str, m: Measurand, t_h: float) -> float | None:
+        if m == Measurand.N2 and SENSOR_BY_ID[sensor_id].source == SensorSource.BUNDLE_TUBE:
+            # 色谱分析的 N2 由各组分归一化得到：用同一时刻已带噪声的其他组分推算，合计不超过 100%
+            others = [self._noisy(sensor_id, g, t_h) or 0.0 for g in (Measurand.O2, Measurand.CO2, Measurand.CH4)]
+            return max(0.0, 100 - sum(others) - 0.93)
         value = self._true_value(sensor_id, m, self.state_at(t_h))
         if value is None:
             return None
@@ -375,7 +382,7 @@ class SimEngine:
         if value is None:
             quality = Quality.MISSING
         else:
-            if m in (Measurand.CO, Measurand.C2H4, Measurand.C2H2, Measurand.CH4, Measurand.CO2):
+            if m in (Measurand.CO, Measurand.C2H4, Measurand.C2H2, Measurand.CH4, Measurand.CO2, Measurand.H2):
                 value = max(0.0, value)
             value = round(value, 3)
         return Reading(sensor_id=sensor_id, measurand=m, ts=self.at(t_h), value=value, quality=quality)

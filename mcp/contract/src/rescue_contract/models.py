@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, WithJsonSchema
 
-CONTRACT_VERSION = "0.3.0"
+CONTRACT_VERSION = "0.4.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -96,6 +96,7 @@ class Measurand(StrEnum):
     C2H4 = "C2H4"  # ppm
     C2H2 = "C2H2"  # ppm
     C2H6 = "C2H6"  # ppm
+    H2 = "H2"  # ppm（束管色谱）
     TEMPERATURE = "TEMP"  # °C
     WIND_SPEED = "WIND"  # m/s
 
@@ -109,6 +110,7 @@ UNITS: dict[Measurand, str] = {
     Measurand.C2H4: "ppm",
     Measurand.C2H2: "ppm",
     Measurand.C2H6: "ppm",
+    Measurand.H2: "ppm",
     Measurand.TEMPERATURE: "°C",
     Measurand.WIND_SPEED: "m/s",
 }

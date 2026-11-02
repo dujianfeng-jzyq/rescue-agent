@@ -142,7 +142,7 @@ ROADWAYS = [
 NETWORK = MineNetwork(mine_id=MINE_ID, nodes=NODES, roadways=ROADWAYS)
 
 M = Measurand
-TUBE = [M.O2, M.N2, M.CO, M.CO2, M.CH4, M.C2H4, M.C2H2]
+TUBE = [M.O2, M.N2, M.CO, M.CO2, M.CH4, M.C2H4, M.C2H2, M.H2]
 SENSORS = [
     SensorPoint(
         id="SM-1201-UC",

@@ -39,14 +39,20 @@ def auth_headers() -> dict[str, str]:
 
 
 class BearerTokenMiddleware:
-    """令牌校验。/healthz 不需要令牌，便于容器探活。"""
+    """令牌校验。/healthz 不需要令牌，便于容器探活。
 
-    def __init__(self, app: ASGIApp, token: str) -> None:
+    `public_prefixes` 下的路径也不校验：只用于凭不可猜测的文件名下载的生成文件（如 fire_model 的 /charts/），
+    浏览器点下载链接时带不上令牌。
+    """
+
+    def __init__(self, app: ASGIApp, token: str, public_prefixes: tuple[str, ...] = ()) -> None:
         self.app = app
         self.expected = f"Bearer {token}".encode()
+        self.public_prefixes = public_prefixes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and scope.get("path") != "/healthz":
+        path = scope.get("path") or ""
+        if scope["type"] == "http" and path != "/healthz" and not path.startswith(self.public_prefixes):
             headers = dict(scope.get("headers") or [])
             got = headers.get(b"authorization", b"")
             if not hmac.compare_digest(got, self.expected):
@@ -78,7 +84,7 @@ def ensure_text_content(server: MCPServer) -> MCPServer:
     return server
 
 
-def build_app(server: MCPServer) -> ASGIApp:
+def build_app(server: MCPServer, public_prefixes: tuple[str, ...] = ()) -> ASGIApp:
     ensure_text_content(server)
 
     @server.custom_route("/healthz", methods=["GET"])
@@ -88,15 +94,15 @@ def build_app(server: MCPServer) -> ASGIApp:
     app: ASGIApp = server.streamable_http_app(stateless_http=True, json_response=True)
     token = os.environ.get("RESCUE_MCP_TOKEN")
     if token:
-        app = BearerTokenMiddleware(app, token)
+        app = BearerTokenMiddleware(app, token, public_prefixes)
     return app
 
 
-def serve(server: MCPServer, key: str) -> None:
+def serve(server: MCPServer, key: str, public_prefixes: tuple[str, ...] = ()) -> None:
     """启动服务。端口取 RESCUE_<KEY>_PORT，默认见 DEFAULT_PORTS。"""
     logging.basicConfig(level=os.environ.get("RESCUE_LOG_LEVEL", "INFO"))
     port = int(os.environ.get(f"RESCUE_{key.upper()}_PORT", DEFAULT_PORTS[key]))
     host = os.environ.get("RESCUE_MCP_HOST", "127.0.0.1")
     if not os.environ.get("RESCUE_MCP_TOKEN"):
         log.warning("RESCUE_MCP_TOKEN 未设置，%s 不校验令牌（仅限本机开发）", key)
-    uvicorn.run(build_app(server), host=host, port=port, log_level="warning")
+    uvicorn.run(build_app(server, public_prefixes), host=host, port=port, log_level="warning")

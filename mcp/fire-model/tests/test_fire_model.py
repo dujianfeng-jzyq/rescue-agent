@@ -21,20 +21,110 @@ def level(scenario: str, hours: float) -> warning.Assessment:
 
 # ── 爆炸三角形 ──
 
+XC = explosion.load_constants()
+
+
+def triangle(gases: dict[str, float], o2: float, co2: float = 0.05, t: float = 25.0, n2: float | None = None) -> dict:
+    return explosion.analyze(explosion.Sample(gases, o2, co2, t, n2), XC)
+
 
 @pytest.mark.parametrize(
-    "ch4,o2,expected",
+    "ch4,o2,zone,risk",
     [
-        (8.0, 18.0, ExplosionRisk.EXPLOSIVE),
-        (30.0, 10.0, ExplosionRisk.MAY_BECOME_EXPLOSIVE),
-        (1.0, 20.5, ExplosionRisk.NOT_EXPLOSIVE),
-        (12.0, 8.0, ExplosionRisk.MAY_BECOME_EXPLOSIVE),  # 惰化区，但补入空气会进入爆炸范围
-        (8.0, 8.0, ExplosionRisk.NOT_EXPLOSIVE),  # 补入空气的路径从鼻点左侧经过
-        (3.0, 5.0, ExplosionRisk.NOT_EXPLOSIVE),
+        (8.0, 18.0, "I", ExplosionRisk.EXPLOSIVE),
+        (0.042, 19.8, "II", ExplosionRisk.MAY_BECOME_EXPLOSIVE),  # 新鲜风流：甲烷积聚会进入爆炸范围
+        (8.0, 8.0, "III", ExplosionRisk.MAY_BECOME_EXPLOSIVE),  # 惰化区，补入空气会穿过三角形
+        (30.0, 10.0, "III", ExplosionRisk.MAY_BECOME_EXPLOSIVE),
+        (3.0, 8.0, "IV", ExplosionRisk.NOT_EXPLOSIVE),  # 鼻点以下的贫氧区；原脚本把这里判成 II
+        (0.5, 2.0, "IV", ExplosionRisk.NOT_EXPLOSIVE),
     ],
 )
-def test_explosion_triangle(ch4, o2, expected):
-    assert explosion.classify(ch4, o2) == expected
+def test_explosion_zones(ch4, o2, zone, risk):
+    r = triangle({"CH4": ch4}, o2)
+    assert (r["zone"], r["explosion_risk"]) == (zone, risk.value)
+
+
+def test_explosion_triangle_matches_skill_example():
+    """与 explosion-triangle-synthesis 技能自检算例的顶点一致（CO2 = 0，N2 用 O2 当量）。"""
+    r = triangle({"CH4": 4.0, "CO": 2.0, "H2": 1.0}, 18.0, co2=0.0, t=30.0)
+    assert r["temperature_factor"] == pytest.approx(0.003605)
+    assert r["triangle"]["lower"]["combustible_pct"] == pytest.approx(6.974765, abs=1e-4)
+    assert r["triangle"]["upper"]["combustible_pct"] == pytest.approx(40.516968, abs=1e-4)
+    assert r["triangle"]["critical"]["combustible_pct"] == pytest.approx(7.291429, abs=1e-4)
+    assert r["inert"] == {"co2_pct": 0.0, "n2_weight": pytest.approx(67.14), "n2_source": "o2_equivalent"}
+    assert r["zone"] == "II"
+
+
+def test_other_combustibles_change_the_conclusion():
+    """只算甲烷会偏乐观：计入 H2 后状态点进入三角形。"""
+    assert triangle({"CH4": 4.5}, 18.0)["zone"] == "II"
+    assert triangle({"CH4": 4.5, "H2": 1.5}, 18.0)["zone"] == "I"
+
+
+def test_temperature_widens_only_lower_and_upper():
+    cold, hot = triangle({"CH4": 1.0}, 10.0, t=25.0, n2=70.0), triangle({"CH4": 1.0}, 10.0, t=80.0, n2=70.0)
+    assert hot["triangle"]["lower"]["combustible_pct"] < cold["triangle"]["lower"]["combustible_pct"]
+    assert hot["triangle"]["upper"]["combustible_pct"] > cold["triangle"]["upper"]["combustible_pct"]
+    assert hot["triangle"]["critical"] == cold["triangle"]["critical"]
+
+
+def test_n2_measured_used_and_inconsistent_n2_dropped():
+    assert triangle({"CH4": 3.0}, 8.0, co2=1.0, n2=87.0)["inert"]["n2_source"] == "measured"
+    r = triangle({"CH4": 3.0}, 8.0, co2=1.0, n2=92.0)  # 合计 104%
+    assert r["inert"]["n2_source"] == "o2_equivalent"
+    assert any("不采用" in w for w in r["warnings"])
+
+
+@pytest.mark.parametrize(
+    "kwargs,message",
+    [
+        ({"gases": {"CH4": 3.0}, "o2": 10.0, "t": 200.0}, "适用范围"),
+        ({"gases": {"CH4": 0.0}, "o2": 10.0}, "未检出"),
+        ({"gases": {"H2S": 1.0}, "o2": 10.0}, "H2S"),
+        ({"gases": {"CH4": 50.0}, "o2": 60.0}, "超过 100%"),
+        ({"gases": {"CH4": 3.0}, "o2": 0.0, "co2": 0.0}, "S 点"),
+    ],
+)
+def test_explosion_refuses_incomplete_or_invalid_input(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        triangle(**kwargs)
+
+
+def _call_fire(holder, tool: str, args: dict):
+    from mcp.client import Client
+    from rescue_fire_model.server import build_server
+
+    async def go():
+        async with Client(build_server(build_mine(holder))) as c:
+            return await c.call_tool(tool, args)
+
+    return asyncio.run(go())
+
+
+def test_assess_explosion_risk_reads_bundle_tube_sample():
+    holder, _ = sim("s4-escalation", 80)
+    r = _call_fire(holder, "assess_explosion_risk", {"sensor_id": "BT-1201-G1"})
+    assert not r.is_error, r.content[0].text
+    d = r.structured_content
+    sample = d["sample"]
+    assert sample["temperature_sensor_id"] == "TP-1201-G1"  # 按采空区深度配对
+    assert d["combustibles_pct"]["CO"] == pytest.approx(sample["readings"]["CO"] / 10_000, rel=1e-4)  # ppm 换算成 %
+    assert "C2H4" in d["combustibles_pct"]  # 乙烯已出现，计入合成
+    assert d["zone"] in {"I", "II", "III", "IV"}
+
+
+def test_assess_explosion_risk_refuses_stuck_sensor():
+    holder, _ = sim("s6-sensor-faults", 30)
+    r = _call_fire(holder, "assess_explosion_risk", {"sensor_id": "BT-1201-G2"})
+    assert r.is_error and "卡值" in r.content[0].text
+
+
+def test_assess_explosion_risk_sample_converts_ppm():
+    holder, _ = sim("s2-slow-oxidation", 1)
+    args = {"ch4_pct": 4.5, "co_ppm": 15000, "o2_pct": 18.0, "co2_pct": 0.05, "temperature_c": 25.0}
+    d = _call_fire(holder, "assess_explosion_risk_sample", args).structured_content
+    assert d["combustibles_pct"] == {"CH4": 4.5, "CO": 1.5}
+    assert any("未提供" in w for w in d["warnings"])
 
 
 def test_graham_ratio():
@@ -335,3 +425,57 @@ def test_panel_overall_rule(effects, expected):
     points = [{"sensor_id": f"S{i}", "measurand": "CO", "effect": e, "effect_name": EFFECT_NAMES[e], "new_marker_gases": [], **dict.fromkeys(keys)} for i, e in enumerate(effects)]
     t = datetime(2026, 11, 4, 8)
     assert overall(points, t, t, 12)["overall"] == expected
+
+
+# ── 爆炸三角形风险图 ──
+
+
+@pytest.mark.parametrize(
+    "gases,o2",
+    [({"CH4": 0.042}, 19.8), ({"CH4": 4.5, "H2": 1.5}, 18.0), ({"CH4": 3.7, "CO": 0.3, "C2H4": 0.001}, 7.8), ({"CO": 30.0}, 10.0)],
+)
+def test_chart_zones_match_classifier(gases, o2):
+    """图上的色块与判定逐点一致：网格上每个点所在色块 = classify 的分区。"""
+    from rescue_fire_model import chart
+
+    r = triangle(gases, o2)
+    tri = tuple((r["triangle"][k]["combustible_pct"], r["triangle"][k]["o2_pct"]) for k in ("lower", "upper", "critical"))
+    xmax = 100.0
+    polys = chart.zone_polygons(tri, XC.air_o2, xmax)
+    checked = 0
+    for i in range(1, 200):
+        for j in range(1, 60):
+            p = (i * 0.5013, j * 0.3497)  # 避开整数格线，减少正好落在边界上的点
+            if p[1] >= XC.air_o2 * (1 - p[0] / 100) - 1e-6:
+                continue
+            assert chart.drawn_zone(p, polys) == explosion.classify(p, tri, XC.air_o2)["zone"], p
+            checked += 1
+    assert checked > 5000
+
+
+def test_chart_saved_and_downloadable(tmp_path, monkeypatch):
+    from xml.etree import ElementTree
+
+    from rescue_contract.serving import build_app
+    from rescue_fire_model.server import build_server
+    from starlette.testclient import TestClient
+
+    monkeypatch.setenv("RESCUE_CHART_DIR", str(tmp_path))
+    monkeypatch.setenv("RESCUE_MCP_TOKEN", "secret")
+    holder, _ = sim("s4-escalation", 80)
+    d = _call_fire(holder, "assess_explosion_risk", {"sensor_id": "BT-1201-G1"}).structured_content
+    c = d["chart"]
+    svg = tmp_path / c["svg_path"].rsplit("/", 1)[1]
+    ElementTree.fromstring(svg.read_text(encoding="utf-8"))  # 合法 XML
+    assert f"{d['zone']} 区" in svg.read_text(encoding="utf-8")
+    assert c["markdown"].startswith(f"![火区混合气体爆炸三角形]({c['svg_path']})")
+
+    app = build_app(build_server(build_mine(holder)), public_prefixes=("/charts/",))
+    with TestClient(app) as http:
+        path = "/charts/" + svg.name
+        r = http.get(path)  # 不带令牌也能下载
+        assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml")
+        assert "attachment" in r.headers["content-disposition"]
+        assert http.get("/charts/explosion-triangle-x-" + "0" * 32 + ".svg").status_code == 404
+        assert http.get("/charts/..%2Fsecret.svg").status_code == 404  # 文件名不合规即拒绝
+        assert http.post("/mcp", json={}).status_code == 401  # 其他路径仍要令牌

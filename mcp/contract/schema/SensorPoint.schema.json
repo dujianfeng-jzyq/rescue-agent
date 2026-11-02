@@ -10,6 +10,7 @@
         "C2H4",
         "C2H2",
         "C2H6",
+        "H2",
         "TEMP",
         "WIND"
       ],
@@ -84,5 +85,5 @@
   ],
   "title": "SensorPoint",
   "type": "object",
-  "$comment": "rescue-contract 0.3.0"
+  "$comment": "rescue-contract 0.4.0"
 }

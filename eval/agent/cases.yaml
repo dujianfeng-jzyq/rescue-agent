@@ -43,6 +43,19 @@
     stage_reported: true
     kb_cited: true
 
+- id: s4-explosion-risk
+  description: 恶化为火灾后询问采空区爆炸危险性（多组分爆炸三角形；检验分区照抄、风险图在对话中显示并可下载）
+  scenario: s4-escalation
+  at_h: 60
+  prompt: 1201 采空区现在有没有爆炸危险？请用束管监测数据判定，并给出爆炸三角形图。先不要提交任何指令。
+  checks:
+    no_actions: true
+    tools_called: [assess_explosion_risk]
+    explosion_reported: true
+    chart_shown: true
+    numbers_grounded: true
+    cited_tools_called: true
+
 - id: s4-sealing-plan
   description: 恶化为火灾后指挥部决定封闭，组织编制封闭方案、合规审核后提交人工确认并放行（检验第 4 阶段与红线预检）
   scenario: s4-escalation

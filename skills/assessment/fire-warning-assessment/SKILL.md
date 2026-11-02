@@ -14,7 +14,7 @@ whenToUse: 需要判断工作面采空区是否有自燃征兆、给出或复核
 2. `fire_model.check_realtime_alarms`：有实时红线报警（甲烷超限、复燃征兆）时，结论第一句就写报警，不等后续研判。
 3. `fire_model.assess_warning_level`：得到等级、触发条件、指标、数据质量说明和自燃发展阶段（`stage_name`、`stage_basis`）。**等级和阶段都照抄，不要自己升降级，也不要根据标志气体自行推断阶段或煤温。**
 4. 对触发条件涉及的测点，用 `fire_model.gas_trend` 看 24 小时趋势（上升速率）。报告窗口内升高或下降了多少时照抄它的 `change`，不要自己用两个读数相减。
-5. 需要判断能否进入或封闭时，用该位置的 CH₄、O₂ 调 `fire_model.assess_explosion_risk`。
+5. 需要判断能否进入或封闭时，用该处束管测点调 `fire_model.assess_explosion_risk`（多组分爆炸三角形，计入 CH₄、CO、乙烯等）。分区（`zone_name`）、含义（`meaning`）和 `warnings` 照抄，不要根据读数自己判断分区；II 区、III 区不是“安全”，要照实说明哪种变化（减风积聚或混入空气）会进入爆炸范围。工具报错说测温点配不上时，从它列出的候选里选同一位置的测温点再调用；人员给出化验单时用 `assess_explosion_risk_sample`。工具返回的 `chart.markdown`（风险图和 SVG、JSON 下载链接）原样单独成段放进报告。
 6. 预警等级达到橙色及以上，或用户要求时，调 `ventnet.threatened_personnel` 列出受威胁人员。各组人数、受威胁合计、井下合计照抄它的 `count`、`total_threatened`、`total_underground`，不要自己数人员名单。
 
 ## 解读要点

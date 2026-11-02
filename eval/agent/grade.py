@@ -17,6 +17,9 @@
 - tools_called: [<工具>]     这些工具（不带 mcp__ 前缀的短名）在整次运行中至少调用过一次
 - effect_reported: true     总指挥协调的最后回复里写了效果评估工具给出的结论（evaluate_effect_panel 的 overall_name；
                             没调总体评估时取 evaluate_effect 的 effect_name）
+- explosion_reported: true  总指挥协调的最后回复里写了 assess_explosion_risk（或 _sample）最近一次给出的分区名 zone_name
+- chart_shown: true         总指挥协调的最后回复里原样放了某次爆炸三角形结果的 chart.markdown 里的图片（![..](svg_path)）
+                            和 SVG 下载链接（网页端据此显示图片、提供下载）
 - kb_cited: true            调用过 kb，且总指挥协调的最后回复里出现 kb 返回过的某个条号（如 第73条；忽略空格）
 - approval_asked: [<工具>]   这些 actions 工具都弹出过人工确认（红线预检已通过）
 - actions_issued: [<工具>]   这些 actions 工具都发布成功（确认放行后返回 status=issued 的回执）
@@ -393,6 +396,22 @@ def grade(root: Session, checks: dict) -> dict:
         effects = names("mcp__fire_model__evaluate_effect_panel", "overall_name") or names("mcp__fire_model__evaluate_effect", "effect_name")
         final = root.final_text()
         results["effect_reported"] = {"ok": any(e in final for e in effects), "detail": {"tool": effects}}
+
+    explosion = [
+        json.loads(text)
+        for s in sessions
+        for name, text in s.tool_results()
+        if name in ("mcp__fire_model__assess_explosion_risk", "mcp__fire_model__assess_explosion_risk_sample") and text.lstrip().startswith("{")
+    ]
+    if checks.get("explosion_reported"):
+        want = explosion[-1].get("zone_name") if explosion else None
+        results["explosion_reported"] = {"ok": want is not None and want in root.final_text(), "detail": {"tool": want}}
+
+    if checks.get("chart_shown"):
+        final = root.final_text()
+        charts = [r["chart"] for r in explosion if isinstance(r.get("chart"), dict) and "svg_path" in r["chart"]]
+        shown = [c["svg_path"] for c in charts if f"]({c['svg_path']})" in final and c["download_svg"] in final]
+        results["chart_shown"] = {"ok": bool(shown), "detail": {"charts": len(charts), "shown": shown}}
 
     if checks.get("kb_cited"):
         articles: set[str] = set()

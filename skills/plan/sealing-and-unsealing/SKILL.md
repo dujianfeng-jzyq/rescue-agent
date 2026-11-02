@@ -13,7 +13,7 @@ whenToUse: 需要编写封闭火区方案（第 4 阶段）或启封方案（第
 必备顺序（红线规则会逐项检查）：
 
 1. `evacuate`：撤出受影响区域人员（写明巷道）。
-2. `inert_injection`：**封闭有爆炸危险或爆炸危险不明的火区，先注惰抑爆**（第85条）。爆炸危险性用 `fire_model.assess_explosion_risk` 判定，结果填入 `context.explosion_risk`。
+2. `inert_injection`：**封闭有爆炸危险或爆炸危险不明的火区，先注惰抑爆**（第85条）。爆炸危险性用 `fire_model.assess_explosion_risk`（按束管测点）判定，把它返回的 `explosion_risk` 原样填入 `context.explosion_risk`；II 区、III 区对应 `may_become_explosive`，同样要先注惰。
 3. `temporary_seal`：先建临时密闭（第84条）。
 4. `monitor`：观测风向、风量、烟雾和气体，确认无爆炸危险。
 5. `permanent_seal`：再建永久或防爆密闭（第84条）。

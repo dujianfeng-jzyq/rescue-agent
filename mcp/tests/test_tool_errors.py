@@ -27,13 +27,17 @@ CASES = [
     (lambda: dispatch(_mine()), "draft_dispatch_order", {"items": [{"item_type": "grout_material_t", "quantity": 1}], "destination_node": "NO-SUCH", "purpose": "测试"}, "目的地节点"),
     (lambda: ventnet(_mine()), "downstream_roadways", {"source_roadway_id": "NO-SUCH"}, "未知巷道"),
     (lambda: ventnet(_mine()), "threatened_personnel", {"source_roadway_id": "NO-SUCH"}, "未知巷道"),
-    (lambda: fire_model(_mine()), "assess_explosion_risk", {"ch4_pct": 80, "o2_pct": 30}, "物理范围"),
+    (lambda: fire_model(_mine()), "assess_explosion_risk", {"sensor_id": "NO-SUCH"}, "未知测点"),
+    (lambda: fire_model(_mine()), "assess_explosion_risk", {"sensor_id": "SM-1201-UC"}, "不测 CO2"),
+    (lambda: fire_model(_mine()), "assess_explosion_risk_sample", {"ch4_pct": 80, "o2_pct": 30, "co2_pct": 1, "temperature_c": 25}, "超过 100%"),
+    (lambda: fire_model(_mine()), "assess_explosion_risk_sample", {"ch4_pct": 3, "o2_pct": 10, "co2_pct": 1, "temperature_c": 300}, "适用范围"),
     (lambda: fire_model(_mine()), "evaluate_effect", {"sensor_id": "BT-1201-G1", "since": "2026-11-04T08:00:00", "measurand": "CH4"}, "不是发火指标"),
 ]
 
 
 @pytest.mark.parametrize(("build", "tool", "args", "expect"), CASES, ids=[f"{c[1]}-{c[3]}" for c in CASES])
-def test_input_errors_reach_the_agent(build, tool, args, expect):
+def test_input_errors_reach_the_agent(build, tool, args, expect, tmp_path, monkeypatch):
+    monkeypatch.setenv("RESCUE_CHART_DIR", str(tmp_path))  # 爆炸三角形工具成功时会存图
     async def go():
         async with Client(build()) as c:
             return await c.call_tool(tool, args)

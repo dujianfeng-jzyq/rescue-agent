@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from datetime import timedelta
 from typing import Any
@@ -9,9 +10,11 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from rescue_contract.client import MineData
-from rescue_contract.models import AirwayKind, Measurand, MineTime, SensorSource
+from rescue_contract.models import UNITS, AirwayKind, Measurand, MineTime, SensorPoint, SensorSource
+from rescue_contract.serving import DEFAULT_PORTS
+from starlette.responses import FileResponse, PlainTextResponse
 
-from . import alarms, explosion, stage, warning
+from . import alarms, chart, explosion, stage, warning
 from .quality import check_series
 
 INSTRUCTIONS = (
@@ -20,8 +23,39 @@ INSTRUCTIONS = (
 )
 
 
+# 数据契约里的可燃气体参数 → explosion.yaml 的气体标识
+COMBUSTIBLE = {Measurand.CH4: "CH4", Measurand.CO: "CO", Measurand.C2H4: "C2H4", Measurand.C2H2: "C2H2", Measurand.C2H6: "C2H6", Measurand.H2: "H2"}
+MARKERS = (Measurand.C2H4, Measurand.C2H2, Measurand.C2H6, Measurand.H2)  # 未出现前读数就是 0
+
+
+def _to_pct(m: Measurand, value: float) -> float:
+    return value / 10_000 if UNITS[m] == "ppm" else value
+
+
+def _pair_temperature(sen: SensorPoint, sensors: dict[str, SensorPoint], chosen: str | None) -> str:
+    """找与气体测点同一位置的测温点：同一巷道，且采空区深度或巷道位置相同。找不到唯一的就报错并列出候选。"""
+    candidates = [s for s in sensors.values() if Measurand.TEMPERATURE in s.measurands and s.roadway_id == sen.roadway_id]
+    if chosen is not None:
+        t = sensors.get(chosen)
+        if t is None or Measurand.TEMPERATURE not in t.measurands:
+            raise ToolError(f"{chosen} 不是测温点")
+        return chosen
+    same = [
+        s for s in candidates
+        if (sen.goaf_depth_m is not None and s.goaf_depth_m == sen.goaf_depth_m)
+        or (sen.position_m is not None and s.position_m == sen.position_m)
+    ]  # fmt: skip
+    if len(same) == 1:
+        return same[0].id
+    listed = "、".join(f"{s.id}（{s.name}）" for s in candidates) or "无"
+    raise ToolError(f"找不到与 {sen.id} 同一位置的唯一测温点，请用 temperature_sensor_id 指定。同一巷道的测温点：{listed}")
+
+
 def build_server(mine_data_target: Any | None = None) -> MCPServer:
     md = MineData(mine_data_target) if mine_data_target is not None else MineData.from_env()
+    xc = explosion.load_constants()
+    # 下载链接的地址：浏览器能访问到的 fire_model 地址（远程访问网页端时要设成对外地址）
+    public_url = os.environ.get("RESCUE_FIRE_MODEL_PUBLIC_URL") or f"http://127.0.0.1:{os.environ.get('RESCUE_FIRE_MODEL_PORT', DEFAULT_PORTS['fire_model'])}"
     server = MCPServer("fire_model", instructions=INSTRUCTIONS)
 
     async def realtime_alarms(panel: str) -> list[dict[str, Any]]:
@@ -124,22 +158,129 @@ def build_server(mine_data_target: Any | None = None) -> MCPServer:
         out = stage.evaluate(since, now, before, after, markers, scfg, ecfg, flat[measurand.value])
         return {"sensor_id": sensor_id, "measurand": measurand.value, **out}
 
-    @server.tool()
-    async def assess_explosion_risk(ch4_pct: float, o2_pct: float) -> dict[str, Any]:
-        """用爆炸三角形判定甲烷—空气混合气体的爆炸危险性：
-        explosive（处于爆炸范围）、may_become_explosive（混入空气后可能爆炸）、not_explosive。
-        只考虑甲烷，火区存在其他可燃气体时结论偏乐观，需人工复核。"""
+    def run_triangle(sample: explosion.Sample) -> dict[str, Any]:
         try:
-            risk = explosion.classify(ch4_pct, o2_pct)
+            return explosion.analyze(sample, xc)
         except ValueError as exc:  # 只有 ToolError 的说明能传给 Agent
             raise ToolError(str(exc)) from exc
-        return {
-            "ch4_pct": ch4_pct,
-            "o2_pct": o2_pct,
-            "explosion_risk": risk.value,
-            "method": "爆炸三角形（仅甲烷），顶点取文献常用值",
-            "caveat": "未计入 CO、H₂、乙烯等其他可燃组分",
+
+    def attach_chart(out: dict[str, Any], label: str, subtitle: str) -> dict[str, Any]:
+        """生成风险图和 JSON；存盘失败不影响判定结果本身。"""
+        try:
+            out["chart"] = chart.save(out, xc.air_o2, label, subtitle, public_url)
+        except OSError as exc:
+            out["chart"] = {"error": f"风险图未能生成：{exc}"}
+        return out
+
+    @server.custom_route("/charts/{name}", methods=["GET"])
+    async def download_chart(request):
+        name = request.path_params["name"]
+        path = chart.chart_dir() / name
+        if not chart.CHART_NAME.match(name) or not path.is_file():
+            return PlainTextResponse("not found", status_code=404)
+        media = "image/svg+xml" if name.endswith(".svg") else "application/json"
+        return FileResponse(path, media_type=media, filename=chart.download_name(name), headers={"Cache-Control": "no-store"})
+
+    @server.tool()
+    async def assess_explosion_risk(sensor_id: str, temperature_sensor_id: str | None = None) -> dict[str, Any]:
+        """用测点（束管）最近一次完整的气体分析判定火区混合气体的爆炸危险性（多组分爆炸三角形，含 CO、乙烯等）。
+        温度取同一位置的测温点（自动配对）；配不上时会列出候选，用 temperature_sensor_id 指定。
+        返回分区 zone（I 爆炸危险区 / II 减风危险区 / III 增风危险区 / IV 相对安全区）、
+        explosion_risk（explosive / may_become_explosive / not_explosive，方案 context.explosion_risk 照抄此值）、
+        三角形顶点和状态点、所用读数及时刻。报告时照抄 zone_name、meaning 和 warnings，不要自己判断分区。
+        chart.markdown 是风险图和下载链接：把它原样单独成段放进最终回答（网页端会显示图片），不要改写路径或链接。"""
+        now = await md.now()
+        sensors = {s.id: s for s in await md.sensors()}
+        sen = sensors.get(sensor_id)
+        if sen is None:
+            raise ToolError(f"未知测点：{sensor_id}")
+        fuels = [m for m in sen.measurands if m in COMBUSTIBLE]
+        lacking = [m.value for m in (Measurand.O2, Measurand.CO2) if m not in sen.measurands]
+        if lacking or not fuels:
+            raise ToolError(
+                f"测点 {sensor_id} 不测 {'、'.join(lacking) or '可燃气体'}，不能做爆炸三角形；请用测 O2、CO2 和可燃气体的束管测点"
+            )
+        temp_id = sensor_id if Measurand.TEMPERATURE in sen.measurands else _pair_temperature(sen, sensors, temperature_sensor_id)
+
+        start = now - timedelta(hours=xc.sample_window_h)
+        gas_ms = [*fuels, Measurand.O2, Measurand.CO2, *([Measurand.N2] if Measurand.N2 in sen.measurands else [])]
+        rs = await md.readings([sensor_id], start=start, end=now, measurands=[m.value for m in gas_ms])
+        series = {m: sorted((r for r in rs if r.measurand == m), key=lambda r: r.ts) for m in gas_ms}
+        flags: list[str] = []
+        usable: dict[Measurand, dict[Any, float]] = {}
+        for m in gas_ms:
+            sibling = series.get(Measurand.CO) if m in MARKERS else None  # 与预警判定一致：标志气体恒 0 而 CO 在变按未检出
+            rep = check_series(f"{sensor_id}/{m.value}", series[m], sibling)
+            flags += rep.flags
+            usable[m] = {r.ts: r.value for r in rep.usable}
+        required = [m for m in gas_ms if m != Measurand.N2]
+        common = set.intersection(*(set(usable[m]) for m in required))
+        if not common:
+            raise ToolError(
+                f"测点 {sensor_id} 最近 {xc.sample_window_h} 小时没有同一时刻完整可用的一组读数（需 {'、'.join(m.value for m in required)}），"
+                f"不能计算。数据质量：{'；'.join(flags) or '无可用读数'}"
+            )
+        ts = max(common)
+        n2 = usable[Measurand.N2].get(ts) if Measurand.N2 in usable else None
+
+        trs = await md.readings([temp_id], start=start, end=now, measurands=[Measurand.TEMPERATURE.value])
+        trep = check_series(f"{temp_id}/TEMP", sorted(trs, key=lambda r: r.ts))
+        flags += trep.flags
+        temps = [r for r in trep.usable if r.ts <= ts] or trep.usable
+        if not temps:
+            raise ToolError(f"测温点 {temp_id} 最近 {xc.sample_window_h} 小时没有可用温度读数，不能计算（不按假定温度代替）")
+        temp = min(temps, key=lambda r: abs((r.ts - ts).total_seconds()))
+
+        out = run_triangle(
+            explosion.Sample(
+                combustibles={COMBUSTIBLE[m]: _to_pct(m, usable[m][ts]) for m in fuels},
+                o2=usable[Measurand.O2][ts],
+                co2=usable[Measurand.CO2][ts],
+                temperature_c=temp.value,
+                n2=n2,
+            )
+        )
+        out["sample"] = {
+            "sensor_id": sensor_id,
+            "sensor_name": sen.name,
+            "ts": ts.isoformat(),
+            "readings": {m.value: usable[m][ts] for m in required} | ({"N2": n2} if n2 is not None else {}),
+            "units": {m.value: UNITS[m] for m in required},
+            "temperature_sensor_id": temp_id,
+            "temperature_ts": temp.ts.isoformat(),
         }
+        out["data_quality"] = flags
+        return attach_chart(out, f"{sensor_id}-{ts:%Y%m%dT%H%M}", f"{sen.name}（{sensor_id}）· 取样时刻 {ts:%Y-%m-%d %H:%M} · 温度取自 {temp_id}")
+
+    @server.tool()
+    async def assess_explosion_risk_sample(
+        o2_pct: float,
+        co2_pct: float,
+        temperature_c: float,
+        ch4_pct: float | None = None,
+        co_ppm: float | None = None,
+        c2h4_ppm: float | None = None,
+        c2h2_ppm: float | None = None,
+        c2h6_ppm: float | None = None,
+        h2_ppm: float | None = None,
+        n2_pct: float | None = None,
+    ) -> dict[str, Any]:
+        """用人工取样化验单判定爆炸危险性（没有束管测点或需要复核时用）。数值照化验单填写，注意单位：
+        CH4、O2、CO2、N2 为 %，CO、C2H4、C2H2、C2H6、H2 为 ppm；化验单没有的组分不填，不要填估计值。
+        O2、CO2 和温度必须是实测值，缺少时不要调用，先向人员索取。返回内容同 assess_explosion_risk。"""
+        inputs = {
+            "o2_pct": o2_pct, "co2_pct": co2_pct, "temperature_c": temperature_c, "n2_pct": n2_pct,
+            "ch4_pct": ch4_pct, "h2_ppm": h2_ppm, "co_ppm": co_ppm, "c2h4_ppm": c2h4_ppm, "c2h2_ppm": c2h2_ppm, "c2h6_ppm": c2h6_ppm,
+        }  # fmt: skip
+        given = {"CH4": ch4_pct, "H2": h2_ppm, "CO": co_ppm, "C2H4": c2h4_ppm, "C2H2": c2h2_ppm, "C2H6": c2h6_ppm}
+        ppm = {"CO", "C2H4", "C2H2", "C2H6", "H2"}
+        combustibles = {g: (v / 10_000 if g in ppm else v) for g, v in given.items() if v is not None}
+        out = run_triangle(explosion.Sample(combustibles=combustibles, o2=o2_pct, co2=co2_pct, temperature_c=temperature_c, n2=n2_pct))
+        missing = [g for g, v in given.items() if v is None]
+        if missing:
+            out["warnings"].append(f"化验单未提供 {'、'.join(missing)}，未计入；这些组分实际存在时结论偏乐观")
+        out["sample"] = {"source": "人工取样化验单", "inputs": {k: v for k, v in inputs.items() if v is not None}}
+        return attach_chart(out, "manual-sample", "人工取样化验单")
 
     @server.tool()
     async def check_realtime_alarms(panel: str = "1201") -> list[dict[str, Any]]:
