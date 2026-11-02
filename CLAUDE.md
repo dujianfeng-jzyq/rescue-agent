@@ -5,7 +5,7 @@
 - 方案（为什么这样做）：`docs/implementation-plan.md`（主版本，带图快照见同名 PDF）
 - 架构（怎么连起来）：`docs/architecture.md`；设计决策：`docs/decisions/`
 - 真实 DSH 上的验证记录（含已知问题）：`docs/validation-checklist.md`
-- 工作流与智能体分工（正在按此实施）：`docs/workflow-design.md`，决策见 `docs/decisions/0006-workflow-vs-agent.md`
+- 工作流与智能体分工（P1–P5 已实施）：`docs/workflow-design.md`，决策见 `docs/decisions/0006-workflow-vs-agent.md`
 
 用中文写文档、注释、提交说明和面向用户的文字；标识符用英文。
 
@@ -61,5 +61,7 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
   `dispatch` 的缺口（check_supply、estimate_inert_gas 的 supply）、路程（route）、密闭材料（estimate_seal_materials）、注浆量（estimate_grout）由代码计算，参数在 `dispatch/.../params.yaml`，均为占位值。
   `assess_explosion_risk` 按束管测点做多组分（含 H2，契约 0.4.0 新增）、温度补偿的爆炸三角形（来自 explosion-triangle-synthesis 技能，分区判据已重新设计），`assess_explosion_risk_sample` 用于人工化验单；参数在 `fire-model/.../explosion.yaml`，为占位值。每次计算生成风险图（SVG）和 JSON（`var/charts/`），结果里的 `chart.markdown` 放进回答后网页端显示图片（经 DSH 的 /api/file），下载走 fire_model 的 `/charts/`（凭随机文件名，不校验令牌）。评测用例 `s4-explosion-risk`。本地 qwen35-122b-a10b 不适合担任救援 Agent（不委派、编造阈值），不再纳入评测。
 - kb 已接入 RAGFlow，用演示专用的三个 dataset（应急救援-法规/预案/案例-演示，laws 切法，迁移方案见 `docs/kb-migration.md`，id 见 `.env`）；RAGFlow 不可用或断开时重试，仍失败则降级到本地红线条文。`get_article` 按条号数值在文档切片里直接查找，RAGFlow 频繁断开连接（疑似网关约 5 秒超时），单次查条 15–65 秒。`s4-escalate-1201`（2026-11-02 演示库，总指挥“每次回答自成完整结论”之后，3 次）：stage_reported、kb_cited 均 3/3；结束的 2 次中全部通过 1/2，另 1 次各项都通过但超过 900 秒（RAGFlow 查条慢，正常结束的也要 217–893 秒）；剩余为 Agent 自己数条数（“1–12 项”）、点名未调用的 evaluate_effect_panel。
-- 进行中：按 `docs/workflow-design.md` 把研判、效果评估、升级建议、方案现场条件改为代码工作流（新服务 `mcp/workflow`，端口 8107），从 P1 开始。
-- 待办：专家审定阈值（含阶段、效果判据）/场景/技能；专家审定 dispatch 用量参数；专家审定爆炸三角形参数和分区判据；评测运行器按用例预设回答 Agent 的提问；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；排查 RAGFlow 断开连接（网关超时）。
+- 工作流改造 P1–P5 已完成（2026-11-02，分支 workflow，`docs/workflow-design.md`）：workflow 服务 7 个工具（assess_panel、review_effect、recommend_escalation、draft_plan、draft_dispatch_for_plan、get_monitor_events、review_timeline）+ 值守进程；契约 0.6.0（研判快照、`snapshot_id`、`HumanInput`），方案现场条件、预警等级、升级、调度单在 actions/预检/kb 自查三处按快照核对；预设减为 3 个（移除 rescue-assessment、rescue-dispatch）。
+  智能体评测（deepseek-flash，各 3 次，按当前判定规则）：`s2-assess-1201`、`s2-effect-after-inerting`、`s4-escalate-1201`、`s4-explosion-risk`、`s4-warning-rejected`、`s4-plan-context-tamper` 均 3/3；研判类每次约 5–7 万 token、40–100 秒（改造前约 80 万 token、`s4-escalate` 217–893 秒）。
+  `s4-sealing-plan`：快照引用、人工确认、发布在走通的运行里都成立，但全部通过不稳定（最新 0/2 + 1 次接口错误）：合规 Agent 凭记忆引用未检索的条文（“细则97(三)”）、合规判“不通过”后总指挥向人请示而评测运行器不会代答；单次 170–340 万 token，偏高。
+- 待办：封闭方案流程的 token 消耗（总指挥上下文里反复携带完整方案 JSON）；合规 Agent 只引用检索到的条文；专家审定 workflow 的占位判据（升级、甲烷上升、爆炸危险性汇总、必备步骤、值守周期）；专家审定阈值（含阶段、效果判据）/场景/技能；专家审定 dispatch 用量参数；专家审定爆炸三角形参数和分区判据；评测运行器按用例预设回答 Agent 的提问；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；排查 RAGFlow 断开连接（网关超时）。
