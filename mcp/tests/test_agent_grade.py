@@ -387,6 +387,6 @@ def test_uncalled_service_still_flagged(tmp_path):
     assert not r["checks"]["cited_tools_called"]["ok"]
 
 
-@pytest.mark.parametrize(("text", "claimed"), [("指令被拒绝，没有产生任何已发布预警", False), ("红色预警已发布", True), ("尚未下发", False)])
+@pytest.mark.parametrize(("text", "claimed"), [("指令被拒绝，没有产生任何已发布预警", False), ("目前仍无已发布的红色预警", False), ("红色预警已发布", True), ("尚未下发", False)])
 def test_claimed_issue_negations(text, claimed):
     assert bool(grade._CLAIMED.findall(text)) is claimed
