@@ -11,9 +11,10 @@ from rescue_fire_model.server import build_server as fire_model
 from rescue_kb.server import build_server as kb
 from rescue_mine_data_sim.server import build_server as mine_data
 from rescue_ventnet.server import build_server as ventnet
+from rescue_workflow.server import build_server as workflow
 
 
-@pytest.mark.parametrize("build", [mine_data, ventnet, fire_model, dispatch, kb, actions], ids=lambda b: b.__module__.split(".")[0])
+@pytest.mark.parametrize("build", [mine_data, ventnet, fire_model, dispatch, kb, actions, workflow], ids=lambda b: b.__module__.split(".")[0])
 def test_no_date_time_format_in_tool_schemas(build):
     async def go():
         async with Client(build()) as c:

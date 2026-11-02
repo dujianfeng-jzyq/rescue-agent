@@ -53,6 +53,19 @@ def _cn_to_int(s: str) -> int | None:
     return total + (cur or 0)
 
 
+def rule_articles() -> list[dict[str, str]]:
+    """红线规则所依据条款的本地留存原文（按条号排序）。规则条号形如“第57、53条”时拆开。"""
+    wanted: set[int] = set()
+    for r in RULES:
+        wanted.update(int(n) for n in re.findall(r"\d+", r.article))
+    out = [
+        {"document": a["document"], "article": a["article"], "content": a["text"], "source": "local-fallback"}
+        for a in LOCAL_ARTICLES
+        if a["document"] == "矿山救援规程" and article_number(a["article"]) in wanted
+    ]
+    return sorted(out, key=lambda a: article_number(a["article"]) or 0)
+
+
 def article_number(article: str | None) -> int | None:
     """条号转成整数：“第85条”“第 85 条”“第八十五条”“85”都得 85；认不出返回 None。"""
     if not article:
@@ -260,8 +273,14 @@ def build_server(kb: KnowledgeBase | None = None) -> MCPServer:
     def check_plan_redlines(tool: str, plan: Plan) -> dict[str, Any]:
         """对结构化方案做红线自查（只读，不发布）。tool 取 issue_firefighting_plan / issue_sealing_plan / approve_unsealing。
         返回 ok 和问题清单（含条号）；检查了几条规则照抄 rules_checked_count，不要自己数。
+        articles 是各规则所依据条款的本地留存原文：引用这些条款时直接照抄，不必再逐条调用 get_article。
         注意：自查不检查数据时效，发布时 actions 服务还会检查。"""
         result = precheck(tool, {"plan": plan.model_dump(mode="json")}, None)
-        return {**result, "rules_checked": [f"{r.rule_id} {r.article} {r.summary}" for r in RULES], "rules_checked_count": len(RULES)}
+        return {
+            **result,
+            "rules_checked": [f"{r.rule_id} {r.article} {r.summary}" for r in RULES],
+            "rules_checked_count": len(RULES),
+            "articles": rule_articles(),
+        }
 
     return server

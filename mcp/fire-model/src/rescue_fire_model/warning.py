@@ -64,6 +64,8 @@ class Assessment:
     notes: list[str] = field(default_factory=list)
     stage: str = "unknown"
     stage_basis: list[str] = field(default_factory=list)
+    # 指标键（uc_co_ppm 等）→ {"sensor_id", "measurand"}：每个指标取自哪个测点，供研判快照选趋势测点
+    indicator_sources: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         from .stage import stage_dict
@@ -77,6 +79,7 @@ class Assessment:
             "data_quality": self.data_quality,
             "notes": self.notes,
             **stage_dict(self.stage, self.stage_basis),
+            "indicator_sources": {LABELS.get(k, k): v for k, v in self.indicator_sources.items()},
             "method": "阈值分级（thresholds.yaml）。阈值为演示占位值，需按本矿自然发火预测预报制度设定；自燃发展阶段与等级独立判定",
         }
 
@@ -113,9 +116,13 @@ async def assess(md: MineData, panel: str = "1201", thresholds: dict | None = No
     uc = usable(f"SM-{panel}-UC", Measurand.CO)
     ret = usable(f"SM-{panel}-RET", Measurand.CO)
     uc_co = uc[-1].value if uc else None
+    src: dict[str, dict[str, str]] = {}
+    if uc_co is not None:
+        src["uc_co_ppm"] = {"sensor_id": f"SM-{panel}-UC", "measurand": Measurand.CO.value}
     if uc and ret and not cross_check(uc, ret, ratio=0.85):
         dq.append(f"SM-{panel}-UC/CO：与回风巷 CO 不匹配（{uc[-1].value:.1f} vs {ret[-1].value:.1f}），疑似漂移，已排除")
         uc_co = None
+        src.pop("uc_co_ppm", None)
 
     tube_co = tube_rate = c2h4 = c2h2 = graham = None
     tubes = [s for s in sensors if s.source == SensorSource.BUNDLE_TUBE]
@@ -126,17 +133,28 @@ async def assess(md: MineData, panel: str = "1201", thresholds: dict | None = No
         last = co[-1].value
         if tube_co is None or last > tube_co:
             tube_co = last
+            src["tube_co_ppm"] = {"sensor_id": t.id, "measurand": Measurand.CO.value}
             recent = [r for r in co if r.ts >= now - timedelta(hours=12)]
             tube_rate = slope_per_hour(recent)
+            if tube_rate is not None:
+                src["tube_co_rate_ppm_h"] = {"sensor_id": t.id, "measurand": Measurand.CO.value}
+            else:
+                src.pop("tube_co_rate_ppm_h", None)
             o2, n2 = usable(t.id, Measurand.O2), usable(t.id, Measurand.N2)
             if o2 and n2:
                 graham = graham_ratio(last, o2[-1].value, n2[-1].value)
+                src.pop("graham_ratio", None)  # 与原逻辑一致：新的最大值测点算得出系数才替换
+                if graham is not None:
+                    src["graham_ratio"] = {"sensor_id": t.id, "measurand": Measurand.CO.value}
                 if n2[-1].value > 85:
                     notes.append(f"{t.id} 氮气浓度 {n2[-1].value:.1f}%，可能处于注氮影响范围，格雷哈姆系数偏低失真")
         for m, cur in ((Measurand.C2H4, "c2h4"), (Measurand.C2H2, "c2h2")):
             s = usable(t.id, m, sibling=Measurand.CO)  # 未出现时恒为 0，用同测点 CO 判断测点是否在工作
             if s:
                 v = s[-1].value
+                prev = c2h4 if cur == "c2h4" else c2h2
+                if prev is None or v > prev:
+                    src[f"{cur}_ppm"] = {"sensor_id": t.id, "measurand": m.value}
                 if cur == "c2h4":
                     c2h4 = v if c2h4 is None else max(c2h4, v)
                 else:
@@ -156,7 +174,11 @@ async def assess(md: MineData, panel: str = "1201", thresholds: dict | None = No
     from .stage import classify_stage
 
     stage, stage_basis = classify_stage(ind, thresholds.get("stage", {}))
-    return Assessment(as_of=now, level=level, indicators=ind, triggered=triggered, data_quality=dq, notes=notes, stage=stage, stage_basis=stage_basis)
+    src = {k: v for k, v in src.items() if ind.get(k) is not None}
+    return Assessment(
+        as_of=now, level=level, indicators=ind, triggered=triggered, data_quality=dq, notes=notes,
+        stage=stage, stage_basis=stage_basis, indicator_sources=src,
+    )  # fmt: skip
 
 
 def level_index(level: WarningLevel) -> int:

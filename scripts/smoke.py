@@ -24,6 +24,7 @@ SERVERS = {
     "dispatch": os.environ.get("RESCUE_MCP_DISPATCH_URL", "http://127.0.0.1:8104/mcp"),
     "kb": os.environ.get("RESCUE_MCP_KB_URL", "http://127.0.0.1:8105/mcp"),
     "actions": os.environ.get("RESCUE_MCP_ACTIONS_URL", "http://127.0.0.1:8106/mcp"),
+    "workflow": os.environ.get("RESCUE_MCP_WORKFLOW_URL", "http://127.0.0.1:8107/mcp"),
 }
 REDLINE_URL = os.environ.get("RESCUE_REDLINE_CHECK_URL", "http://127.0.0.1:8106/redlines/check")
 
@@ -34,6 +35,7 @@ CALLS = {
     "dispatch": [("estimate_inert_gas", {"leak_m3_min": 40, "current_o2_pct": 9, "target_o2_pct": 6})],
     "kb": [("search_regulations", {"query": "封闭火区 惰性气体"})],
     "actions": [],  # 指令类工具不在冒烟测试里调用
+    "workflow": [("assess_panel", {})],
 }
 
 failed = 0

@@ -28,6 +28,7 @@ EXPORTED = [
     "DispatchOrder",
     "EvacuationNotice",
     "Escalation",
+    "Snapshot",
 ]
 
 

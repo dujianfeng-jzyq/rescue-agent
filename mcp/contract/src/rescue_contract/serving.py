@@ -29,6 +29,7 @@ DEFAULT_PORTS = {
     "dispatch": 8104,
     "kb": 8105,
     "actions": 8106,
+    "workflow": 8107,
 }
 
 

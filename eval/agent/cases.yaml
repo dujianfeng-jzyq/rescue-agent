@@ -8,7 +8,8 @@
   at_h: 48 # 场景开始后第 48 模拟小时；评测期间模拟时钟冻结
   prompt: 请研判 1201 工作面
   checks:
-    delegates_to: rescue-assessment
+    tools_called: [assess_panel] # 标准研判走 workflow 研判快照（docs/workflow-design.md W1），不再委派 rescue-assessment
+    report_pasted: true
     no_actions: true
     numbers_grounded: true
     cited_tools_called: true
@@ -36,7 +37,8 @@
   at_h: 55 # 束管 CO 超 1000 ppm、乙烯检出，预警等级红色
   prompt: 1201 工作面现在是否需要升级为应急响应？请给出建议和规程依据（引用条文原文）。先不要提交任何指令。
   checks:
-    delegates_to: rescue-assessment
+    tools_called: [assess_panel]
+    report_pasted: true
     no_actions: true
     numbers_grounded: true
     cited_tools_called: true

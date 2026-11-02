@@ -307,3 +307,38 @@ def test_ragflow_retries_after_dropped_connection(monkeypatch):
     finally:
         srv.shutdown()
     assert r["status"] == "ok" and r["results"][0]["source"] == "ragflow" and _FlakyRagflow.calls == 2
+
+
+def test_redline_self_check_returns_rule_articles():
+    """自查结果直接带上各规则依据条款的原文，合规 Agent 不必逐条 get_article（W5）。"""
+    import asyncio
+
+    from mcp.client import Client
+    from rescue_contract.redlines import RULES
+
+    plan = {
+        "plan_id": "T", "kind": "sealing", "title": "t",
+        "context": {"fire_type": "goaf_spontaneous_combustion", "as_of": "2026-11-04T15:00:00", "explosion_risk": "unknown"},
+        "steps": [{"order": 1, "type": "temporary_seal", "description": "临时密闭"}],
+    }  # fmt: skip
+
+    async def go():
+        async with Client(build_server(KnowledgeBase(cfg=None))) as c:
+            return (await c.call_tool("check_plan_redlines", {"tool": "issue_sealing_plan", "plan": plan})).structured_content
+
+    out = asyncio.run(go())
+    got = {a["article"] for a in out["articles"]}
+    want = {f"第{n}条" for r in RULES for n in __import__("re").findall(r"\d+", r.article)}
+    assert got == want
+    assert all(a["content"] for a in out["articles"])
+
+
+def test_skill_referenced_articles_are_local():
+    """技能里引用的《矿山救援规程》条款都在本地留存里，避免为固定条款去检索 RAGFlow。"""
+    import re
+    from pathlib import Path
+
+    skills = Path(__file__).resolve().parents[3] / "skills"
+    cited = {int(n) for p in skills.rglob("SKILL.md") for n in re.findall(r"第(\d+)条", p.read_text(encoding="utf-8"))}
+    local = {article_number(a["article"]) for a in LOCAL_ARTICLES if a["document"] == "矿山救援规程"}
+    assert cited - local == set()

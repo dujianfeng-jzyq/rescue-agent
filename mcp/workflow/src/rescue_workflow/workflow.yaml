@@ -1,0 +1,14 @@
+# 工作流的取数规则（开发占位值，待专家审定；见 docs/workflow-design.md 第 9 节）。
+# 阈值类判据（升级、甲烷上升）放在 fire-model 的 thresholds.yaml；这里只放“取哪些数、怎么汇总”。
+
+assessment:
+  trend_hours: 24                 # 趋势窗口
+  # 没有任何触发条件时也要看趋势的指标（键同 assess_warning_level 的指标）
+  default_trend_indicators: [uc_co_ppm, tube_co_ppm]
+  # 受威胁人员：等级达到此级别时自动计算（也可由调用方要求）
+  personnel_level_at_least: orange
+  # 受威胁人员的源头巷道类型：采空区漏风经上隅角进入工作面回风侧，取工作面巷道偏保守
+  # TODO(专家): 确认源头；可选 working_face / goaf
+  personnel_source_kind: working_face
+  # 多个束管测点的爆炸危险性汇总：取最不利；任一测点算不出来时为 unknown（不放行）
+  explosion_order: [explosive, may_become_explosive, not_explosive]

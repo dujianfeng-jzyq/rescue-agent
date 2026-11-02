@@ -16,6 +16,7 @@ members = [
     "rescue-mcp-workspace",
     "rescue-mine-data-sim",
     "rescue-ventnet",
+    "rescue-workflow",
 ]
 
 [[package]]
@@ -729,6 +730,7 @@ dependencies = [
     { name = "rescue-kb" },
     { name = "rescue-mine-data-sim" },
     { name = "rescue-ventnet" },
+    { name = "rescue-workflow" },
 ]
 
 [package.dev-dependencies]
@@ -746,6 +748,7 @@ requires-dist = [
     { name = "rescue-kb", editable = "kb" },
     { name = "rescue-mine-data-sim", editable = "mine-data-sim" },
     { name = "rescue-ventnet", editable = "ventnet" },
+    { name = "rescue-workflow", editable = "workflow" },
 ]
 
 [package.metadata.requires-dev]
@@ -782,6 +785,29 @@ dependencies = [
 requires-dist = [
     { name = "networkx", specifier = ">=3.3" },
     { name = "rescue-contract", editable = "contract" },
+]
+
+[[package]]
+name = "rescue-workflow"
+version = "0.1.0"
+source = { editable = "workflow" }
+dependencies = [
+    { name = "pyyaml" },
+    { name = "rescue-contract" },
+    { name = "rescue-dispatch" },
+    { name = "rescue-fire-model" },
+    { name = "rescue-kb" },
+    { name = "rescue-ventnet" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "rescue-contract", editable = "contract" },
+    { name = "rescue-dispatch", editable = "dispatch" },
+    { name = "rescue-fire-model", editable = "fire-model" },
+    { name = "rescue-kb", editable = "kb" },
+    { name = "rescue-ventnet", editable = "ventnet" },
 ]
 
 [[package]]

@@ -308,3 +308,53 @@ def test_rejection_reported_in_question(tmp_path):
     tree.events[-1:-1] = _assistant("", [("q1", "ask_user_question", {"questions": [{"question": "红色预警发布被人工拒绝，请告知原因"}]})])
     r = grade.grade(tree, {"rejection_reported": True})
     assert r["checks"]["rejection_reported"]["ok"], r["checks"]
+
+
+# ── workflow 工具（研判快照）──
+
+REPORT = "【预警研判】1201 工作面 2026-11-04 15:00:00\n结论：预警等级 红色（危险）（计算结果）\n自燃发展阶段：加速氧化（计算结果）"
+
+
+def _wf_tree(tmp_path, final: str, action_args: dict | None = None):
+    wf = {"snapshot_id": "SN-20261104T150000-abc123", "report_markdown": REPORT, "result": {"warning": {"stage_name": "加速氧化"}, "explosion": {"points": []}}}
+    calls = [("w1", "mcp__workflow__assess_panel", {"panel": "1201"})]
+    events = [{"type": "turn/start"}, _user("请研判 1201 工作面"), *_assistant("", calls), _result("w1", json.dumps(wf, ensure_ascii=False))]
+    if action_args is not None:
+        events += [*_assistant("", [("a1", "mcp__actions__publish_warning", action_args)]), _result("a1", '{"status": "issued"}')]
+    events += [*_assistant(final), {"type": "turn/end"}]
+    _write(tmp_path, ROOT_ID, events, "rescue-commander")
+    return grade.load_tree(ROOT_ID, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("final", "ok"),
+    [
+        (REPORT + "\n\n分析与建议：按预案准备升级。", True),
+        ("  " + REPORT.replace("\n", "\n\n  ") + "\n\n分析：…", True),  # 缩进、空行不同不算改写
+        (REPORT.replace("红色（危险）", "红色"), False),  # 改写了等级名
+        ("结论：红色，加速氧化。", False),
+    ],
+)
+def test_report_pasted(tmp_path, final, ok):
+    r = grade.grade(_wf_tree(tmp_path, final), {"report_pasted": True, "stage_reported": True})
+    assert r["checks"]["report_pasted"]["ok"] is ok
+    assert r["checks"]["stage_reported"]["ok"]  # 阶段名取自研判快照
+
+
+@pytest.mark.parametrize(
+    ("args", "ok"),
+    [
+        ({"notice": {"level": "red", "snapshot_id": "SN-20261104T150000-abc123"}}, True),
+        ({"notice": {"level": "red"}}, False),
+        ({"notice": {"level": "red", "snapshot_id": "SN-20261104T150000-zzzzzz"}}, False),
+    ],
+)
+def test_snapshot_referenced(tmp_path, args, ok):
+    r = grade.grade(_wf_tree(tmp_path, REPORT, args), {"snapshot_referenced": True})
+    assert r["checks"]["snapshot_referenced"]["ok"] is ok
+
+
+def test_workflow_call_covers_internal_tools(tmp_path):
+    """调用了 assess_panel，分析里提到 gas_trend、ventnet 不算点名未调用。"""
+    r = grade.grade(_wf_tree(tmp_path, REPORT + "\n分析：趋势见 gas_trend，人员按 ventnet 估算。"), {"cited_tools_called": True})
+    assert r["checks"]["cited_tools_called"]["ok"], r["checks"]

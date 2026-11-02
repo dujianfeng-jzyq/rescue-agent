@@ -12,6 +12,7 @@ cd "$ROOT"
 . scripts/lib/env.sh && load_env .env   # 已 export 的变量优先于 .env
 export RESCUE_HOME="${RESCUE_HOME:-$ROOT}"
 export RESCUE_ACTIONS_LEDGER="${RESCUE_ACTIONS_LEDGER:-$ROOT/var/actions-ledger.jsonl}"
+export RESCUE_SNAPSHOT_DIR="${RESCUE_SNAPSHOT_DIR:-$ROOT/var/snapshots}"   # workflow 写、actions 和 kb 读，必须同一目录
 
 PY="${RESCUE_PYTHON:-uv run --project $ROOT/mcp python}"
 mkdir -p var/log var/run
@@ -23,8 +24,9 @@ declare -A MODULES=(
   [dispatch]=rescue_dispatch
   [kb]=rescue_kb
   [actions]=rescue_actions
+  [workflow]=rescue_workflow
 )
-ORDER=(mine_data ventnet fire_model dispatch kb actions)
+ORDER=(mine_data ventnet fire_model dispatch kb actions workflow)
 TARGETS=("${@:-${ORDER[@]}}")
 
 # 接入真实矿井时，用 RESCUE_MINE_DATA_MODULE 指向该矿的适配器模块
@@ -48,6 +50,7 @@ for key in "${TARGETS[@]}"; do
   case $key in
     mine_data) port=${!var:-8101} ;; ventnet) port=${!var:-8102} ;; fire_model) port=${!var:-8103} ;;
     dispatch) port=${!var:-8104} ;; kb) port=${!var:-8105} ;; actions) port=${!var:-8106} ;;
+    workflow) port=${!var:-8107} ;;
   esac
   for _ in $(seq 1 50); do
     curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1 && break

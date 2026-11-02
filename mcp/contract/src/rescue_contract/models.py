@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, WithJsonSchema
 
-CONTRACT_VERSION = "0.4.0"
+CONTRACT_VERSION = "0.5.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -380,3 +380,28 @@ class Escalation(_Model):
     reason: str
     recommended_level: str
     basis: list[Citation] = Field(default_factory=list)
+
+
+# ── 研判快照（workflow 服务生成，指令发布时按编号核对；见 docs/workflow-design.md）──
+
+
+class SnapshotKind(StrEnum):
+    ASSESSMENT = "assessment"  # 研判快照（预警等级、阶段、趋势、爆炸危险性、受威胁人员）
+    EFFECT = "effect"  # 处置效果评估
+    ESCALATION = "escalation"  # 升级为应急响应的建议
+    PLAN_CONTEXT = "plan-context"  # 方案草案（现场条件和必备步骤）
+    DISPATCH = "dispatch"  # 调度单草案
+
+
+class Snapshot(_Model):
+    """工作流的一次计算结果。只新增、不修改；方案、预警、升级都引用它的编号。"""
+
+    snapshot_id: str
+    kind: SnapshotKind
+    panel: str
+    as_of: MineTime  # 取数时的矿井时间
+    created_at: MineTime  # 系统时间（本地），仅用于审计
+    inputs: dict[str, Any] = Field(default_factory=dict)  # 调用参数，含人工输入及其确认人
+    result: dict[str, Any]  # 工作流的结构化结果
+    report_markdown: str | None = None  # 由模板生成的报告事实部分
+    parent_ids: list[str] = Field(default_factory=list)  # 依赖的上游快照
