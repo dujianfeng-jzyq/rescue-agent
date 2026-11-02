@@ -239,7 +239,7 @@ _ARTICLE = re.compile(r"第\s*(\d+)\s*条")
 # 省略了“第”的条号（“164 条不适用”）：材料里有“第164条”才算有依据；“共 12 条”这类计数仍要溯源
 _BARE_ARTICLE = re.compile(r"\s*条")
 # 省略了“第”的条号列表（“basis 共 7 条（84/85/87/98）”）：每个数都是材料里的条号才剔除
-_NUM_LIST = re.compile(r"\d+(?:\s*[/／、]\s*\d+)+")
+_NUM_LIST = re.compile(r"\d+(?:\s*[/／、·]\s*\d+)+")
 # 行首单独成标题的多级小节号（“**1.2**”“**1.4（正文未返回）**”“2.5 — 矿级预案”）：同一段回复里
 # 再出现这个数（“见1.6”“同2.4全文照抄”）也是小节号；后面跟单位（**1.5** ppm）的不算
 _SECTION = re.compile(
@@ -287,12 +287,13 @@ def check_numbers(s: Session) -> dict[str, list[dict]]:
         articles.update(_ARTICLE.findall(text))
     out: dict[str, list[dict]] = {"none": [], "approx": []}
     for text in s.outputs():
-        lists = [m.span() for m in _NUM_LIST.finditer(text) if set(_NUM.findall(m.group(0))) <= articles]
+        # 条号列表里可能带前导零（RL-057 的写法“057·053/164”）：按数值比较
+        lists = [m.span() for m in _NUM_LIST.finditer(text) if {str(int(x)) for x in _NUM.findall(m.group(0))} <= articles]
         sections = set(_SECTION.findall(text)) | set(_MD_SECTION.findall(text))
         for tok, pos in numbers(text):
             if tok in sections:
                 continue
-            if tok in articles and (_BARE_ARTICLE.match(text, pos + len(tok)) or any(a <= pos < b for a, b in lists)):
+            if str(int(float(tok))) in articles and (_BARE_ARTICLE.match(text, pos + len(tok)) or any(a <= pos < b for a, b in lists)):
                 continue
             level = match_level(tok, pool)
             if level != "exact":
