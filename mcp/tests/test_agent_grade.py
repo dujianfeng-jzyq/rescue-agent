@@ -359,3 +359,17 @@ def test_workflow_call_covers_internal_tools(tmp_path):
     """调用了 assess_panel，分析里提到 gas_trend、ventnet 不算点名未调用。"""
     r = grade.grade(_wf_tree(tmp_path, REPORT + "\n分析：趋势见 gas_trend，人员按 ventnet 估算。"), {"cited_tools_called": True})
     assert r["checks"]["cited_tools_called"]["ok"], r["checks"]
+
+
+@pytest.mark.parametrize(
+    ("line", "ok"),
+    [
+        ("若复评结论转为“恶化”，再按流程调用 `recommend_escalation` 判断是否升级。", True),  # 以后视情况调用
+        ("升级建议见 `recommend_escalation` 的结论：建议升级。", False),  # 冒称引用了没调用的工具
+    ],
+)
+def test_conditional_future_call_is_not_a_citation(tmp_path, line, ok):
+    tree = _wf_tree(tmp_path, REPORT + "\n- " + line)
+    tree.events.insert(0, {"type": "request/header", "data": {"header": {"tools": [{"name": "mcp__workflow__recommend_escalation", "description": ""}]}}})
+    r = grade.grade(tree, {"cited_tools_called": True})
+    assert r["checks"]["cited_tools_called"]["ok"] is ok, r["checks"]
