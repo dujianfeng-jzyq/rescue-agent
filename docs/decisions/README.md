@@ -9,3 +9,4 @@
 | [0003](0003-redlines-in-python-contract.md) | 红线引擎放在 Python 契约包，自查工具放在 kb | 采纳 |
 | [0004](0004-mcp-transport.md) | MCP 用 streamable-http，地址走环境变量；Python SDK 2.x | 采纳 |
 | [0005](0005-simulated-mine-boundary.md) | 模拟矿井与真实矿井共用同一契约 | 采纳 |
+| [0006](0006-workflow-vs-agent.md) | 确定性流程用代码工作流（MCP）实现，智能体只做理解、开放问答、经验判断和异常处理；不采用 DSH 自带工作流 | 采纳 |

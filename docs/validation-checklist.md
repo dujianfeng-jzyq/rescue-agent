@@ -24,6 +24,8 @@
 | 16 | 本地大模型 | `scripts/dev.sh --local-llm`（有可用端点时） | 能选中 rescue-local 模型并完成 #8 | ✓ 2026-10-29（qwen35-122b-a10b，OpenAI 兼容网关）：模型下拉出现 rescue-local 分组并可选中；指挥 Agent 调 delegate → rescue-assessment，两者都走 rescue-local，结果返回指挥 Agent 汇总；约 1 分钟、67K token，未调用 actions。`scripts/dev.sh --local-llm` 原先启动失败（`unknown option '--patch'`），已修复并复验，见下方“#16 本地大模型”。研判内容质量问题也见下方 |
 | 17 | `.env` 加载 | 不 export、只写 `.env` 时启动 | 确认 DSH_* 必须 export 的说法；如有变化更新 `scripts/dev.sh` | ✓ 2026-10-28：`DSH_HOME` 只写在 `.env` 时 DSH 找不到 rescue 配置档；export 后正常。`scripts/dev.sh` 无需改 |
 
+| 18 | DSH 自带工作流（可选能力，评估是否采用） | 叠加 patch 让 rescue-commander 挂载 `dsh-workflow-ptc` + `dsh-tool-workflow`（见下方“#18”），经网页端让它用 `workflow` 工具运行固定脚本：子 Agent 报告工具和人设、调 fire_model、调 kb、借 delegate 转 rescue-compliance、提交 publish_warning | 记录能否运行、子 Agent 用哪个预设、结构化输出是否可靠、人工确认是否照常 | ✓ 2026-11-02（评估完成，**不采用**，见 ADR 0006）：workspace-write 下能运行；子 Agent 只能用调用方自己的预设（有 actions、没有 kb），不能再委派；结构化输出 5/5 符合 schema；子 Agent 调 actions 时审批被强制为 never，未弹确认即被拒，审计记成“用户拒绝”。详见下方“#18” |
+
 ## 已知需要关注的点
 
 - `rescue-approval` 在 `tools/pre-execute` 里先调 `next()` 再决定 ask：若上游已 deny/cancel，保持上游结论。需确认 rc.4 的瀑布顺序与预期一致（#9、#10）。
@@ -44,3 +46,29 @@
   - 本机代理环境变量 `ALL_PROXY=socks://...` 会让 MCP 客户端（httpx）报 `Unknown scheme for proxy URL`，`make smoke` 全部失败；`NO_PROXY` 的 `127.*` 通配写法 httpx 也不认。本次 unset 代理变量后启动。属本机环境问题，代码不处理：运行 MCP 服务和 DSH 的环境不要设置 socks 代理。
   - 研判内容比 DeepSeek 弱，违反“数值只来自代码”的约定：研判 Agent 自行写出“氧浓度降至 8% 以下”“CO 上升速率超过 1.0 ppm/h 立即启动应急响应”“束管加密至 30 分钟/次”“采空区氧浓度已降至安全水平”，均无工具依据（报告里的“>100℃ 才出现乙烯”来自技能 `fire-warning-assessment` 原文，不是模型编的）；声称依据含“ventnet 通风网络分析”，实际未调用 ventnet；把指挥 Agent 转述的旧读数（G1/G2 氮气 85.3%/88.9%）与自己新取的计算结果（G2 92.0%）混在同一时刻下报告。指挥 Agent 委派 18 秒后就发消息催“请加快研判进度”。弱模型上线前需要输出侧约束（例如报告中的数值必须能在本轮工具结果里找到）和智能体端到端评测。
   - 智能体端到端评测（2026-10-29，`eval/agent`，s2 第 48 小时“请研判 1201 工作面”）：qwen 在 5 次有效运行中只有 1 次全部通过，多次不委派研判 Agent、编造升级预警的阈值（如“温度上升速率超过 0.5℃/h 建议升级”“60℃以上采取注浆”）、点名未调用的 ventnet；另有 1 次本地端点连接失败。**结论：该本地模型不适合担任救援 Agent，不再纳入评测。** 换用其他本地模型时，先用 `make eval-agent` 与 DeepSeek 对比再决定。
+- #18 DSH 自带工作流（2026-11-02，s4 第 55 小时，deepseek-official/deepseek-flash，两轮共 5 个子 Agent）：
+  - 是什么：`dsh-workflow`（引擎接口）+ `dsh-workflow-ptc`（在 Node PTC 沙箱里执行）+ `dsh-tool-workflow`（给模型的 `workflow` 工具）。模型现写一段 JavaScript，脚本只能用 `agent()`、`parallel()`、`pipeline()`、`phase()`、`log()`；**不能直接调用 MCP 工具**，每一步都是一个大模型子 Agent。rescue 配置档里这几行默认 `disabled: true`。
+  - 试验方法：不入库的叠加 patch，按 id 覆盖 `preset-rescue-commander`（内容同 `presets/commander.patch.yml`），在 plugins 末尾加：
+    ```yaml
+    - id: workflow-trial
+      name: cordis:group
+      group: true
+      isolate:
+        workflowEngine: true
+      config:
+        - id: workflow-ptc
+          name: '@deepseek-ai/dsh-workflow-ptc'
+          config:
+            provider: spawn
+        - id: tool-workflow
+          name: '@deepseek-ai/dsh-tool-workflow'
+          config:
+            enableRunInBackground: false
+    ```
+    用 `dsh rescue --patch <该文件> --no-open` 启动（台账、审计按 `make dev-eval` 写到 `var/eval/`）。
+  - 运行：workspace-write 权限下正常运行（本机有 `/usr/bin/bwrap`；PTC 文档写明没有沙箱隔离时 read-only、workspace-write 会直接失败，换机器要先确认）。总指挥协调原样提交了脚本。
+  - 子 Agent 的预设：`agent()` 的请求只有 prompt、schema、provider、model（`dsh-workflow-ptc` 源码 `startChild` → `subagents.startActivation`），**不能指定预设**。子 Agent 实际用的是调用方的 rescue-commander：人设相同，工具含 mine_data、fire_model、**actions**、delegate、workflow，**没有 kb**。
+  - 借道委派：子 Agent 调 delegate 被拒，原因是委派层数上限（当前深度 1，上限 1）。所以子 Agent 也拿不到 kb 和其他 rescue-* 预设。
+  - 结构化输出：5 个子 Agent 都按 schema 返回；取预警等级的子 Agent 照抄 `level=red`、`stage_name=加速氧化`，与工具结果一致；每个子 Agent 6–10 秒。
+  - 人工确认：子会话日志里 `approval/policy` 为 `{"policy": "never", "source": "delegation"}`。子 Agent 调 `publish_warning` 时红线预检通过、记了 `approval/asked`，随即 `approval/decided: rejected`，网页端没有弹确认；`var/eval/audit/tool-actions.jsonl` 2026-11-02T16:24:15Z 一条 denied，detail 为 `the user rejected tool ...`，与真人拒绝无法区分（与“Full access 下指令一律被自动拒绝”同类）。指令发不出去，不会绕过确认，但复盘时会误判为人拒绝。
+  - 结论：不采用（ADR 0006）。确定性流程改为 MCP 工具实现（`docs/workflow-design.md`）。以后 DSH 版本若支持 `agent()` 指定预设，再重新评估。
