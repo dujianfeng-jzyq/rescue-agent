@@ -84,6 +84,26 @@ def test_ragflow_down_degrades_to_local(monkeypatch):
     assert r["status"] == "local-fallback" and r["results"][0]["article"] == "第77条"
 
 
+class _EmptyReply(BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.close_connection = True  # 不回任何字节就断开，等同 curl 的 Empty reply from server
+
+    def log_message(self, *a):
+        pass
+
+
+def test_ragflow_empty_reply_degrades_to_local(monkeypatch):
+    monkeypatch.setenv("KB_DATASETS_REGULATIONS", "ds-reg")
+    srv = HTTPServer(("127.0.0.1", 0), _EmptyReply)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        kb = KnowledgeBase(cfg=RagflowConfig(base_url=f"http://127.0.0.1:{srv.server_address[1]}", api_key="k", timeout_s=2))
+        r = kb.search("regulations", "反风 撤人")
+    finally:
+        srv.shutdown()
+    assert r["status"] == "local-fallback" and r["results"][0]["article"] == "第77条"
+
+
 def test_check_plan_redlines_tool_flags_missing_inerting():
     import asyncio
     from datetime import datetime

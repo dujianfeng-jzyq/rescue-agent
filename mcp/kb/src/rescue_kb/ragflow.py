@@ -6,6 +6,7 @@ RAGFlow 升级导致接口变化时，只需改这个文件。
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import os
@@ -70,7 +71,8 @@ def retrieve(cfg: RagflowConfig, question: str, dataset_ids: list[str], page_siz
     try:
         with urllib.request.urlopen(req, timeout=cfg.timeout_s) as resp:
             payload = json.loads(resp.read())
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+    # 连接被断开（空响应）时 urllib 抛 RemoteDisconnected，不包装成 URLError，所以按 OSError 统一捕获
+    except (OSError, http.client.HTTPException, json.JSONDecodeError) as exc:
         raise RagflowError(f"RAGFlow 不可用：{exc}") from exc
     if payload.get("code") not in (0, None):
         raise RagflowError(f"RAGFlow 返回错误：{payload.get('message')}")
