@@ -365,6 +365,7 @@ def test_workflow_call_covers_internal_tools(tmp_path):
     ("line", "ok"),
     [
         ("若复评结论转为“恶化”，再按流程调用 `recommend_escalation` 判断是否升级。", True),  # 以后视情况调用
+        ("是否升级为应急响应，可调 recommend_escalation 取条文依据后再由总工程师决定。", True),
         ("升级建议见 `recommend_escalation` 的结论：建议升级。", False),  # 冒称引用了没调用的工具
     ],
 )
