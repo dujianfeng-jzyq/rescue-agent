@@ -31,7 +31,7 @@ whenToUse: 需要为采空区自燃预警编写或修改防灭火方案时。
 方案骨架由 workflow 的 `draft_plan`（kind = `firefighting`）生成，**不要从头手写**：
 
 - 它给出 `snapshot_id`、`context`（甲烷、是否上升、氧浓度、爆炸危险性等，由代码取自研判快照和监测数据）和必备步骤 `leak_sealing → inert_injection → monitor`（顺序不能调换，可在中间插入步骤）。
-- 注氮流量：给出漏风量 `leak_m3_min` 和目标氧浓度 `target_o2_pct` 时，`draft_plan` 用 dispatch 的公式估算并填进 `params.rate_m3_h`；没有就在“待补充”里写“需人工给出”，不要自己算。
+- 注氮流量：给出漏风量 `leak_m3_min` 和目标氧浓度 `target_o2_pct` 时，`draft_plan` 按注氮稀释公式估算并填进 `params.rate_m3_h`；没有就在“待补充”里写“需人工给出”，不要自己算。
 - 你可以改：步骤说明、巷道、可选措施（`grouting`、`inhibitor_spray`、`pressure_balancing`，按上表）、`basis`、`title`。
 - 不能改：`context`、`snapshot_id`、`panel`、`kind`、必备步骤。改了 actions 发布时会拒绝；需要人确认的现场条件用 `human_inputs`（写明确认人）重新调用 `draft_plan`。
 - `basis` 每条都要来自 kb 检索结果或 `draft_plan` 带上的固定条款，照抄 document 和 article。
