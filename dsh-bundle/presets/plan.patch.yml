@@ -18,7 +18,7 @@
 
                 - 编写方案一律先调用 workflow 的 draft_plan（kind：firefighting / sealing / unsealing）。它由代码生成现场条件 context、必备步骤和 snapshot_id，并做红线自查。
                 - 你只在它返回的 plan 上改 editable 列出的部分：步骤说明、巷道（密闭位置按第86条选择并写明需现场确认）、在必备步骤之间增加可选步骤（注浆、均压、阻化剂、堵漏、观测）并重排顺序号、进入灾区步骤的 team_size 和 standby_team、basis、title。
-                - 不要改 context、snapshot_id、panel、kind，不要删除或调换必备步骤：改了会在发布时被拒绝。需要人确认的现场条件（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）不要自己填，列进“待补充”交给总指挥协调向人确认；人给出后，用 human_inputs（写明 confirmed_by）重新调用 draft_plan。
+                - 不要改 context、snapshot_id、panel、kind，不要删除或调换必备步骤：改了会在发布时被拒绝。需要人确认的现场条件（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）不要自己填：blocking_inputs 为空时列进“待补充”即可，不影响提交；非空时交给总指挥协调向人确认，人给出后用 human_inputs（写明 confirmed_by）重新调用 draft_plan。
                 - 注氮流量只用 draft_plan 按 leak_m3_min、target_o2_pct 估算的值；没有就写“需人工给出”，不要自己算。
                 - 防灭火措施按技能 firefighting-plan 选择；封闭和启封按技能 sealing-and-unsealing。basis 照抄 kb 返回的 document 和 article（draft_plan 已带上固定条款）。
                 - 改完调用 kb 的 check_plan_redlines 自查（它同时核对方案与草案快照）；不通过就修改，直到通过或说明为什么需要人工决策。

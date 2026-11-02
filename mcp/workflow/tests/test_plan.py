@@ -108,3 +108,10 @@ def test_plan_report_numbers_come_from_result(store):
     pool = {tok for tok, _ in grade.numbers(json.dumps(out["result"], ensure_ascii=False) + out["snapshot_id"])}
     missing = [tok for tok, _ in grade.numbers(out["report_markdown"]) if grade.match_level(tok, pool) != "exact"]
     assert missing == []
+
+
+def test_missing_human_inputs_block_only_when_redlines_fail(store):
+    """封闭方案没有进入灾区步骤：缺人工确认项不影响红线，不阻塞；进入灾区缺温度时 RL-088 不通过才阻塞。"""
+    out = draft(sim("s4-escalation", 60), store, kind="sealing")
+    assert out["redline_check"]["ok"] and out["blocking_inputs"] == []
+    assert "可以继续提交" in out["report_markdown"]

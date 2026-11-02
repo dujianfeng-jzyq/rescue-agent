@@ -170,6 +170,7 @@ def build_server(mine_data_target: Any | None = None, store: SnapshotStore | Non
         系统没有数据的现场条件（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）只能由人确认后
         通过 human_inputs 传入（写明 confirmed_by），不要自己填；leak_m3_min、target_o2_pct 给出时由代码估算注氮流量。
         返回 plan（完整方案，含 snapshot_id）、editable（可以改的部分）、fixed（不能改的部分）、missing_inputs、
+        blocking_inputs（红线自查因缺少它们而不通过时才非空：只有这些必须先问人；为空时缺失项列为待补充，可以继续提交）、
         redline_check 和 report_markdown。在 plan 上只改 editable 列出的部分；context、snapshot_id 和必备步骤改了会在发布时被拒绝。"""
         a = await new_assessment(panel, include_personnel=(kind == "sealing"))
         inputs = list(human_inputs or [])
@@ -188,7 +189,10 @@ def build_server(mine_data_target: Any | None = None, store: SnapshotStore | Non
         }
         snap = save(SnapshotKind.PLAN_CONTEXT, panel, result["as_of"], args, result, lambda r, sid: "", [a.snapshot_id], bind)
         check = precheck(PLAN_TOOL[kind], {"plan": snap.result["plan"]}, None, snapshots)
-        out = {**snap.result, "redline_check": check}
+        # 人工确认项只有在红线自查因此不通过时才阻塞提交；否则列为待补充，由确认人在人工确认时把关
+        human_missing = [f for f in plan.HUMAN_FIELDS if snap.result["plan"]["context"].get(f) is None]
+        blocking = [] if check["ok"] else human_missing
+        out = {**snap.result, "redline_check": check, "blocking_inputs": blocking}
         return {
             "snapshot_id": snap.snapshot_id,
             "assessment_snapshot_id": a.snapshot_id,
@@ -196,6 +200,7 @@ def build_server(mine_data_target: Any | None = None, store: SnapshotStore | Non
             "editable": out["editable"],
             "fixed": out["fixed"],
             "missing_inputs": out["missing_inputs"],
+            "blocking_inputs": blocking,
             "redline_check": check,
             "report_markdown": reports.plan_draft(out, snap.snapshot_id),
             "result": out,

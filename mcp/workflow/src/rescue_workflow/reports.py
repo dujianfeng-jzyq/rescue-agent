@@ -126,7 +126,11 @@ def plan_draft(r: dict[str, Any], snapshot_id: str) -> str:
             f"{s['order']}. {STEP_NAMES.get(s['type'], s['type'])}：{s['description']}" + (f"（{'；'.join(extra)}）" if extra else "")
         )
     if r["missing_inputs"]:
-        lines.append("待补充：")
+        blocking = r.get("blocking_inputs")
+        if blocking:
+            lines.append("待补充（红线自查因缺少现场条件不通过，须先由人确认）：")
+        else:
+            lines.append("待补充（不影响红线自查结论，可以继续提交，人工确认时由确认人把关）：")
         lines += [f"- {m}" for m in r["missing_inputs"]]
     chk = r.get("redline_check")
     if chk is not None:
