@@ -27,6 +27,9 @@
 | 18 | DSH 自带工作流（可选能力，评估是否采用） | 叠加 patch 让 rescue-commander 挂载 `dsh-workflow-ptc` + `dsh-tool-workflow`（见下方“#18”），经网页端让它用 `workflow` 工具运行固定脚本：子 Agent 报告工具和人设、调 fire_model、调 kb、借 delegate 转 rescue-compliance、提交 publish_warning | 记录能否运行、子 Agent 用哪个预设、结构化输出是否可靠、人工确认是否照常 | ✓ 2026-11-02（评估完成，**不采用**，见 ADR 0006）：workspace-write 下能运行；子 Agent 只能用调用方自己的预设（有 actions、没有 kb），不能再委派；结构化输出 5/5 符合 schema；子 Agent 调 actions 时审批被强制为 never，未弹确认即被拒，审计记成“用户拒绝”。详见下方“#18” |
 | 19 | 插件工具编排（确定性工具调用 + 指定预设的子 Agent） | 验证分支 `spike/plugin-workflow`：验证插件 `dsh-bundle/src/spike` 注册工具 `spike_plan_review`，叠加 patch `dsh-bundle/spike/plan-review.patch.yml` 挂到 rescue-commander；评测用例 `spike-plan-review`（s4 第 60 小时）让总指挥调用它（见下方“#19”） | 插件里能调 MCP 工具、能按预设起子 Agent 并拿到结构化结果、审批和审计照常、网页端能显示运行过程 | ✓ 2026-11-02：四项都成立；子 Agent 照抄整份方案作工具参数时 DeepSeek 偶发生成坏 JSON，改为插件做红线检查后 3/3 正常。详见下方“#19” |
 | 20 | 插件登记后台任务（持续检测 → 唤醒 → 询问操作员） | 验证插件 `dsh-bundle/src/spike-watch` 注册工具 `spike_watch`（once / watch），watch 用 `ctx.jobs.start` 登记后台任务；叠加 patch `experiments/spike20/watch.patch.yml`（由 `gen_patch.py` 生成）给 rescue-commander 加 `dsh-tool-jobs` 和 persona 规则；`experiments/spike20/drive.py` 经网页端提问、推进模拟时钟、读会话日志（见下方“#20”） | 插件能登记任务并立即返回；网页端任务列表显示进度、可停止；任务结束时唤醒空闲会话（含网页已关闭、长时间空闲）；唤醒后能读结果、弹出提问并按回答处理；停止、重启时的行为明确 | ✓ 2026-11-03（机制可行，有一处要补救）：登记、进度、两种停止、唤醒、提问（三个选项 + 自由回答）、网页关闭后唤醒和补答都成立；空闲 20 分钟后任务仍在、唤醒正常，但唤醒的这一轮因 DeepSeek 接口错误中断，没有重试，异常没有送到人。DSH 重启或崩溃后任务消失、不通知。详见下方“#20” |
+| 21 | 容器内的 bash 沙箱 | 第二版 P0：DSH 镜像里开 `dsh-bash-sandbox`，复跑实验 0001 第 0 步探测（`exp-probe-env`） | 沙箱在容器里能工作；工作区、技能目录、记录目录的读写权限与本机一致 | 未验证 |
+| 22 | 插件起 Python 子进程（证据插件的 `runScript`） | 验证分支 `spike/plugin-subprocess`：验证插件 `dsh-bundle/src/spike-script` 的 `spike_run_script` 在 DSH 进程里起子进程运行技能脚本替身 `experiments/spike22/script.py`，`spike_export` 把记录写进会话工作区；叠加 patch `experiments/spike22/spike.patch.yml`，`drive.py script` 经网页端驱动（见下方“#22”） | 子进程不受 bash 沙箱限制、能写记录目录；超时、非零退出、输出不合格能分类报告；沙箱写不了记录目录；导出的记录能在沙箱里读 | ✓ 2026-11-03：都成立。另有两点要进设计：子进程默认继承 DSH 进程的全部环境变量（含模型、RAGFlow、MCP 的密钥），必须按白名单传；子进程没有任何限制（能写技能目录、能出网），脚本只能是评审过的代码。详见下方“#22” |
+| 23 | 唤醒失败的补救（#20 遗留） | 同一验证分支：`spike_job` 登记后台任务，插件盯住被唤醒的这一轮，以 `agent/error` 结束时补发通知；故障注入代理 `experiments/spike22/fault_proxy.py` 把唤醒这一轮的模型流截断在 `message_stop` 之前；`drive.py wake N`（见下方“#23”） | 复现 #20 的故障；插件补发后智能体能提问；或者 provider 重试能在同一轮里恢复 | ✓ 2026-11-03：复现了 #20（`STREAM_CLOSED` 不在默认可重试列表里，这一轮以 error 结束）。插件补发：截断 1 次后第 2 轮正常提问；连续截断 4 次时补发 3 次后停止。provider 重试：把 `STREAM_CLOSED` 加进 `retryPolicy.retryableCodes` 后同一轮重试 2 次恢复。两者都做。详见下方“#23” |
 
 ## 已知需要关注的点
 
@@ -100,3 +103,17 @@
   - DSH 崩溃（`kill -9`）：会话日志只有 `job/registered`，没有 `job/settled`。
   - 没有验证：`maxConsecutiveWakes` 的效果；超过 20 分钟的空闲；同时多个会话各有任务。
   - 结论：“插件登记后台任务、不经模型持续检测、结束时由 DSH 唤醒智能体询问操作员”在 rc.4 上可行，网页关闭也不影响。要补两处：① **唤醒的这一轮失败时异常会丢**（模型接口错误不重试），需要兜底（见设计文档 4.9）；② DSH 重启、崩溃后任务消失且不通知，以后无人值守的恢复服务可以按会话日志判断——有 `job/registered` 而没有 `job/settled`（崩溃），或 `job/settled` 的 cause 为 `teardown`（关闭）。
+- #22 插件起 Python 子进程（2026-11-03，deepseek-official/deepseek-flash，验证分支 `spike/plugin-subprocess`，不需要 MCP 服务）：
+  - 做法：插件用 `node:child_process.spawn` 运行 `python3 -I script.py --case <case> --input-file … --output-file …`，cwd 是记录目录旁的运行目录，环境变量只传 `PATH`、`LANG`（另加 `PYTHONIOENCODING`），超时 5 秒（占位）先 SIGTERM、1 秒后 SIGKILL。模型在一个会话里按顺序调 7 种 case，再导出 ok 的记录，用 bash 读它、尝试写记录目录。
+  - 分类：ok（约 35–40 毫秒，含 Python 启动）、timeout（5009 毫秒后终止）、exit（退出码 3，带 stderr）、invalid-output（输出不是 JSON）、schema（缺 `result`）都按预期报告；ok 时记录原子写入，带脚本、输入、输出的 sha256。
+  - 子进程不受 bash 沙箱限制：bash 沙箱只套在 bash 工具上（`dsh-bash-sandbox` 替换 `ctx.shell`），插件自己起的子进程以 DSH 进程的用户运行，能写记录目录、**也能写 `skills/`**、能看到全部 469 个进程、能连外网。脚本因此只能是评审过的代码；“脚本不访问网络”（设计 4.2 脚本约定 1）没有机制保证，靠评审和容器（技能目录只读挂载、出站白名单）。
+  - 环境变量：按白名单传时子进程只有 `LANG`、`PATH`、`PYTHONIOENCODING`。`probe-inherit`（故意继承）时能看到 `DEEPSEEK_API_KEY`、`RAGFLOW_API_KEY`、`RESCUE_MCP_TOKEN`、`RESCUE_LLM_API_KEY`、`DSH_HOME` 等全部变量。**`runScript` 必须按白名单传环境变量**（DSH 自带的 `ctx.subprocess` 用 `scrubbedParentEnv()` 去掉名字像凭据的变量和 `DSH_*`，也可以用它，但白名单更严）。
+  - 沙箱：bash 写记录目录里的新文件、覆盖已有记录都返回 `Read-only file system`，并提示可以申请提权重试（模型按 persona 没有申请）；写工作区成功。导出的记录模型能用 bash `cat` 读出。
+  - 工作区：`ctx.workingDirectory.ensure(agent)` 返回 `~/Documents/deepseek-harness/default-workspace`，**所有会话共用这一个目录**。`exportRecord` 要按会话或记录分子目录，不能假定工作区只属于一个会话。
+  - 结论：设计 4.3 的 `runScript`（插件在 DSH 进程里起子进程、结果写沙箱写不了的记录目录）可行；要加环境变量白名单、导出按会话分目录，并在设计里写明子进程不受限制。
+- #23 唤醒失败的补救（2026-11-03，同上）：
+  - 故障注入：`DEEPSEEK_BASE_URL` 指向本地代理，代理转发到 `api.deepseek.com`，装填后把流在前 4 个 SSE 事件后正常结束（不发 `message_stop`）。DSH 报 `DeepSeek Messages stream ended before message_stop`（错误码 `STREAM_CLOSED`），与 #20 空闲测试里的错误相同。（代理到上游偶发 TLS 握手失败，代理内部重试，不算注入的故障；DSH 对 `TRANSPORT` 默认会重试。）
+  - DSH 默认：`STREAM_CLOSED` 不在默认可重试列表（`EMPTY_RESPONSE`、`RATE_LIMIT`、`SERVER`、`TIMEOUT`、`TRANSPORT`）里，唤醒这一轮直接以 `turn/end`（error）结束，复现了 #20。
+  - 插件补发：插件监听 `agent/error` 和 `agent/status`，被唤醒的这一轮出错后回到 idle 时，用 `agent.followup()` 补发一条通知（来源沿用 `tool-jobs` 的 notice）。截断 1 次：第 2 轮读 `job_output`、弹出提问、回答后正常结束。截断 4 次：补发 3 次后停止，记 `wake-gave-up`。补发是立即的，没有退避，真实故障时 3 次会在约 30 秒内用完。
+  - provider 重试：叠加 patch 给 `llm-deepseek` 配 `retryPolicy: { mode: normal, maxRetries: 3, retryableCodes: [默认 5 个, STREAM_CLOSED] }`，关掉插件补发。截断 2 次：同一轮里 `llm/retry` 2 次后恢复，正常提问，没有多出轮次。重试发生在模型输出完整之前，工具还没执行，不会重复执行工具。
+  - 结论：两者都做。provider 重试是第一道（对所有轮次都有效，不只唤醒）；插件补发是第二道，覆盖重试用完或不可重试的错误，正式实现要加退避（占位 1、5、15 分钟）；都失败时由演示控制台显示“未确认的异常”。没有验证：真实接口长时间卡住（#20 中 178 秒）时重试的表现；补发与操作员同时输入的交错。

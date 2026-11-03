@@ -1,6 +1,6 @@
 # 应急救援智能体 第二版设计（第五稿）
 
-> 状态：**第五稿，第 10 节 1–7 已定**（2026-11-03）；#22（插件起 Python 子进程）、唤醒失败补救（第 10 节 12）验证后定稿。定稿后：写 ADR 0007（取代 ADR 0006 的相应部分），同步修改 `docs/implementation-plan.md`、`docs/architecture.md`、CLAUDE.md，再按第 9 节实施。
+> 状态：**第五稿，已定稿**（2026-11-03）：第 10 节 1–7 已定，#22（插件起 Python 子进程）、#23（唤醒失败的补救）已验证。定稿后：写 ADR 0007（取代 ADR 0006 的相应部分），同步修改 `docs/implementation-plan.md`、`docs/architecture.md`、CLAUDE.md，再按第 9 节实施。
 > 本文出现的阈值、参数、时限、倍速都沿用现有的**开发占位值**，需专家审定。
 > 范围：采空区自燃火灾的一个闭环，满足本次演示（第 6 节），Docker 部署。其他事故类型、多矿接入不在范围内；对外接口（上一版的 rescue-api、SubAgent 接口）本次不实现，但按 4.11 留出扩展点。
 
@@ -16,6 +16,8 @@
 | 模拟矿井读记录目录 | 注明只为演示的自动暂停，不是矿井接口的一部分 | 4.10 |
 | 主预设不挂 delegate | 4.1 删去子 Agent 一行 | 4.1 |
 | 倍速 | 检测到异常后暂停（不再“降为 1 倍速”） | 4.10、第 6 节 |
+| #22 已验证：插件起的子进程可行，但不受任何限制、默认继承 DSH 进程的密钥 | `runScript` 按白名单传环境变量、设超时；写明脚本是受信代码，靠评审和容器只读挂载约束；工作区所有会话共用，导出按会话分目录 | 4.2、4.3、7.1 |
+| #23 已验证：唤醒失败的两种补救都可行 | 两者都做：provider 重试加上 `STREAM_CLOSED`（P0），插件补发带退避（P4） | 4.9、第 9、10 节 |
 
 ### 第五稿
 
@@ -165,7 +167,7 @@ skills/<技能名>/
 
 脚本约定：
 
-1. **纯函数，文件进、文件出**：`python scripts/<名>.py --input-file <证据或上一步结果.json> --output-file <结果.json> [--svg-out <图.svg>]`。脚本不访问网络和数据库，不读环境变量里的凭据。所以沙箱里也能运行（输入文件由 `export_record` 提供），不需要给沙箱任何令牌（实验 0001 第 9.0 节结论 2 的问题由此避开）。
+1. **纯函数，文件进、文件出**：`python scripts/<名>.py --input-file <证据或上一步结果.json> --output-file <结果.json> [--svg-out <图.svg>]`。脚本不访问网络和数据库，不读环境变量里的凭据。所以沙箱里也能运行（输入文件由 `export_record` 提供），不需要给沙箱任何令牌（实验 0001 第 9.0 节结论 2 的问题由此避开）。注意：证据插件起的子进程不在沙箱里，以 DSH 进程的用户运行，能写技能目录、能出网（#22），“不访问网络”没有机制保证。所以脚本是**受信代码**，只靠评审和 CI 进入技能库；容器里技能目录只读挂载、出站白名单兜底（7.1）。
 2. **输出可审计**：结果 JSON 包含算法版本、使用的参数、全部警告；数据缺失时输出明确的“无法判定”，不估算。
 3. **只依赖运行镜像里已有的 Python 包**（清单写进技能规范），不在运行时安装依赖。DSH 镜像按这份清单安装。
 4. **自检**：每个脚本至少有一组样例；CI 和镜像构建时运行全部样例，输出与期望不一致即失败。参数改动必须同时更新样例，提交说明里写明是占位值还是专家审定值。
@@ -207,9 +209,9 @@ skills/<技能名>/
 | 方法 | 作用 |
 | --- | --- |
 | `collectEvidence(panel, kind, windowH?)` | 按 `kind`（check、assessment、effect、plan-context 等）读对应技能 `references/collect.yaml` 的采集清单，从 mine_data 取数，存为证据记录；Python 小工具读同一份清单 |
-| `runScript(skill, script, inputs)` | 起子进程运行技能脚本（不在 bash 沙箱里）。只能运行技能清单里登记过的 `skills/*/scripts/` 下的脚本；把输入记录写成文件，输出存为结果记录 |
+| `runScript(skill, script, inputs)` | 起子进程运行技能脚本（不在 bash 沙箱里）。只能运行技能清单里登记过的 `skills/*/scripts/` 下的脚本；把输入记录写成文件，输出存为结果记录。环境变量按白名单传（`PATH`、`LANG` 等，不继承 DSH 进程的模型、RAGFlow、MCP 密钥，#22）；设超时（先 SIGTERM，再 SIGKILL）；失败按超时、非零退出（带 stderr）、输出不是 JSON、输出不合 schema、启动失败分类（4.5 第 3 条） |
 | `renderReport(skill, template, recordIds)` | 用技能模板和记录生成报告事实部分（数值原样填入，不取整），存为报告记录 |
-| `getRecord(id)` / `exportRecord(id, workspace)` | 读取记录；把记录写进会话工作区，供智能体按技能在沙箱里做进一步分析 |
+| `getRecord(id)` / `exportRecord(id, workspace)` | 读取记录；把记录写进会话工作区，供智能体按技能在沙箱里做进一步分析。工作区由 `ctx.workingDirectory` 给出，**所有会话共用同一个目录**（#22），导出到 `records/<会话编号>/` 下 |
 
 风险检测、固定流程都调这些方法，因此一次性检测、持续检测、完整研判用的是同一套采集和计算。
 
@@ -454,10 +456,10 @@ class Record(_Model):
 
 #20 已在 DSH 0.2.1-rc.4 上验证（`docs/validation-checklist.md` #20）：登记、进度显示、网页上两击停止、模型 `job_kill`、唤醒、提问（三个选项加自由回答）都正常；网页关闭、空闲 20 分钟后任务仍在、照常唤醒，提问在会话列表里有“Waiting for answer”标记，重新打开后可以回答。限制有三条：
 
-- **唤醒的这一轮失败时，异常会丢。** 验证中一次唤醒后模型请求卡住 178 秒，以接口错误结束且没有重试：任务已结束，智能体没能提问，操作员不知道。补救（P4 实现，二选一或都做，见第 10 节）：
-  1. 插件在任务结束后继续盯一段时间：从会话事件里确认这一轮出现了提问（或正常结束）；如果这一轮以 error 结束，就再投递一次同样的通知（最多若干次，占位 3 次）；
-  2. 调整 DSH 的模型重试设置，让“stream ended before message_stop”这类错误也重试。
-  不论哪种，检测到异常的记录都已写进记录目录，演示控制台会把它显示为“未确认的异常”，直到会话里出现对它的提问或回答。
+- **唤醒的这一轮失败时，异常会丢。** 验证中一次唤醒后模型请求卡住 178 秒，以 `STREAM_CLOSED`（stream ended before message_stop）结束，这个错误码不在 DSH 默认的可重试列表里：任务已结束，智能体没能提问，操作员不知道。#23 用故障注入复现了这个问题，并验证了两种补救，**两者都做**：
+  1. **provider 重试**（第一道，P0 随主预设一起配）：`llm-deepseek` 的 `retryPolicy.retryableCodes` 在默认的 5 个之外加上 `STREAM_CLOSED`。验证中同一轮重试 2 次就恢复了，不多出轮次；重试发生在模型输出完整之前，不会重复执行工具。对所有轮次都有效，不只唤醒；
+  2. **插件补发**（第二道，P4 实现）：证据插件在任务结束后监听拥有者的 `agent/error`、`agent/status`；被唤醒的这一轮以 error 结束时，用 `agent.followup()` 再投递同样的通知（来源沿用 `tool-jobs` 的 notice）。验证中补发后下一轮正常提问。要加退避（占位 1、5、15 分钟），最多 3 次；用完后在记录里标“唤醒失败”。
+  都失败时，检测到异常的记录已经写进记录目录，演示控制台把它显示为“未确认的异常”，直到会话里出现对它的提问或回答。
 - **DSH 重启、崩溃后任务消失，且不通知。** 正常关闭时会话日志记 `job/settled`（cause `teardown`），崩溃时只有 `job/registered`。缓解：检测记录带时间，演示控制台显示“持续检测：最近一次检测的矿井时间”，超过两个检测间隔没有新记录就标红；以后无人值守的恢复服务按会话日志的这两种情况判断并恢复。
 - 唤醒后 `ask_user` 要有人在网页端回答；没人回答时问题一直挂着（阻塞模式，这正是以后要做无人值守的原因）。
 
@@ -560,6 +562,7 @@ class Record(_Model):
 | --- | --- | --- |
 | 令牌 | 设置令牌；mine_data 只读令牌（证据插件用）、actions 令牌（主预设用）、`/sim` 控制令牌（只给控制台和 actions 的模拟执行）分开，DSH 不持有 `/sim` 控制令牌 | 每个服务、每个调用方单独令牌 |
 | 密钥文件 | DSH 容器里不放 `.env`；各服务容器只拿自己需要的变量 | 同左，加上密钥服务 |
+| 技能脚本子进程 | `runScript` 按白名单传环境变量、设超时；技能目录只读挂载（子进程能写 DSH 用户能写的任何地方，#22） | 评估用 DSH 的沙箱服务（`ctx.sandbox`）包住子进程：只许写本次运行目录、不许出网（未验证） |
 | DSH 凭据文件 | `.dsh-home/.credentials.yaml` 与沙箱在同一容器，沙箱能读（探测结论）。演示前确认能否限制沙箱读取该目录；不能则至少保证其中只有模型、RAGFlow 凭据，没有其他服务的令牌 | 凭据放到沙箱读不到的位置或外部密钥服务 |
 | 只读挂载 | 技能目录、代码只读；记录目录由 DSH 容器写，actions、模拟矿井只读；台账卷只挂到 actions；审计卷只挂到 DSH（审计插件写） | 同左 |
 | 提权 | 预设说明里要求不申请提权；演示中出现提权确认一律拒绝 | 容器只读挂载兜底，不依赖确认框 |
@@ -606,11 +609,11 @@ class Record(_Model):
 
 | 阶段 | 内容 | 验收 |
 | --- | --- | --- |
-| P0 基础 | 契约 0.7.0（Record、Origin、ResultCard、HumanInputRequest、ApprovalSummary、FlowEvent）；证据插件骨架（自带 MCP 客户端、`collectEvidence`、`runScript`、`renderReport`、记录存储）与 Python 采集小工具（一致性测试）；技能规范与 CI 自检运行器；令牌拆分；主预设草稿（挂 `dsh-jobs-local`、`dsh-tool-jobs`）；验证 #21（容器内沙箱）、#22（插件起 Python 子进程）、唤醒失败的补救（第 10 节 12）；#20 已通过 | `make check` 通过；技能自检能跑；TS、Python 采集一致；第 0 步探测在新预设下复跑结果不变差；#21、#22、唤醒失败补救有结论 |
+| P0 基础 | 契约 0.7.0（Record、Origin、ResultCard、HumanInputRequest、ApprovalSummary、FlowEvent）；证据插件骨架（自带 MCP 客户端、`collectEvidence`、`runScript`、`renderReport`、记录存储）与 Python 采集小工具（一致性测试）；技能规范与 CI 自检运行器；令牌拆分；主预设草稿（挂 `dsh-jobs-local`、`dsh-tool-jobs`；provider 重试加 `STREAM_CLOSED`，4.9）；验证 #21（容器内沙箱）；#20、#22、#23 已通过 | `make check` 通过；技能自检能跑；`runScript` 的超时、退出码、输出校验、环境变量白名单有测试；TS、Python 采集一致；第 0 步探测在新预设下复跑结果不变差；#21 有结论 |
 | P1 火灾研判 | `fire-assessment`、`explosion-triangle`、`emergency-escalation` 技能（脚本迁移 + 样例）；`check.py`、`check_mine(once)`、`run_fire_assessment`；研判报告与风险图 | 迁移后的脚本对现有 6 个场景的关键时刻输出与现有服务一致（等级、阶段、爆炸分区、升级建议）；评测 `s2-assess-1201`、`s4-escalate-1201`、`s4-explosion-risk` 各 3 次全部通过，token 不高于现状 |
 | P2 知识库与指令核对 | 知识库插件（迁移 + 条文索引 + `kb_get_articles`）；`precheck_plan` 移到 actions；actions、审批预检改为按记录核对，`ApprovalSummary`；`publish_warning`、`escalate_emergency` 走通 | 条文索引对演示数据集中《矿山救援规程》等规程的切分经抽查无误；查条单次 < 1 秒；跨切片的条文完整；`contract/tests` 覆盖每种不一致；`s4-warning-rejected`、`s4-plan-context-tamper` 3/3 |
 | P3 封闭方案 | `sealing-plan`、`plan-compliance` 技能；`draft_sealing_plan` 插件；`issue_sealing_plan` 按记录核对 | `s4-sealing-plan` 3/3 全部通过；单次 token 比现状（170–340 万）下降一个数量级（占位目标） |
-| P4 复评与持续检测 | `effect-review` 技能、`review_effect` 插件；`check_mine(watch)`（后台任务、基线、异常结束、唤醒后询问）；停用 fire_model、ventnet、dispatch、kb、workflow 服务和值守进程 | `s2-effect-after-inerting` 3/3；s3 从第 0 小时持续检测、快进 72 小时，任务结束的矿井时刻和原因与期望一致（由 `eval/expectations.yaml` 的值守期望改写）；新增评测用例：持续检测 → 唤醒 → 询问 → 评测运行器选“开始完整研判” → 研判完成 |
+| P4 复评与持续检测 | `effect-review` 技能、`review_effect` 插件；`check_mine(watch)`（后台任务、基线、异常结束、唤醒后询问、唤醒失败时带退避补发，4.9）；停用 fire_model、ventnet、dispatch、kb、workflow 服务和值守进程 | `s2-effect-after-inerting` 3/3；s3 从第 0 小时持续检测、快进 72 小时，任务结束的矿井时刻和原因与期望一致（由 `eval/expectations.yaml` 的值守期望改写）；新增评测用例：持续检测 → 唤醒 → 询问 → 评测运行器选“开始完整研判” → 研判完成 |
 | P5 演示环境 | 模拟矿井常态运行、事故注入、读数设置、倍速分段；演示控制台；Docker 部署（7.2） | `make demo-up` 从零启动全部健康；控制台各功能可用；注入与读数设置有单元测试；评测（手动时钟）不受影响 |
 | P6 彩排 | 演示脚本（第 6 节）；文档同步 | 在 Docker 环境按第 6 节彩排两遍，除人工操作外无失败 |
 
@@ -630,6 +633,11 @@ class Record(_Model):
 6. **读数设置的语义**：只改读数，不改物理模型。演示脚本避免对处置要作用的测点做人工固定。
 7. **知识库维护工具**：本次不开放给模型或设置页，条文索引用离线脚本建立；维护预设、设置页以后再做。
 
+**已验证（2026-11-03，`docs/validation-checklist.md`）**
+
+- **#22 插件起 Python 子进程**：可行。子进程不受 bash 沙箱限制、能写记录目录，失败能分类报告；但它不受任何限制、默认继承 DSH 进程的密钥，设计随之修改（4.2、4.3）。
+- **#23 唤醒失败的补救**：provider 重试、插件补发都可行，两者都做（4.9）。
+
 **需要专家确认的**
 
 8. **爆炸三角形以哪个为准**：上一版脚本与本项目 `explosion.py`（含 H₂、分区判据已重新设计）有差异，迁移时需逐项对照。
@@ -639,7 +647,5 @@ class Record(_Model):
 
 **需要验证的**
 
-12. **唤醒失败的补救**（4.9 限制第一条）：插件盯唤醒结果并补发通知，还是调整 DSH 的模型重试设置，或两者都做。补发通知要先验证插件能否向会话追加消息（与 `dsh-schedule` 的 `followup()` 同一机制）。
-13. **#21 容器内沙箱**：bash 沙箱在 Docker 里能否工作，权限与本机是否一致。
-14. **#22 插件起 Python 子进程**：证据插件在 DSH 进程里起的子进程不受 bash 沙箱限制、能写记录目录；技能脚本的运行时间和失败（超时、非零退出、输出不合 schema）能按 4.5 第 3 条分类报告。
-15. **沙箱能读 DSH 凭据文件**（7.1）：能否通过配置限制；不能的话演示可接受的范围。现在 DSH 凭据里还多了 mine_data 只读令牌，泄露的后果是能读矿井数据（不能发指令、不能控制模拟器）。
+12. **#21 容器内沙箱**：bash 沙箱在 Docker 里能否工作，权限与本机是否一致。
+13. **沙箱能读 DSH 凭据文件**（7.1）：能否通过配置限制；不能的话演示可接受的范围。现在 DSH 凭据里还多了 mine_data 只读令牌，泄露的后果是能读矿井数据（不能发指令、不能控制模拟器）。
