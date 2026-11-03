@@ -4,8 +4,9 @@
 检查内容：
 - YAML 能解析（支持 `!!js` 标签）；
 - 每个 `!!js` 表达式在 Node 中语法正确，并能用示例环境变量求值；
-- 预设：id 唯一、带 persona、技能目录存在且包含 skills/shared、MCP serverName 合法且在预设内唯一、
+- 预设：id 唯一、带 persona、技能目录存在且包含 skills/shared（第二版：技能根目录 skills/）、MCP serverName 合法且在预设内唯一、
   只有总指挥协调预设挂载 actions 服务、MCP 地址来自 RESCUE_MCP_* 环境变量；
+  profiles/ 下按 id 覆盖预设的叠加（如第二版 profiles/v2.patch.yml）按同样规则检查；
 - 审批策略写死为 ask，权限预设全部是 ask（人工确认不能被关掉）；
 - package.json 的 dsh.bundle.patch 列出了全部 patch 文件；
 - 本机装了 dsh 时，额外用 DSH 自带的插件包校验预设里每个插件的 config
@@ -113,7 +114,8 @@ def dsh_package_dir() -> Path | None:
 
 
 def check_plugin_configs(rows: list[dict]) -> str:
-    """返回一行说明；不合法的配置记入 errors。"""
+    """返回一行说明；不合法的配置记入 errors。本项目的插件（@rescue/*）不在 DSH 安装目录里，由 TS 测试覆盖，这里跳过。"""
+    rows = [r for r in rows if not r["name"].startswith("@rescue/")]
     pkg = dsh_package_dir()
     if pkg is None:
         return "未安装 dsh，跳过插件配置校验"
@@ -151,15 +153,21 @@ def main() -> int:
     for f in files:
         doc = load(f) or []
         walk(doc, exprs, f.name)
+        overlay = f.parent.name == "profiles"
         for block in doc:
-            for row in block.get("insert", []) if isinstance(block, dict) else []:
+            if not isinstance(block, dict):
+                continue
+            # bundle 里是 insert 新增；profiles/ 的叠加是顶层按 id 覆盖
+            rows_in = block.get("insert", []) + ([block] if overlay and "config" in block else [])
+            for row in rows_in:
                 if row.get("name") != "@deepseek-ai/dsh-agent-preset":
                     continue
                 cfg = row["config"]
                 pid = cfg["id"]
-                if pid in preset_ids:
-                    errors.append(f"{f.name}: 预设 id 重复 {pid}")
-                preset_ids.add(pid)
+                if not overlay:
+                    if pid in preset_ids:
+                        errors.append(f"{f.name}: 预设 id 重复 {pid}")
+                    preset_ids.add(pid)
                 plugins = {p["id"]: p for p in cfg["plugins"]}
                 plugin_rows += flatten_plugins(cfg["plugins"], pid)
                 if "persona" not in plugins:
@@ -186,10 +194,10 @@ def main() -> int:
             for d in r["value"]:
                 if not Path(d).is_dir():
                     errors.append(f"{where}: 技能目录不存在 {d}")
-                elif not any(Path(d).glob("*/SKILL.md")):
+                elif not any(Path(d).glob("*/SKILL.md")) and Path(d) != ROOT / "skills":  # 第二版技能在 P1 之前还没有
                     errors.append(f"{where}: 技能目录下没有 */SKILL.md：{d}")
-            if str(ROOT / "skills" / "shared") not in r["value"]:
-                errors.append(f"{where}: 每个预设都要包含 skills/shared")
+            if str(ROOT / "skills" / "shared") not in r["value"] and str(ROOT / "skills") not in r["value"]:
+                errors.append(f"{where}: 每个预设都要包含 skills/shared（第一版）或 skills（第二版）")
 
     main_patch = load(BUNDLE / "cordis.patch.yml") or []
     rows = {r.get("id"): r for r in main_patch if isinstance(r, dict) and "id" in r}

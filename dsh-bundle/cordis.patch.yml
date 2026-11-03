@@ -26,6 +26,16 @@
         approval: ask
     defaultPreset: workspace-write
 
+# 模型请求的重试：在默认可重试错误之外加上 STREAM_CLOSED（“stream ended before message_stop”）。
+# 默认不重试它，持续检测唤醒的这一轮会因此以 error 结束、异常送不到人（验证清单 #20、#23）。
+# 重试发生在模型输出完整之前，工具还没执行，不会重复执行工具。maxRetries 为占位值。
+- id: llm-deepseek
+  config:
+    retryPolicy:
+      mode: normal
+      maxRetries: 3
+      retryableCodes: [EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT, TRANSPORT, STREAM_CLOSED]
+
 # ── 2. 默认预设改为总指挥协调 Agent，并关闭 DSH 自带的编程类预设 ─────────────
 # 自带预设带有 bash、文件读写等工具，不应出现在救援系统里。
 # 验证项：若某个 DSH 版本里这些行 id 不存在，--dump-config 会提示未匹配，按提示删除对应行即可。

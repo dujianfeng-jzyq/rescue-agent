@@ -33,6 +33,8 @@
 
 ## 已知需要关注的点
 
+- 预设里提供 cordis 服务的插件（第二版的证据插件 `rescueEvidence`）必须放进带 `isolate` 的 `cordis:group`，否则新建会话失败：`agent-preset/invalid: Preset services require isolate realms: rescueEvidence`（2026-11-03，rc.4，`profiles/v2.patch.yml`）。注入该服务的插件（以后的固定流程）放进同一组。新的 `DSH_HOME` 第一次打开网页端要先选工作区，评测运行器目前没有处理这一步。
+- 第二版主预设草稿（2026-11-03，rc.4，deepseek-flash，令牌按服务拆分，DSH 不持有 `/sim` 控制令牌）：`get_record` 读出 Python 写的记录（TS 侧哈希核对通过）、`export_record` 写进 `records/<会话>/`、沙箱里 `cat` 能读、写记录目录返回 `Read-only file system`。
 - `rescue-approval` 在 `tools/pre-execute` 里先调 `next()` 再决定 ask：若上游已 deny/cancel，保持上游结论。需确认 rc.4 的瀑布顺序与预期一致（#9、#10）。
   - 2026-10-28 rc.4 实测：违规方案直接 deny 不弹确认（#9），合规方案弹确认（#10），与预期一致。
 - `rescue-audit` 根据错误码和错误信息正则判断 issued / denied / failed（`src/audit/record.ts`）。DSH 改错误文案会导致误判，#11、#12 要核对。

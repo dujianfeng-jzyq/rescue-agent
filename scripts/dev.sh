@@ -3,6 +3,7 @@
 #
 #   scripts/dev.sh                       默认场景（.env 里的 RESCUE_SIM_SCENARIO）
 #   scripts/dev.sh --local-llm           改用本地化部署的大模型（profiles/local-llm.patch.yml）
+#   scripts/dev.sh --v2                  第二版主预设（profiles/v2.patch.yml，P4 之前是可选叠加）
 #   RESCUE_SIM_SCENARIO=s4-escalation scripts/dev.sh
 #
 # 退出 DSH 后 MCP 服务继续运行，用 scripts/mcp-down.sh 停止。
@@ -18,10 +19,15 @@ mkdir -p var/audit
 scripts/mcp-up.sh
 
 EXTRA=()
-if [ "${1:-}" = "--local-llm" ]; then
-  : "${RESCUE_LLM_BASE_URL:?未设置 RESCUE_LLM_BASE_URL}" "${RESCUE_LLM_MODEL:?未设置 RESCUE_LLM_MODEL}"
-  EXTRA+=(--patch profiles/local-llm.patch.yml)
-  shift
-fi
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --local-llm)
+      : "${RESCUE_LLM_BASE_URL:?未设置 RESCUE_LLM_BASE_URL}" "${RESCUE_LLM_MODEL:?未设置 RESCUE_LLM_MODEL}"
+      EXTRA+=(--patch profiles/local-llm.patch.yml); shift ;;
+    --v2)
+      EXTRA+=(--patch profiles/v2.patch.yml); shift ;;
+    *) break ;;
+  esac
+done
 
 exec dsh rescue "${EXTRA[@]}" --no-open "$@"   # --patch 是启动器参数，必须在 app 参数之前
