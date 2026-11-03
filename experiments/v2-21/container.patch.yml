@@ -1,0 +1,5 @@
+# 容器里没有 xdg-user-dir，DSH 找不到“文档”目录，建不了默认工作区（网页端报 Unable to create default workspace）。
+# 显式指定（演示部署镜像 P5 同样要配）。
+- id: workspace-controller
+  config:
+    documentsDirectory: /home/node/Documents

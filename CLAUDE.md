@@ -25,6 +25,9 @@ make dev-eval                 # 同 make dev，但指令台账、研判快照、
 make schema                   # 契约模型改动后重新导出 JSON Schema（CI 会检查）
 python3 scripts/sim.py state|reset <场景>|advance <小时>|apply <处置>   # 模拟控制台
 make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API_KEY）
+scripts/dev.sh --v2           # 同上，用第二版主预设（profiles/v2.patch.yml）
+make skills-check             # 第二版技能自检（结构、import、样例）
+python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清单取一次证据（Python 采集小工具）
 ```
 
 单个包的测试：`cd mcp && uv run pytest fire-model/tests -q`。
@@ -81,5 +84,7 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
 - 2026-11-03：第二版设计定稿（`docs/design-v2.md` 第五稿），ADR 0007；验证清单 #20（插件登记后台任务）、#22（插件起 Python 子进程）、#23（唤醒失败的补救）通过，#21（容器内的 bash 沙箱）待 P0 验证。实验 0001（技能驱动 vs 代码工作流）封存。验证代码在 `spike/job-watch`、`spike/plugin-subprocess` 分支，不合入。
 - 技能脚本由插件起的子进程不在沙箱里、默认继承 DSH 进程的密钥：`runScript` 必须按白名单传环境变量、设超时；脚本是受信代码（#22）。会话工作区所有会话共用一个目录，导出按会话分子目录。
 - provider 重试要把 `STREAM_CLOSED` 加进 `retryPolicy.retryableCodes`（默认不重试，#23）。
-- 进行中：P0（契约 0.7.0、证据插件骨架、Python 采集小工具、技能规范与自检运行器、令牌拆分、主预设草稿、#21）。
+- P0（2026-11-03）：契约 0.7.0（`Record` 等，`snapshot_id` 的改名留到 P2）；规范化 JSON（RFC 8785）TS/Python 两份实现、共用样例；技能规范 `skills/README.md` 与自检 `make skills-check`；证据插件骨架 `dsh-bundle/src/evidence/`（MCP 客户端、记录、runScript、采集、get_record、export_record）与 Python 采集小工具 `rescue_contract.collect`（一致性测试逐字节相同）；令牌拆分（`RESCUE_MCP_<服务>_TOKEN`、`RESCUE_SIM_CONTROL_TOKEN`，退回 `RESCUE_MCP_TOKEN`）；主预设草稿 `profiles/v2.patch.yml`（`scripts/dev.sh --v2`）；provider 重试加 `STREAM_CLOSED`；#21 通过（容器里 Docker 默认配置下 DSH 用 Landlock，权限与本机一致）。P0 完成。
+- 预设里提供 cordis 服务的插件必须放进带 `isolate` 的 `cordis:group`（否则新建会话失败）；固定流程插件放进同一组才能注入 `rescueEvidence`。
+- 技能脚本用 `python -E -s -B -X utf8` 运行，不用 `-I`（不把脚本目录加进 sys.path）；`-E` 忽略 PYTHON* 环境变量。
 
