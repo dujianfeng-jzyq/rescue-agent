@@ -1,0 +1,116 @@
+{
+  "$defs": {
+    "NextAction": {
+      "additionalProperties": false,
+      "description": "结果卡片上的可选下一步。tool 为空时只是文字建议。",
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool"
+        },
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "NextAction",
+      "type": "object"
+    },
+    "RecordFile": {
+      "additionalProperties": false,
+      "description": "记录附带的文件（风险图、报告文件等）。按记录编号和文件名下载，不按路径。",
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "media_type": {
+          "title": "Media Type",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "media_type",
+        "size",
+        "sha256"
+      ],
+      "title": "RecordFile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "固定流程和风险检测工具返回的结构化结果；网页端和以后的对外接口各自呈现。",
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "record_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Record Ids",
+      "type": "array"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/RecordFile"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "next_actions": {
+      "items": {
+        "$ref": "#/$defs/NextAction"
+      },
+      "title": "Next Actions",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "title",
+    "summary"
+  ],
+  "title": "ResultCard",
+  "type": "object",
+  "$comment": "rescue-contract 0.7.0"
+}

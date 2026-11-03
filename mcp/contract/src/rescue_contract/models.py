@@ -11,9 +11,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, WithJsonSchema
+from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, WithJsonSchema, model_validator
 
-CONTRACT_VERSION = "0.6.0"
+CONTRACT_VERSION = "0.7.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -431,3 +431,136 @@ class Snapshot(_Model):
     result: dict[str, Any]  # 工作流的结构化结果
     report_markdown: str | None = None  # 由模板生成的报告事实部分
     parent_ids: list[str] = Field(default_factory=list)  # 依赖的上游快照
+
+
+# ── 第二版：记录与接口扩展点（docs/design-v2.md 4.3、4.4、4.11；ADR 0007）────────
+# 记录由证据插件（DSH 进程，TypeScript）写入，actions 等 Python 侧只读并重算 content_sha256 核对。
+# 第一版的 Snapshot 和各指令的 snapshot_id 在迁移完成前保留；P2 起指令改为引用 record_id。
+
+
+class Origin(_Model):
+    """谁触发的。记录、台账、审计都带上，以后按渠道、调用方查询和限权。"""
+
+    channel: Literal["web", "api", "subagent", "eval"]
+    trigger: Literal["chat", "watch", "button", "flow"]  # 提问、持续检测、界面按钮（以后）、固定流程内部
+    caller: str | None = None  # 用户、后台任务编号、appId
+    conversation_id: str | None = None  # 本系统的会话编号（不是 DSH 的内部编号）
+
+
+class RecordKind(StrEnum):
+    EVIDENCE = "evidence"  # 按采集清单取到的数据
+    RESULT = "result"  # 技能脚本的计算结果
+    REPORT = "report"  # 按模板生成的报告
+
+
+RECORD_PREFIX: dict[RecordKind, str] = {RecordKind.EVIDENCE: "EV", RecordKind.RESULT: "RS", RecordKind.REPORT: "RP"}
+
+# <前缀>-<矿井时间 yyyymmddThhmmss>-<6 位小写字母或数字>，按时间可排序、不可猜测
+RECORD_ID_PATTERN = r"^(EV|RS|RP)-\d{8}T\d{6}-[a-z0-9]{6}$"
+
+Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
+class RecordFile(_Model):
+    """记录附带的文件（风险图、报告文件等）。按记录编号和文件名下载，不按路径。"""
+
+    name: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+    media_type: str
+    size: int = Field(ge=0)
+    sha256: Sha256
+
+
+class Record(_Model):
+    """证据、结果或报告。只新增、不修改；报告和指令按编号引用，发布前重算 content_sha256。
+
+    content_sha256 = sha256(canonical_json(content))，规范化方式见 rescue_contract.canonical（RFC 8785）；
+    content 为字符串时是其 UTF-8 字节的 sha256。
+    """
+
+    record_id: str = Field(pattern=RECORD_ID_PATTERN)
+    kind: RecordKind
+    panel: str | None = None  # 全矿性的检测可以没有工作面
+    as_of: MineTime  # 取数时的矿井时间
+    created_at: AwareDatetime  # 系统时间（带时区），仅用于审计
+    origin: Origin
+    # 证据：采集清单和参数；结果：skill、skill_version、script、script_sha256、inputs、input_sha256；
+    # 报告：skill、template、template_sha256
+    source: dict[str, Any]
+    content: dict[str, Any] | str
+    content_sha256: Sha256
+    files: list[RecordFile] = Field(default_factory=list)
+    parent_ids: list[str] = Field(default_factory=list)  # 依赖的上游记录
+
+    @model_validator(mode="after")
+    def _prefix_matches_kind(self) -> Record:
+        if not self.record_id.startswith(RECORD_PREFIX[self.kind] + "-"):
+            raise ValueError(f"记录编号 {self.record_id} 的前缀与类型 {self.kind} 不符（应为 {RECORD_PREFIX[self.kind]}-）")
+        return self
+
+
+class NextAction(_Model):
+    """结果卡片上的可选下一步。tool 为空时只是文字建议。"""
+
+    label: str
+    tool: str | None = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResultCard(_Model):
+    """固定流程和风险检测工具返回的结构化结果；网页端和以后的对外接口各自呈现。"""
+
+    title: str
+    summary: str  # 结论摘要，数值照抄记录
+    record_ids: list[str] = Field(default_factory=list)
+    files: list[RecordFile] = Field(default_factory=list)  # 交付的文件（所属记录见 record_ids）
+    next_actions: list[NextAction] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)  # 数据缺失、阶段未生成等需要提醒的事
+
+
+class HumanInputItem(_Model):
+    field: str  # 方案现场条件用 HumanInput.field 的取值
+    label: str
+    description: str | None = None
+    value_type: Literal["bool", "number", "text", "choice"]
+    options: list[str] = Field(default_factory=list)  # value_type 为 choice 时的可选值
+    allow_text: bool = False  # 除选项外是否允许填写文字
+    blocking: bool = True  # 缺了它是否影响红线、必须先补
+
+
+class HumanInputRequest(_Model):
+    """固定流程缺人工输入时返回的结构化问题。主预设转成 ask_user；无人值守的入口原样转给调用方。"""
+
+    flow: str  # 哪个固定流程，如 draft_sealing_plan
+    reason: str
+    items: list[HumanInputItem] = Field(min_length=1)
+    record_ids: list[str] = Field(default_factory=list)  # 已经生成的记录，重新运行时可复用
+
+
+class ApprovalCheck(_Model):
+    name: str  # 如“现场条件与记录一致”“记录时效”“红线”
+    ok: bool
+    detail: str | None = None
+
+
+class ApprovalSummary(_Model):
+    """审批弹窗的内容：由预检结果生成，不透出工具原始参数。"""
+
+    action: str  # 要做什么，如“下发 1201 采空区封闭方案”
+    tool: str
+    record_ids: list[str] = Field(default_factory=list)
+    checks: list[ApprovalCheck] = Field(default_factory=list)
+    human_items: list[str] = Field(default_factory=list)  # 需要确认人把关的人工确认项
+    override_reason: str | None = None
+
+
+class FlowEvent(_Model):
+    """固定流程的阶段事件，写进运行记录；以后转成对外接口的过程事件。"""
+
+    flow: str
+    run_id: str
+    stage: str
+    status: Literal["started", "completed", "failed", "skipped"]
+    at: AwareDatetime
+    record_ids: list[str] = Field(default_factory=list)
+    detail: str | None = None
+

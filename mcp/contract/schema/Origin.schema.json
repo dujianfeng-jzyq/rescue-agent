@@ -1,0 +1,57 @@
+{
+  "additionalProperties": false,
+  "description": "谁触发的。记录、台账、审计都带上，以后按渠道、调用方查询和限权。",
+  "properties": {
+    "channel": {
+      "enum": [
+        "web",
+        "api",
+        "subagent",
+        "eval"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "trigger": {
+      "enum": [
+        "chat",
+        "watch",
+        "button",
+        "flow"
+      ],
+      "title": "Trigger",
+      "type": "string"
+    },
+    "caller": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Caller"
+    },
+    "conversation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Conversation Id"
+    }
+  },
+  "required": [
+    "channel",
+    "trigger"
+  ],
+  "title": "Origin",
+  "type": "object",
+  "$comment": "rescue-contract 0.7.0"
+}

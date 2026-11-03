@@ -29,6 +29,13 @@ EXPORTED = [
     "EvacuationNotice",
     "Escalation",
     "Snapshot",
+    # 第二版（0.7.0）：证据插件按这些 schema 校验后写入记录；固定流程、审批插件按它们组织结构化结果
+    "Record",
+    "Origin",
+    "ResultCard",
+    "HumanInputRequest",
+    "ApprovalSummary",
+    "FlowEvent",
 ]
 
 

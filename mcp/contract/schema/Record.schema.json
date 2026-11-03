@@ -1,0 +1,189 @@
+{
+  "$defs": {
+    "Origin": {
+      "additionalProperties": false,
+      "description": "谁触发的。记录、台账、审计都带上，以后按渠道、调用方查询和限权。",
+      "properties": {
+        "channel": {
+          "enum": [
+            "web",
+            "api",
+            "subagent",
+            "eval"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "trigger": {
+          "enum": [
+            "chat",
+            "watch",
+            "button",
+            "flow"
+          ],
+          "title": "Trigger",
+          "type": "string"
+        },
+        "caller": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caller"
+        },
+        "conversation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversation Id"
+        }
+      },
+      "required": [
+        "channel",
+        "trigger"
+      ],
+      "title": "Origin",
+      "type": "object"
+    },
+    "RecordFile": {
+      "additionalProperties": false,
+      "description": "记录附带的文件（风险图、报告文件等）。按记录编号和文件名下载，不按路径。",
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "media_type": {
+          "title": "Media Type",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "media_type",
+        "size",
+        "sha256"
+      ],
+      "title": "RecordFile",
+      "type": "object"
+    },
+    "RecordKind": {
+      "enum": [
+        "evidence",
+        "result",
+        "report"
+      ],
+      "title": "RecordKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "证据、结果或报告。只新增、不修改；报告和指令按编号引用，发布前重算 content_sha256。\n\ncontent_sha256 = sha256(canonical_json(content))，规范化方式见 rescue_contract.canonical（RFC 8785）；\ncontent 为字符串时是其 UTF-8 字节的 sha256。",
+  "properties": {
+    "record_id": {
+      "pattern": "^(EV|RS|RP)-\\d{8}T\\d{6}-[a-z0-9]{6}$",
+      "title": "Record Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/RecordKind"
+    },
+    "panel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Panel"
+    },
+    "as_of": {
+      "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+      "title": "As Of",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "origin": {
+      "$ref": "#/$defs/Origin"
+    },
+    "source": {
+      "additionalProperties": true,
+      "title": "Source",
+      "type": "object"
+    },
+    "content": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "Content"
+    },
+    "content_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Sha256",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/RecordFile"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "parent_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Parent Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "record_id",
+    "kind",
+    "as_of",
+    "created_at",
+    "origin",
+    "source",
+    "content",
+    "content_sha256"
+  ],
+  "title": "Record",
+  "type": "object",
+  "$comment": "rescue-contract 0.7.0"
+}

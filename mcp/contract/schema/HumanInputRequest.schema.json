@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "HumanInputItem": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "value_type": {
+          "enum": [
+            "bool",
+            "number",
+            "text",
+            "choice"
+          ],
+          "title": "Value Type",
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Options",
+          "type": "array"
+        },
+        "allow_text": {
+          "default": false,
+          "title": "Allow Text",
+          "type": "boolean"
+        },
+        "blocking": {
+          "default": true,
+          "title": "Blocking",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "field",
+        "label",
+        "value_type"
+      ],
+      "title": "HumanInputItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "固定流程缺人工输入时返回的结构化问题。主预设转成 ask_user；无人值守的入口原样转给调用方。",
+  "properties": {
+    "flow": {
+      "title": "Flow",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/HumanInputItem"
+      },
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    },
+    "record_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Record Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "flow",
+    "reason",
+    "items"
+  ],
+  "title": "HumanInputRequest",
+  "type": "object",
+  "$comment": "rescue-contract 0.7.0"
+}

@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "description": "固定流程的阶段事件，写进运行记录；以后转成对外接口的过程事件。",
+  "properties": {
+    "flow": {
+      "title": "Flow",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "stage": {
+      "title": "Stage",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "started",
+        "completed",
+        "failed",
+        "skipped"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "record_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Record Ids",
+      "type": "array"
+    },
+    "detail": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detail"
+    }
+  },
+  "required": [
+    "flow",
+    "run_id",
+    "stage",
+    "status",
+    "at"
+  ],
+  "title": "FlowEvent",
+  "type": "object",
+  "$comment": "rescue-contract 0.7.0"
+}

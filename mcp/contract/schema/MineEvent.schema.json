@@ -62,5 +62,5 @@
   ],
   "title": "MineEvent",
   "type": "object",
-  "$comment": "rescue-contract 0.6.0"
+  "$comment": "rescue-contract 0.7.0"
 }

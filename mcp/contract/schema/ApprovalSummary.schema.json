@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "ApprovalCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        }
+      },
+      "required": [
+        "name",
+        "ok"
+      ],
+      "title": "ApprovalCheck",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "审批弹窗的内容：由预检结果生成，不透出工具原始参数。",
+  "properties": {
+    "action": {
+      "title": "Action",
+      "type": "string"
+    },
+    "tool": {
+      "title": "Tool",
+      "type": "string"
+    },
+    "record_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Record Ids",
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/ApprovalCheck"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "human_items": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Human Items",
+      "type": "array"
+    },
+    "override_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Override Reason"
+    }
+  },
+  "required": [
+    "action",
+    "tool"
+  ],
+  "title": "ApprovalSummary",
+  "type": "object",
+  "$comment": "rescue-contract 0.7.0"
+}
