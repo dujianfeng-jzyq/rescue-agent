@@ -147,7 +147,10 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float, app
                 btn.first.click()
                 time.sleep(3)  # 等 approval/decided 写入日志，避免重复点击
                 continue
-        if all(s.turns_settled() for s in sessions) and time.time() - last_change >= quiet_s:
+        # 总指挥委派后结束本轮等结果时，子 Agent 结束到总指挥被唤醒之间所有会话都暂时“已结束”：
+        # 子 Agent 的最后回合比总指挥的最后回合结束得晚，说明它的结论还没被总指挥处理，继续等
+        pending = any(c.last_time("turn/end") > root.last_time("turn/end") for c in sessions if c is not root)
+        if all(s.turns_settled() for s in sessions) and not pending and time.time() - last_change >= quiet_s:
             return root, "settled"
         # 指挥 Agent 停下来问人（ask_user_question）也是正常收尾：评测不代答，按已有输出判定
         # 子 Agent 还在工作时提问（如“要不要先给出要点”）不算收尾，等子 Agent 结束

@@ -30,6 +30,9 @@
 - snapshot_referenced: true 每次 actions 调用的参数里都有 snapshot_id，且都是本次运行中 workflow 返回过的快照
 - no_issue: true            整次运行没有任何 actions 指令发布成功（回执 status=issued）
 - rejection_reported: true  总指挥协调的最后回复（含最后向人提的问题）写明指令被拒绝，且没有声称已发布或已下发
+- no_wait_polling: true     有子 Agent 在后台运行时，总指挥协调只调用零碎读数工具（时钟、最新读数、值守事件、报警复查、
+                            资源列表、不存在的工具等）的轮次不超过 2 轮（写整数时为允许的轮次）。delegate 立即返回，子 Agent
+                            完成后系统把结果发回；只剩等待时应结束本轮，轮询会让每一轮都重读整个上下文（见 Session.wait_polling）
 
 人工确认的放行与拒绝由评测运行器按用例的 approvals 操作（run.py），判定只读会话日志里的
 approval/asked、approval/decided 事件和 actions 工具结果，不读指令台账。
@@ -170,6 +173,35 @@ class Session:
         ends = sum(e["type"] == "turn/end" for e in self.events)
         return starts > 0 and starts == ends
 
+    def wait_polling(self) -> list[dict]:
+        """有子 Agent 在后台运行时，只调用了零碎读数工具的轮次（等结果时轮询）。
+
+        delegate 立即返回，子 Agent 完成后系统把结果发回父级；只剩等待时应结束本轮。等待期间调用的
+        委派、发消息、问人、actions、workflow（值守事件除外）、kb、技能工具算正常工作；其余（时钟、
+        最新读数、值守事件、报警复查、资源列表、不存在的工具等）算轮询。返回 [{step, tools, tokens}]。
+        """
+        running: set[str] = set()
+        out = []
+        for e in self.events:
+            t, d = e["type"], e.get("data") or {}
+            if t == "subagent/catalog":
+                running.add(d.get("childId", ""))
+            elif t == "tool/call" and d.get("name") == "send_message":
+                with contextlib.suppress(ValueError, AttributeError):
+                    running.add(json.loads(d.get("arguments") or "{}").get("agent_id", ""))
+            elif t in ("user/message", "agent/inbox/spliced"):
+                for m in _FINISHED.finditer(json.dumps(d, ensure_ascii=False)):
+                    running.discard(m.group(1))
+            elif t == "assistant/message" and running:
+                names = [c.get("name", "") for c in d["message"]["content"] if c.get("type") not in ("text", "thinking", "reasoning")]
+                if names and not any(_working_tool(n) for n in names):
+                    out.append({"tools": names, "tokens": (d.get("usage") or {}).get("totalTokens", 0)})
+        return out
+
+    def last_time(self, event_type: str) -> int:
+        """某类事件最后一次出现的时间（毫秒）；没有时为 0。"""
+        return max((e.get("time", 0) for e in self.events if e["type"] == event_type), default=0)
+
     def tokens(self) -> int:
         return sum((e["data"].get("usage") or {}).get("totalTokens", 0) for e in self.events if e["type"] == "assistant/message")
 
@@ -177,6 +209,16 @@ class Session:
         yield self
         for c in self.children:
             yield from c.walk()
+
+
+_FINISHED = re.compile(r"Background subagent ([0-9a-f-]{36}) finished")
+_WORKING = ("delegate", "send_message", "interrupt_agent", "ask_user_question", "skill", "todo_write")
+
+
+def _working_tool(name: str) -> bool:
+    if name in _WORKING or name.startswith(("mcp__actions__", "mcp__kb__")):
+        return True
+    return name.startswith("mcp__workflow__") and name != "mcp__workflow__get_monitor_events"
 
 
 def read_events(path: Path) -> list[dict]:
@@ -430,6 +472,17 @@ def grade(root: Session, checks: dict) -> dict:
         want = [want] if isinstance(want, str) else want
         got = [c.preset for c in sessions if c is not root]
         results["delegates_to"] = {"ok": all(w in got for w in want), "detail": got}
+
+    if checks.get("no_wait_polling") is not None and checks.get("no_wait_polling") is not False:
+        # true：允许 2 轮（偶尔复查一次报警等）；整数：允许的轮次
+        limit = 2 if checks["no_wait_polling"] is True else int(checks["no_wait_polling"])
+        polls = root.wait_polling()
+        share = sum(p["tokens"] for p in polls) / max(root.tokens(), 1)
+        results["no_wait_polling"] = {
+            "ok": len(polls) <= limit,
+            "detail": [f"等待子 Agent 期间轮询 {len(polls)} 轮（允许 {limit}），占总指挥 {share:.0%} token"]
+            + [f"{'、'.join(p['tools'])}" for p in polls[:8]],
+        }
 
     if checks.get("no_actions"):
         used = sorted({n for n in all_calls if n.startswith("mcp__actions__")})

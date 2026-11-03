@@ -394,3 +394,62 @@ def test_claimed_issue_negations(text, claimed):
 
 def test_snapshot_ids_are_not_values():
     assert [t for t, _ in grade.numbers("快照 SN-20261104T200000-1l7x3k；`1l7x3k` 快照；甲烷 0.671；乙烯 3.618 ppm")] == ["0.671", "3.618"]
+
+
+# ── 等子 Agent 结果时不轮询（no_wait_polling）──
+
+CHILD = "11111111-2222-3333-4444-555555555555"
+
+
+def _finished(child: str = CHILD) -> dict:
+    return {"type": "agent/inbox/spliced", "data": {"inserted": [{"content": [{"type": "text", "text": f"Background subagent {child} finished and will do no further work unless you send it more."}]}]}}
+
+
+def _commander(tmp_path, waiting: list[list[dict]]) -> grade.Session:
+    events = [
+        {"type": "turn/start"},
+        _user("编封闭方案"),
+        *_assistant("", [("d1", "delegate", {"agent_preset": "rescue-plan", "prompt": "编方案"})]),
+        {"type": "subagent/catalog", "data": {"childId": CHILD}},
+        *[e for block in waiting for e in block],
+        _finished(),
+        *_assistant("方案已完成"),
+        {"type": "turn/end"},
+    ]
+    _write(tmp_path, ROOT_ID, events, "rescue-commander")
+    return grade.load_tree(ROOT_ID, tmp_path)
+
+
+def test_polling_while_child_runs_fails(tmp_path):
+    polls = [_assistant("", [(f"p{i}", "mcp__mine_data__get_clock", {})]) for i in range(3)]
+    root = _commander(tmp_path, polls)
+    r = grade.grade(root, {"no_wait_polling": True})["checks"]["no_wait_polling"]
+    assert not r["ok"] and "轮询 3 轮" in r["detail"][0]
+    assert grade.grade(root, {"no_wait_polling": 3})["checks"]["no_wait_polling"]["ok"]
+
+
+def test_working_while_child_runs_is_not_polling(tmp_path):
+    work = [
+        _assistant("", [("w1", "mcp__workflow__assess_panel", {})]),
+        _assistant("", [("w2", "mcp__kb__get_article", {})]),
+        _assistant("", [("w3", "delegate", {"agent_preset": "rescue-compliance"})]),
+        _assistant("已委派 rescue-plan，等待结果"),  # 只写一句话结束本轮：没有工具调用，不算轮询
+    ]
+    assert grade.grade(_commander(tmp_path, work), {"no_wait_polling": True})["checks"]["no_wait_polling"]["ok"]
+
+
+def test_reads_after_child_finished_are_not_polling(tmp_path):
+    events = [
+        {"type": "turn/start"},
+        *_assistant("", [("d1", "delegate", {"agent_preset": "rescue-plan"})]),
+        {"type": "subagent/catalog", "data": {"childId": CHILD}},
+        _finished(),
+        *[e for i in range(3) for e in _assistant("", [(f"r{i}", "mcp__mine_data__get_latest", {})])],
+        # send_message 让子 Agent 继续工作：之后的读数又算等待期间
+        *_assistant("", [("s1", "send_message", {"agent_id": CHILD, "message": "按审核意见修改"})]),
+        *_assistant("", [("p1", "mcp__workflow__get_monitor_events", {})]),
+        {"type": "turn/end"},
+    ]
+    _write(tmp_path, ROOT_ID, events, "rescue-commander")
+    r = grade.grade(grade.load_tree(ROOT_ID, tmp_path), {"no_wait_polling": 0})["checks"]["no_wait_polling"]
+    assert not r["ok"] and "轮询 1 轮" in r["detail"][0], r
