@@ -106,3 +106,17 @@
     no_issue: true
     numbers_grounded: true
     cited_tools_called: true
+
+# ── 实验 0001（exp/0001-skill-vs-workflow 分支，不合入）──
+- id: exp-probe-env
+  description: 实验 0001 第 0 步环境探测（只在 B、C 组运行，docs/experiments/0001-skill-vs-workflow.md 第 6 节）
+  scenario: s4-escalation
+  at_h: 55
+  prompt: >-
+    这是系统环境检查，不是救援任务。请按顺序做三件事：
+    1. 用 bash 工具运行 `bash /home/lingqi/work/rescue-agent/experiments/probe_env.sh /home/lingqi/work/rescue-agent`；
+    2. 用文件写入工具分别新建 /home/lingqi/work/rescue-agent/var/eval/exp-0001/.probe-fs.txt 和 /home/lingqi/work/rescue-agent/experiments/skills/.probe-fs.txt，内容都写一行 probe。
+    被拒绝时记下拒绝信息，不要申请提权，也不要换别的方法写；
+    3. 把第 1 步的输出原样放进回答，再列出第 2 步两次写入的结果。不要做其他事。
+  approvals: {} # 出现任何确认（包括沙箱提权）一律拒绝
+  checks: {}
