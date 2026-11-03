@@ -1,6 +1,6 @@
 # 0003 红线引擎放在 Python 契约包，自查工具放在 kb
 
-状态：采纳
+状态：采纳；“自查工具放在 kb”已被 [0007](0007-skills-plugins-fixed-flows.md) 取代（2026-11-03）：自查改为 actions 的只读工具 `precheck_plan`，知识库改为 DSH 插件。规则只实现一次仍有效。
 
 ## 背景
 
