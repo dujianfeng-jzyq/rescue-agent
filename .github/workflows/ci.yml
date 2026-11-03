@@ -20,6 +20,8 @@ jobs:
           git diff --exit-code mcp/contract/schema || (echo "契约模型已改但 schema 未重新导出：make schema" && exit 1)
       - name: 基线评测
         run: uv run --project mcp python eval/baseline.py
+      - name: 技能自检
+        run: uv run --project mcp python -m rescue_contract.skills check
       - name: 服务冒烟
         run: |
           RESCUE_SIM_CONTROL_URL=http://127.0.0.1:8101/sim scripts/mcp-up.sh

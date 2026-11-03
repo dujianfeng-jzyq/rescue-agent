@@ -1,5 +1,5 @@
 # 常用命令入口。具体说明见 README.md。
-.PHONY: setup setup-py dev dev-eval up down smoke test test-py test-ts lint check eval eval-agent schema sim-state clean
+.PHONY: setup setup-py dev dev-eval up down smoke test test-py test-ts lint check skills-check eval eval-agent schema sim-state clean
 
 UV := uv run --project mcp
 
@@ -26,10 +26,13 @@ test-ts:
 	cd dsh-bundle && pnpm test && pnpm typecheck
 lint:
 	cd mcp && uv run ruff check . ../eval ../scripts
-check:            ## 提交前：lint + 全部测试 + patch 离线校验 + 基线评测
-	$(MAKE) lint test
+check:            ## 提交前：lint + 全部测试 + 技能自检 + patch 离线校验 + 基线评测
+	$(MAKE) lint test skills-check
 	python3 scripts/check_patches.py
 	$(UV) python eval/baseline.py
+
+skills-check:     ## 第二版技能自检：结构、import、全部样例（skills/README.md）
+	$(UV) python -m rescue_contract.skills check
 
 eval:             ## 确定性基线评测（不需要大模型）
 	$(UV) python eval/baseline.py
