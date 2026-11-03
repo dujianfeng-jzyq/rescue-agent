@@ -25,6 +25,7 @@
 | 17 | `.env` 加载 | 不 export、只写 `.env` 时启动 | 确认 DSH_* 必须 export 的说法；如有变化更新 `scripts/dev.sh` | ✓ 2026-10-28：`DSH_HOME` 只写在 `.env` 时 DSH 找不到 rescue 配置档；export 后正常。`scripts/dev.sh` 无需改 |
 
 | 18 | DSH 自带工作流（可选能力，评估是否采用） | 叠加 patch 让 rescue-commander 挂载 `dsh-workflow-ptc` + `dsh-tool-workflow`（见下方“#18”），经网页端让它用 `workflow` 工具运行固定脚本：子 Agent 报告工具和人设、调 fire_model、调 kb、借 delegate 转 rescue-compliance、提交 publish_warning | 记录能否运行、子 Agent 用哪个预设、结构化输出是否可靠、人工确认是否照常 | ✓ 2026-11-02（评估完成，**不采用**，见 ADR 0006）：workspace-write 下能运行；子 Agent 只能用调用方自己的预设（有 actions、没有 kb），不能再委派；结构化输出 5/5 符合 schema；子 Agent 调 actions 时审批被强制为 never，未弹确认即被拒，审计记成“用户拒绝”。详见下方“#18” |
+| 19 | 插件工具编排（确定性工具调用 + 指定预设的子 Agent） | 验证分支 `spike/plugin-workflow`：验证插件 `dsh-bundle/src/spike` 注册工具 `spike_plan_review`，叠加 patch `dsh-bundle/spike/plan-review.patch.yml` 挂到 rescue-commander；评测用例 `spike-plan-review`（s4 第 60 小时）让总指挥调用它（见下方“#19”） | 插件里能调 MCP 工具、能按预设起子 Agent 并拿到结构化结果、审批和审计照常、网页端能显示运行过程 | ✓ 2026-11-02：四项都成立；子 Agent 照抄整份方案作工具参数时 DeepSeek 偶发生成坏 JSON，改为插件做红线检查后 3/3 正常。详见下方“#19” |
 
 ## 已知需要关注的点
 
@@ -72,3 +73,14 @@
   - 结构化输出：5 个子 Agent 都按 schema 返回；取预警等级的子 Agent 照抄 `level=red`、`stage_name=加速氧化`，与工具结果一致；每个子 Agent 6–10 秒。
   - 人工确认：子会话日志里 `approval/policy` 为 `{"policy": "never", "source": "delegation"}`。子 Agent 调 `publish_warning` 时红线预检通过、记了 `approval/asked`，随即 `approval/decided: rejected`，网页端没有弹确认；`var/eval/audit/tool-actions.jsonl` 2026-11-02T16:24:15Z 一条 denied，detail 为 `the user rejected tool ...`，与真人拒绝无法区分（与“Full access 下指令一律被自动拒绝”同类）。指令发不出去，不会绕过确认，但复盘时会误判为人拒绝。
   - 结论：不采用（ADR 0006）。确定性流程改为 MCP 工具实现（`docs/workflow-design.md`）。以后 DSH 版本若支持 `agent()` 指定预设，再重新评估。
+  - 更正（2026-11-02，见 #19）：`workflow` 工具的参数就是脚本，可以要求模型原样提交固定脚本，并不是“每次现写”；DSH 没有“保存的工作流”，但插件可以用 `ctx.workflowEngine.start({ script, meta, args, parent })` 运行仓库里审定过的脚本。“`agent()` 不能指定预设”的原因是 `dsh-workflow-ptc` 的 `startChild` 只传 prompt、schema、provider、model，没有把 `agentPreset` 传给 `subagents.startActivation`（后者支持）。
+- #19 插件工具编排（2026-11-02，s4 第 60 小时，deepseek-official/deepseek-flash，验证分支 `spike/plugin-workflow`）：
+  - 做法：验证插件在工具 `spike_plan_review` 里依次 ① 用 `ctx.tools.execute` 调 `mcp__workflow__draft_plan`、`mcp__mine_data__get_clock` 和总指挥没有挂载的 `mcp__kb__check_plan_redlines`；② 直接 POST actions 的 `/redlines/check` 做红线检查；③ 用 `ctx.subagents.startActivation({ provider: 'spawn', delivery: 'caller', request: { agentPreset: 'rescue-compliance', outputSchema, parent, prompt } })` 起合规审核子 Agent；④ 往调用方会话写 `tool-workflow/run-start`、`agent-start`、`agent-end`、`run-end`；⑤ 经 `ctx.tools.execute` 调 `mcp__actions__issue_sealing_plan`（评测运行器在确认弹窗点拒绝）。
+  - 插件调 MCP 工具：正常，结果是 `{ content, structuredContent }`，draft_plan 约 0.75 秒。带不带 `parent`（调用方的 `exec.token`）都能调。只能调调用方 Agent 范围内的工具：总指挥调 `mcp__kb__check_plan_redlines` 返回 `UNKNOWN_TOOL`。
+  - 审批与审计：经插件提交的 actions 调用照常走 `tools/pre-execute`：rescue-approval 预检通过后在总指挥会话记 `approval/asked`（reason 含人工确认项），网页端弹确认，拒绝后记 `approval/decided: rejected`；rescue-audit 记入 `var/eval/audit/tool-actions.jsonl`，call_id 为 `<外层 callId>:spike:4`。
+  - 会话日志：插件内部的工具调用**不写** `tool/call`、`tool/result`，总指挥会话只有外层 `spike_plan_review` 一条。`grade.py` 的 tools_called 等检查看不到这些步骤；正式实现要自己记录步骤（写快照或会话事件）。
+  - 指定预设的子 Agent：子会话 `agent-preset/selected: rescue-compliance`，工具为 kb 全套 + skill + structured_output，没有 actions；`approval/policy: never (delegation)`，与 delegate 相同；父会话为总指挥，层数与 delegate 委派的子 Agent 相同。结构化输出（`outputSchema`）走 `structured_output` 工具，正常结束的 4 次都按 schema 返回。
+  - 坏 JSON：先让子 Agent 自己调 `check_plan_redlines`（要把整份方案 JSON 抄进工具参数），4 次中 3 次子 Agent 以 `MALFORMED_RESPONSE: DeepSeek Messages stream: tool input is invalid JSON` 结束（与 `s4-sealing-plan` 的“接口错误”同类）。改为插件直接调 `/redlines/check`、把结论和方案放进提示词、要求子 Agent 不调 `check_plan_redlines` 之后，3/3 正常结束，子 Agent 都没有调它；引用的条文全部出现在本次 kb 检索结果里。单次 87–117 秒，总指挥约 4 万 token（主要是系统提示词），合规子 Agent 2.4–5.7 万 token。
+  - 网页端：`dsh-client-ui-workflow-run` 认插件写的 `tool-workflow/*` 事件，工具调用下面显示运行节点（“spike-plan-review · 1 member”），展开为阶段“合规审核”和成员“合规审核（rescue-compliance）Completed”。只显示子 Agent 成员，确定性步骤和 `phase()`/`log()` 不显示。
+  - 其他：工具返回值必须是无损 JSON，含值为 `undefined` 的字段会被拒（`INVALID_TOOL_OUTPUT: value is not lossless JSON`）。插件改动后要重启 DSH。
+  - 结论：“插件工具按代码顺序编排确定性工具调用和指定预设的子 Agent，指令仍由总指挥提交、人工确认”在 rc.4 上可行。红线检查这类确定性步骤由插件直接做，子 Agent 不要抄写大段 JSON。
