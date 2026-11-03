@@ -3,7 +3,7 @@
  * 插件入口 index.ts 把它包成 cordis 服务 `rescueEvidence`，供固定流程插件在进程内调用，并注册给模型的只读工具。
  *
  * 插件本身不含领域判据：采什么数据（collect.yaml）、怎么算（scripts/）都在技能目录里（design-v2 4.3）。
- * TODO(P1)：renderReport（技能模板 + 记录 → 报告记录）；check_mine 等工具。
+ * 报告由 renderReport 用技能模板（templates/<名>.md，规则见 template.ts）和记录生成，存为报告记录。
  */
 
 import { createHash, randomInt } from 'node:crypto'
@@ -13,6 +13,7 @@ import { join, relative } from 'node:path'
 import { collect, parseCollectSpec, type CallTool } from './collect.ts'
 import { buildRecord, RECORD_ID_PATTERN, RecordNotFound, RecordStore, type Origin, type RecordFile, type RescueRecord } from './records.ts'
 import { loadSkill, runScript, type RunResult } from './skills.ts'
+import { render, reportData } from './template.ts'
 
 export interface EvidenceConfig {
   skillsDir: string
@@ -36,6 +37,7 @@ export class ScriptFailed extends Error {
 }
 
 const SESSION_KEY = /^[A-Za-z0-9._-]{1,128}$/
+const TEMPLATE_NAME = /^[a-z0-9][a-z0-9-]*$/
 
 export class Evidence {
   readonly store: RecordStore
@@ -129,6 +131,45 @@ export class Evidence {
       await copyFile(join(runDir, 'chart.svg'), join(this.filesDir(record.record_id), 'chart.svg'))
     }
     return { record: await this.store.put(record), run }
+  }
+
+  /**
+   * 用技能模板和记录生成报告事实部分（数值原样填入，不取整），存为报告记录（content 是 Markdown 文本）。
+   * extra 是模板要用的非记录数据（如风险图的 Markdown），也写进 source，便于复核。
+   */
+  async renderReport(opts: {
+    skill: string
+    template: string
+    inputs: Record<string, string>
+    extra?: Record<string, unknown>
+    origin: Origin
+  }): Promise<RescueRecord> {
+    if (!TEMPLATE_NAME.test(opts.template)) throw new Error(`模板名不合法：${opts.template}`)
+    const skill = await loadSkill(this.cfg.skillsDir, opts.skill)
+    const file = join(skill.dir, 'templates', `${opts.template}.md`)
+    const text = await readFile(file, 'utf8')
+    const names = Object.keys(opts.inputs)
+    const records = await Promise.all(names.map((n) => this.store.get(opts.inputs[n]!)))
+    const markdown = render(text, reportData(Object.fromEntries(names.map((n, i) => [n, records[i]!])), opts.extra))
+    const first = records[0]!
+    return this.store.put(
+      buildRecord({
+        kind: 'report',
+        panel: first.panel,
+        asOf: first.as_of,
+        origin: opts.origin,
+        source: {
+          skill: skill.name,
+          skill_version: skill.version,
+          template: `templates/${opts.template}.md`,
+          template_sha256: createHash('sha256').update(text).digest('hex'),
+          inputs: opts.inputs,
+          extra: opts.extra ?? {},
+        },
+        content: markdown,
+        parentIds: names.map((n) => opts.inputs[n]!),
+      }),
+    )
   }
 
   getRecord(id: string): Promise<RescueRecord> {

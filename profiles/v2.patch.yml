@@ -3,8 +3,8 @@
 #   scripts/dev.sh --v2          （等价于 dsh rescue --no-open --patch profiles/v2.patch.yml）
 #
 # 按 id 覆盖总指挥预设 rescue-commander；第一版的 rescue-plan、rescue-compliance 预设仍在（P3 后移除）。
-# P0 只有证据插件的 get_record、export_record 和 actions；check_mine、固定流程（run_fire_assessment 等）、
-# 知识库插件在 P1–P4 加，persona 随之补充。
+# P1：证据插件的 check_mine（一次性检测）、get_record、export_record，固定流程 run_fire_assessment，以及 actions；
+# 封闭方案、复评、持续检测、知识库插件在 P2–P4 加，persona 随之补充。
 #
 # 令牌（.env.example）：证据插件用 mine_data 只读令牌，actions 用 actions 令牌；DSH 不拿 /sim 控制令牌。
 - id: preset-rescue-commander
@@ -22,7 +22,9 @@
             你是煤矿采空区自燃应急救援的总指挥协调助手，服务于调度员、通风部门、总工程师和应急指挥部。
 
             工作方式：
-            - 典型场景调用固定流程工具（研判、编制封闭方案、处置效果复评），其余按技能处理。固定流程返回的报告事实部分原样放进回答，不改写、不删减、不重排；你只在后面写“分析与建议”，只引用报告里已有的数值。
+            - “现在矿井是否有异常”调 check_mine（mode=once）；研判工作面、问预警等级、要不要升级、有没有爆炸危险，调 run_fire_assessment。其余按技能处理。
+            - 典型场景调用固定流程工具，不要自己拼步骤，也不要在沙箱里重复它已经算过的内容。固定流程返回的报告事实部分原样放进回答，不改写、不删减、不重排；你只在后面写“分析与建议”，只引用报告里已有的数值。
+            - 固定流程和检测返回的 report_markdown 含风险图（Markdown 图片），原样单独成段放进回答，不要改写路径。
             - 计算结果以记录为准：记录编号形如 EV-…（证据）、RS-…（结果）、RP-…（报告），用 get_record 读取。发布预警、下发方案、升级响应时引用记录编号，actions 会按记录核对，对不上就拒绝。
             - 需要在记录基础上做进一步分析时，可以用 export_record 把记录导出到工作区，按技能用 bash 在沙箱里运行技能脚本试算。沙箱里算出的结果只作参考：回答里要注明“试算，仅供参考”，不能作为指令依据。
             - bash 和文件工具只在会话工作区里使用。不要申请提权（不要用 workspace-write 以外的沙箱权限重试），不要读取工作区以外的配置、密钥或日志文件。
@@ -84,6 +86,9 @@
               recordDir: !!js "process.env.RESCUE_RECORD_DIR || `${process.env.RESCUE_HOME}/var/records`"
               # 运行技能脚本的解释器：要装有 skills/requirements.txt 的包。Docker 里是镜像自带的 python3
               python: !!js "process.env.RESCUE_SKILL_PYTHON || `${process.env.RESCUE_HOME}/mcp/.venv/bin/python`"
+          # 固定流程：进程内用 rescueEvidence，所以在同一组里
+          - id: rescue-fire-loop
+            name: '@rescue/dsh-bundle/fire-loop'
       - id: mcp-actions
         name: '@deepseek-ai/dsh-mcp-client'
         config:

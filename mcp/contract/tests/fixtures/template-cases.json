@@ -1,0 +1,173 @@
+[
+ {
+  "name": "变量与嵌套路径",
+  "template": "等级 {{w.level_name}}，{{ w.n }} 人",
+  "data": {
+   "w": {
+    "level_name": "红色",
+    "n": 11
+   }
+  },
+  "expected": "等级 红色，11 人"
+ },
+ {
+  "name": "数字按 ECMAScript 写法",
+  "template": "{{a}} {{b}} {{c}} {{d}} {{e}} {{f}} {{g}}",
+  "data": {
+   "a": 1.0,
+   "b": 0.1,
+   "c": 1629.091,
+   "d": 1e-07,
+   "e": -0.0,
+   "f": 123456789012,
+   "g": 2.5e+21
+  },
+  "expected": "1 0.1 1629.091 1e-7 0 123456789012 2.5e+21"
+ },
+ {
+  "name": "null true false",
+  "template": "{{a}}/{{b}}/{{c}}",
+  "data": {
+   "a": null,
+   "b": true,
+   "c": false
+  },
+  "expected": "缺失/是/否"
+ },
+ {
+  "name": "列表区块与当前项",
+  "template": "{{#xs}}- {{.}}\n{{/xs}}",
+  "data": {
+   "xs": [
+    "a",
+    "b"
+   ]
+  },
+  "expected": "- a\n- b\n"
+ },
+ {
+  "name": "对象列表，向外层查找",
+  "template": "{{#ps}}{{id}}@{{panel}};{{/ps}}",
+  "data": {
+   "panel": "1201",
+   "ps": [
+    {
+     "id": "G1"
+    },
+    {
+     "id": "G2",
+     "panel": "X"
+    }
+   ]
+  },
+  "expected": "G1@1201;G2@X;"
+ },
+ {
+  "name": "独占一行的区块标签整行去掉",
+  "template": "开始\n  {{#ok}}\n有\n  {{/ok}}\n{{^ok}}\n没有\n{{/ok}}\n结束\n",
+  "data": {
+   "ok": true
+  },
+  "expected": "开始\n有\n结束\n"
+ },
+ {
+  "name": "反向区块：空列表、null、空字符串",
+  "template": "{{^a}}A{{/a}}{{^b}}B{{/b}}{{^c}}C{{/c}}{{^d}}D{{/d}}",
+  "data": {
+   "a": [],
+   "b": null,
+   "c": "",
+   "d": 0
+  },
+  "expected": "ABC"
+ },
+ {
+  "name": "区块：0 与非空字符串是真值，压入后用 .",
+  "template": "{{#n}}[{{.}}]{{/n}}{{#s}}<{{.}}>{{/s}}",
+  "data": {
+   "n": 0,
+   "s": "x"
+  },
+  "expected": "[0]<x>"
+ },
+ {
+  "name": "对象区块压入上下文",
+  "template": "{{#p}}{{total}} 人{{/p}}{{^p}}未计算{{/p}}",
+  "data": {
+   "p": {
+    "total": 3
+   }
+  },
+  "expected": "3 人"
+ },
+ {
+  "name": "注释不输出，注释独占一行整行去掉",
+  "template": "a\n{{! 占位值，待审定 }}\nb{{! x }}c",
+  "data": {},
+  "expected": "a\nbc"
+ },
+ {
+  "name": "同一行两个标签不算独占",
+  "template": "{{#a}}x{{/a}}\n",
+  "data": {
+   "a": true
+  },
+  "expected": "x\n"
+ },
+ {
+  "name": "\\r 与 U+2028 不分行",
+  "template": "a\r{{#t}} b{{/t}}\n",
+  "data": {
+   "t": true
+  },
+  "expected": "a\r b\n"
+ },
+ {
+  "name": "不转义",
+  "template": "{{s}}",
+  "data": {
+   "s": "<b>&\"'"
+  },
+  "expected": "<b>&\"'"
+ },
+ {
+  "name": "键不存在报错",
+  "template": "{{w.nope}}",
+  "data": {
+   "w": {}
+  },
+  "error": "模板变量不存在"
+ },
+ {
+  "name": "区块键不存在报错",
+  "template": "{{#nope}}x{{/nope}}",
+  "data": {},
+  "error": "模板变量不存在"
+ },
+ {
+  "name": "对象不能直接输出",
+  "template": "{{w}}",
+  "data": {
+   "w": {
+    "a": 1
+   }
+  },
+  "error": "不能直接输出"
+ },
+ {
+  "name": "区块没有结束标签",
+  "template": "{{#a}}x",
+  "data": {
+   "a": true
+  },
+  "error": "没有结束标签"
+ },
+ {
+  "name": "结束标签不配对",
+  "template": "{{#a}}x{{/b}}",
+  "data": {
+   "a": true
+  },
+  "error": "没有对应的开始标签"
+ }
+]

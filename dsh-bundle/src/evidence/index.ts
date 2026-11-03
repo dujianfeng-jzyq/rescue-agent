@@ -2,7 +2,7 @@
  * rescue-evidence：证据插件（docs/design-v2.md 4.3，ADR 0007）。
  *
  * 提供 cordis 服务 `rescueEvidence`（固定流程插件在进程内调用：采集、运行技能脚本、读记录），
- * 并给模型注册只读工具 get_record、export_record。check_mine、review_timeline 在 P1、P4 加。
+ * 并给模型注册只读工具 get_record、export_record、check_mine（一次性风险检测；持续检测在 P4）。review_timeline 在 P4 加。
  *
  * - 自带 MCP 客户端直连 mine_data（只读令牌），不经模型的工具范围（验证清单 #19、#20）；
  * - 技能脚本在 DSH 进程起的子进程里运行，不在 bash 沙箱里，环境变量按白名单传（#22）；
@@ -11,6 +11,7 @@
 
 import type { Context } from '../adapter/dsh.ts'
 import { defineTool, Schema, Service } from '../adapter/dsh.ts'
+import { checkMine, defaultPanels } from './check.ts'
 import { McpClient } from './mcp-client.ts'
 import { Evidence } from './service.ts'
 
@@ -71,6 +72,31 @@ export default class RescueEvidence extends Service {
         parameters: { record_id: { type: 'string', required: true, description: '记录编号' } },
         output: jsonOutput,
         execute: async (args: { record_id: string }) => toJson(await this.evidence.getRecord(String(args.record_id))),
+      }),
+    )
+
+    c.tools.register(
+      defineTool({
+        name: 'check_mine',
+        description:
+          '矿井风险检测（几秒）：按 fire-assessment 技能的标准逐个工作面检测必需测点、实时红线报警、预警等级和自燃阶段，' +
+          '与正常状态比较给出是否异常（anomaly）及原因，每个工作面存为检测记录。回答“现在矿井是否有异常”时调它，照抄 card 和 report_markdown。' +
+          'mode 只支持 once（一次性检测）；持续检测以后提供。panels 缺省为技能配置的全部工作面。',
+        parameters: {
+          mode: { type: 'string', required: true, enum: ['once', 'watch'], description: 'once：一次性检测' },
+          panels: { type: 'array', items: { type: 'string' }, description: '工作面编号；缺省为全部' },
+        },
+        output: jsonOutput,
+        execute: async (args: { mode: string; panels?: string[] }, exec: any) => {
+          if (args.mode !== 'once') throw new Error('持续检测（mode=watch）还没有提供，请用 mode=once 做一次性检测')
+          const panels = args.panels?.length ? args.panels.map(String) : await defaultPanels(config.skillsDir)
+          const out = await checkMine(this.evidence, {
+            panels,
+            origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
+            signal: exec.signal,
+          })
+          return toJson(out)
+        },
       }),
     )
 

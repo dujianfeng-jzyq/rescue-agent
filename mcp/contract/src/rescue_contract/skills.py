@@ -321,10 +321,46 @@ def check(root: Path | None = None, *, python: str | None = None) -> CheckReport
                 expected = json.loads(exp_path.read_text(encoding="utf-8"))
                 ok = r.output == expected
                 report.cases.append(CaseResult(skill.name, name, case, ok, "" if ok else _first_difference(r.output, expected), r.duration_ms))
+        report.problems += check_templates(skill, report)
     for f in sorted(root.glob("*/tests/cases/*/*.expected.json")):
         if not f.with_name(f.name.replace(".expected.json", ".input.json")).is_file():
             report.problems.append(f"{f.relative_to(root)}：没有对应的 input.json")
     return report
+
+
+def check_templates(skill: Skill, report: CheckReport) -> list[str]:
+    """templates/<名>.md 的样例：tests/templates/<名>/<样例>.input.json（渲染数据）+ 同名 .expected.md，渲染结果整体相等。"""
+    from .template import TemplateError, render
+
+    problems = []
+    for tpl in sorted((skill.dir / "templates").glob("*.md")):
+        cases = sorted((skill.dir / "tests" / "templates" / tpl.stem).glob("*.input.json"))
+        if not cases:
+            problems.append(f"{skill.name}：模板 {tpl.name} 没有样例（tests/templates/{tpl.stem}/*.input.json）")
+        for inp in cases:
+            case = inp.name.removesuffix(".input.json")
+            exp = inp.with_name(f"{case}.expected.md")
+            name = f"templates/{tpl.name}"
+            if not exp.is_file():
+                report.cases.append(CaseResult(skill.name, name, case, False, f"缺少 {exp.name}"))
+                continue
+            try:
+                got = render(tpl.read_text(encoding="utf-8"), json.loads(inp.read_text(encoding="utf-8")))
+            except TemplateError as err:
+                report.cases.append(CaseResult(skill.name, name, case, False, f"渲染失败：{err}"))
+                continue
+            want = exp.read_text(encoding="utf-8")
+            detail = "" if got == want else _first_line_difference(got, want)
+            report.cases.append(CaseResult(skill.name, name, case, got == want, detail))
+    return problems
+
+
+def _first_line_difference(got: str, want: str) -> str:
+    g, w = got.split("\n"), want.split("\n")
+    for i, (a, b) in enumerate(zip(g, w, strict=False)):
+        if a != b:
+            return f"第 {i + 1} 行：期望 {b[:60]!r}，实际 {a[:60]!r}"
+    return f"行数期望 {len(w)}，实际 {len(g)}"
 
 
 def _print_report(report: CheckReport) -> None:

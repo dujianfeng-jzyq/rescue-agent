@@ -20,6 +20,7 @@ from pathlib import Path
 
 from rescue_contract.collect import collect_from, parse_collect_spec
 from rescue_contract.skills import load_skill, run_script
+from rescue_contract.template import render, report_data
 from rescue_mine_data_sim.server import SimHolder, build_server
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,6 +95,55 @@ def build_inputs() -> dict[tuple[str, str, str], dict]:
     }
 
 
+def fake_record(name: str, content: dict, i: int) -> dict:
+    """样例用的记录：编号是假的（格式合法），只用于渲染。"""
+    r = content.get("result", {})
+    as_of = (r.get("as_of") or content.get("as_of") or "2026-11-04T00:00:00")[:19]
+    prefix = "EV" if name == "evidence" else "RS"
+    return {"record_id": f"{prefix}-{as_of.replace('-', '').replace(':', '')}-case{i:02d}", "panel": "1201", "as_of": as_of, "content": content}
+
+
+def build_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
+    """模板样例的渲染数据：用脚本样例的输入重新运行脚本，按 renderReport 的方式组织。"""
+    out = {}
+    for label, ev_key, esc_key in (
+        ("s4-escalation-60h-red", (FA, "warning", "s4-escalation-60h-red"), (ESC, "escalation", "s4-escalation-60h-recommend")),
+        ("s1-normal-24h", (FA, "check", "s1-normal-24h-no-anomaly"), (ESC, "escalation", "s1-normal-24h-not-met")),
+        ("s6-sensor-faults-36h", (FA, "warning", "s6-sensor-faults-36h"), None),
+    ):
+        ev = inputs[ev_key]["evidence"]
+        res = {"evidence": ev}
+        res["warning"] = run(FA, "warning", {"evidence": ev})
+        res["stage"] = run(FA, "stage", {"warning": res["warning"]})
+        res["alarms"] = run(FA, "alarms", {"evidence": ev})
+        res["trend"] = run(FA, "trend", {"evidence": ev, "warning": res["warning"]})
+        res["explosion"] = run(XT, "explosion_triangle", {"evidence": ev})
+        ev_full = ev if "network" in ev else None
+        res["personnel"] = run(FA, "personnel", {"evidence": ev_full or {**ev, "groups": {}}, "warning": res["warning"]})
+        recs = {k: fake_record(k, v, i) for i, (k, v) in enumerate(res.items())}
+        recs["evidence"]["as_of"] = ev["as_of"]
+        chart = f"![火区混合气体爆炸三角形](records/case/{recs['explosion']['record_id']}.chart.svg)" if res["explosion"]["result"]["points"] else None
+        out[(FA, "report", label)] = report_data(recs, {"chart_markdown": chart})
+        check = run(FA, "check", {"evidence": ev})
+        out[(FA, "check", label)] = report_data({"check": fake_record("check", check, 0)})
+        if esc_key:
+            esc = run(ESC, "escalation", inputs[esc_key])
+            out[(ESC, "report", label)] = report_data({"escalation": fake_record("escalation", esc, 0)})
+    return out
+
+
+def write_template_case(skill: str, template: str, case: str, data: dict) -> None:
+    d = SKILLS / skill / "tests" / "templates" / template
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{case}.input.json").write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    write_template_expected(skill, template, case, data)
+
+
+def write_template_expected(skill: str, template: str, case: str, data: dict) -> None:
+    tpl = (SKILLS / skill / "templates" / f"{template}.md").read_text(encoding="utf-8")
+    (SKILLS / skill / "tests" / "templates" / template / f"{case}.expected.md").write_text(render(tpl, data), encoding="utf-8")
+
+
 def case_dir(skill: str, script: str) -> Path:
     return SKILLS / skill / "tests" / "cases" / script
 
@@ -112,8 +162,15 @@ def main() -> int:
             for inp in sorted((SKILLS / skill / "tests" / "cases").glob("*/*.input.json")):
                 write_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/{inp.parent.name}/{inp.name}")
+            for inp in sorted((SKILLS / skill / "tests" / "templates").glob("*/*.input.json")):
+                write_template_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
+                print(f"期望  {skill}/templates/{inp.parent.name}/{inp.name}")
         return 0
-    for (skill, script, case), data in build_inputs().items():
+    inputs = build_inputs()
+    for (skill, template, case), data in build_template_inputs(inputs).items():
+        write_template_case(skill, template, case, data)
+        print(f"模板  {skill}/{template}/{case}")
+    for (skill, script, case), data in inputs.items():
         d = case_dir(skill, script)
         d.mkdir(parents=True, exist_ok=True)
         # 输入不缩进（证据较大），期望缩进便于审阅差异

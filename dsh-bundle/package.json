@@ -2,12 +2,13 @@
   "name": "@rescue/dsh-bundle",
   "version": "0.1.0",
   "private": true,
-  "description": "煤矿应急救援智能体的 DSH bundle：人工确认与红线预检、审计、证据（第二版）、Agent 预设",
+  "description": "煤矿应急救援智能体的 DSH bundle：人工确认与红线预检、审计、证据与火灾固定流程（第二版）、Agent 预设",
   "type": "module",
   "exports": {
     "./approval": "./lib/approval/index.js",
     "./audit": "./lib/audit/index.js",
     "./evidence": "./lib/evidence/index.js",
+    "./fire-loop": "./lib/fire-loop/index.js",
     "./package.json": "./package.json"
   },
   "files": [
