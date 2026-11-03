@@ -2,10 +2,11 @@
 
 煤矿应急救援智能体：基于 DeepSeek Harness（DSH，锁定 0.2.1-rc.4）。一期闭环场景是采空区煤自燃，开发和演示都对着模拟矿井进行。
 
-- 方案（为什么这样做）：`docs/implementation-plan.md`（主版本，带图快照见同名 PDF）
-- 架构（怎么连起来）：`docs/architecture.md`；设计决策：`docs/decisions/`
+- 方案（为什么这样做）：`docs/implementation-plan.md`（主版本；同名 PDF 是第一版的带图快照）
+- **第二版设计（实施中，`v2` 分支）**：`docs/design-v2.md`，决策见 `docs/decisions/0007-skills-plugins-fixed-flows.md`
+- 架构（怎么连起来）：`docs/architecture.md`（第二版；第 8 节是过渡期）；设计决策：`docs/decisions/`
 - 真实 DSH 上的验证记录（含已知问题）：`docs/validation-checklist.md`
-- 工作流与智能体分工（P1–P5 已实施）：`docs/workflow-design.md`，决策见 `docs/decisions/0006-workflow-vs-agent.md`
+- 第一版的工作流与智能体分工（P4 后停用）：`docs/workflow-design.md`，决策见 ADR 0006
 
 用中文写文档、注释、提交说明和面向用户的文字；标识符用英文。
 
@@ -30,6 +31,15 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
 
 ## 结构与边界（改代码前先看）
 
+第二版的目标结构（ADR 0007，按 `docs/design-v2.md` 第 9 节 P0–P6 逐步落地）：
+
+- `skills/<技能名>/`：专家经验和算法的唯一来源。SKILL.md（流程）、`scripts/`（纯函数，`--input-file`/`--output-file`，不访问网络和凭据）、`templates/`、`references/`（参数，标注占位值）、`tests/cases/`（自检样例，CI 运行）。
+- `dsh-bundle/src/evidence/`（证据插件：采集、`runScript`、记录、`check_mine`）、`src/fire-loop/`（固定流程）、`src/knowledge/`（知识库插件、条文索引）、`src/approval`、`src/audit`。插件只做编排，不写领域判据。
+- 记录（`Record`，契约 0.7.0）取代研判快照：只有 DSH 进程（证据插件）能写，bash 沙箱和 actions 只读；指令引用 `record_id`。
+- Python 服务最终只剩 `mcp/mine-data-sim`（含演示控制台）和 `mcp/actions`；下面列出的其余服务在迁移完成前仍在运行（`docs/architecture.md` 第 8 节）。
+
+第一版（现有代码）：
+
 - `mcp/contract/`：数据契约（pydantic）、红线引擎 `redlines.py`、方案校验 `validation.py`、`MineData` 客户端、一致性测试。**契约是各工作线之间的边界**，改 `models.py` 要谨慎并 `make schema`。
 - `mcp/<服务>/`：7 个 MCP 服务，各自 `src/rescue_<名>/server.py` 里 `build_server()`，`__main__.py` 用 `rescue_contract.serving.serve` 启动（streamable-http，端口 8101–8107）。
 - `mcp/workflow/`：确定性流程（研判快照、效果评估、升级建议、方案草案、调度草案、复盘时间线）和值守进程 `rescue_workflow.monitor`。步骤固定、产出数值或结论、会成为红线输入的流程写在这里，不交给模型编排（ADR 0006，`docs/workflow-design.md`）。结果写成研判快照（`var/snapshots/`），报告事实部分由 `reports.py` 模板生成。
@@ -41,11 +51,11 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
 
 ## 必须遵守的约定
 
-1. **数值只来自代码计算**。Agent 提示词和技能里不写阈值、不让模型估算；新的判断逻辑写进 MCP 服务并加测试。计数、合计、差值、汇总结论也算：评测发现 Agent 会自己数人数、相减算升温、汇总多个测点的结论，这些都要由工具给出（如 `threatened_personnel` 的 count、`gas_trend` 的 change、`evaluate_effect_panel` 的 counts/overall）。
-2. **只有 `rescue-commander` 挂载 actions**；其他预设只读。`scripts/check_patches.py` 会检查。指令必须引用研判快照（`snapshot_id`），现场条件、预警等级按快照核对（`rescue_contract/validation.py`），不能由模型填写。
-3. **红线规则只在 `rescue_contract/redlines.py` 实现一次**。新增规则：改规则表 + `contract/tests/test_redlines.py` + `skills/compliance/red-line-rules/SKILL.md`（有同步测试）。未知值按不通过处理（fail closed）。
-4. **智能体看不到模拟器真值**。`/sim/state` 的 truth 只给控制台和评测；不要通过 MCP 工具暴露。
-5. **mine-data 的工具集合就是真实矿井适配器要实现的接口**。增删工具要同步 `rescue_contract/conformance.py`。
+1. **数值只来自代码计算**。“代码”指 MCP 服务和技能脚本（第二版起以技能脚本为准）。Agent 提示词和 SKILL.md 的正文里不写阈值、不让模型估算；新的判断逻辑写进技能脚本（或迁移完成前的 MCP 服务）并加自检样例或测试。计数、合计、差值、汇总结论也算：评测发现 Agent 会自己数人数、相减算升温、汇总多个测点的结论，这些都要由工具给出（如 `threatened_personnel` 的 count、`gas_trend` 的 change、`evaluate_effect_panel` 的 counts/overall）。智能体在沙箱里自己运行脚本的结果只作参考，不能被指令引用。
+2. **只有 `rescue-commander` 挂载 actions**；其他预设只读（第二版只有这一个预设，固定流程的阶段子 Agent 用 `tools.guard` 限制为只能提交结果）。`scripts/check_patches.py` 会检查。指令必须引用研判快照（`snapshot_id`，第二版改为记录 `record_id`），现场条件、预警等级按快照或记录核对（`rescue_contract/validation.py`），不能由模型填写。
+3. **红线规则只在 `rescue_contract/redlines.py` 实现一次**（第二版不迁入技能）。新增规则：改规则表 + `contract/tests/test_redlines.py` + `skills/compliance/red-line-rules/SKILL.md`（有同步测试；第二版是 `plan-compliance` 技能）。知识库插件需要的条号由规则表导出，不在 TS 里再写一遍。未知值按不通过处理（fail closed）。
+4. **智能体看不到模拟器真值**。`/sim/state` 的 truth、读数设置、倍速只给控制台和评测；不要通过 MCP 工具或证据插件暴露。DSH 不持有 `/sim` 控制令牌。
+5. **mine-data 的工具集合就是真实矿井适配器要实现的接口**。增删工具要同步 `rescue_contract/conformance.py`；第二版的采集清单（技能的 `references/collect.yaml`）只能用这些工具。
 6. 阈值（`fire-model/.../thresholds.yaml`）、场景参数、评测期望都是**开发占位值**。可以为了测试调整，但要在提交说明里写明，并且不要声称它们“正确”。
 7. MCP Python SDK 是 2.x：`from mcp.server.mcpserver import MCPServer`（没有 FastMCP）。工具返回 pydantic 模型或 `dict[str, Any]`，不要返回裸 `dict`（会丢结构化输出）。输入错误抛 `ToolError`（`mcp.server.mcpserver.exceptions`）：其他异常的说明传不到 Agent（`mcp/tests/test_tool_errors.py`）。
 8. DSH 版本锁定在 0.2.1-rc.4。DSH 的 `DSH_*` 环境变量必须 export，写在 `.env` 里不生效。
@@ -65,3 +75,11 @@ make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API
   智能体评测（deepseek-flash，各 3 次，按当前判定规则）：`s2-assess-1201`、`s2-effect-after-inerting`、`s4-escalate-1201`、`s4-explosion-risk`、`s4-warning-rejected`、`s4-plan-context-tamper` 均 3/3；研判类每次约 5–7 万 token、40–100 秒（改造前约 80 万 token、`s4-escalate` 217–893 秒）。
   `s4-sealing-plan`：快照引用、人工确认、发布在走通的运行里都成立，但全部通过不稳定（最新 0/2 + 1 次接口错误）：合规 Agent 凭记忆引用未检索的条文（“细则97(三)”）、合规判“不通过”后总指挥向人请示而评测运行器不会代答；单次 170–340 万 token，偏高。
 - 待办：封闭方案流程的 token 消耗（总指挥上下文里反复携带完整方案 JSON）；合规 Agent 只引用检索到的条文；专家审定 workflow 的占位判据（升级、甲烷上升、爆炸危险性汇总、必备步骤、值守周期）；专家审定阈值（含阶段、效果判据）/场景/技能；专家审定 dispatch 用量参数；专家审定爆炸三角形参数和分区判据；评测运行器按用例预设回答 Agent 的提问；ventnet 的 Hardy Cross 风网解算；确认人按角色限定；排查 RAGFlow 断开连接（网关超时）。
+
+## 第二版进度（`v2` 分支）
+
+- 2026-11-03：第二版设计定稿（`docs/design-v2.md` 第五稿），ADR 0007；验证清单 #20（插件登记后台任务）、#22（插件起 Python 子进程）、#23（唤醒失败的补救）通过，#21（容器内的 bash 沙箱）待 P0 验证。实验 0001（技能驱动 vs 代码工作流）封存。验证代码在 `spike/job-watch`、`spike/plugin-subprocess` 分支，不合入。
+- 技能脚本由插件起的子进程不在沙箱里、默认继承 DSH 进程的密钥：`runScript` 必须按白名单传环境变量、设超时；脚本是受信代码（#22）。会话工作区所有会话共用一个目录，导出按会话分子目录。
+- provider 重试要把 `STREAM_CLOSED` 加进 `retryPolicy.retryableCodes`（默认不重试，#23）。
+- 进行中：P0（契约 0.7.0、证据插件骨架、Python 采集小工具、技能规范与自检运行器、令牌拆分、主预设草稿、#21）。
+
