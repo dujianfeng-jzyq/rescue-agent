@@ -20,8 +20,8 @@ import sys
 import urllib.request
 
 BASE = os.environ.get("RESCUE_SIM_CONTROL_URL", "http://127.0.0.1:8101/sim").rstrip("/")
-# 与 rescue_contract.serving.auth_headers 一致（本脚本只用标准库，不导入它）
-TOKEN = os.environ.get("RESCUE_MCP_TOKEN")
+# 控制令牌，与 rescue_contract.serving.sim_control_token 一致（本脚本只用标准库，不导入它）
+TOKEN = os.environ.get("RESCUE_SIM_CONTROL_TOKEN") or os.environ.get("RESCUE_MCP_MINE_DATA_TOKEN") or os.environ.get("RESCUE_MCP_TOKEN")
 AUTH = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
 
 

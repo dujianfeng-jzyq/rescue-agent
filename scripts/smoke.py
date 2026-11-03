@@ -16,6 +16,7 @@ from datetime import datetime
 
 from rescue_contract.client import connect
 from rescue_contract.conformance import run_all
+from rescue_contract.serving import auth_headers
 
 SERVERS = {
     "mine_data": os.environ.get("RESCUE_MCP_MINE_DATA_URL", "http://127.0.0.1:8101/mcp"),
@@ -54,7 +55,7 @@ def short(x: object, n: int = 110) -> str:
 
 async def check_server(key: str, url: str) -> None:
     try:
-        async with connect(url) as c:
+        async with connect(url, key) as c:
             tools = [t.name for t in (await c.list_tools()).tools]
             report(True, f"{key}: {len(tools)} 个工具", ", ".join(tools))
             for tool, args in CALLS[key]:
@@ -76,7 +77,7 @@ def check_redline_endpoint(now: str) -> None:
     req = urllib.request.Request(
         REDLINE_URL,
         data=json.dumps({"tool": "issue_sealing_plan", "arguments": {"plan": plan}}).encode(),
-        headers={"Content-Type": "application/json", **({"Authorization": f"Bearer {t}"} if (t := os.environ.get("RESCUE_MCP_TOKEN")) else {})},
+        headers={"Content-Type": "application/json", **auth_headers("actions")},
         method="POST",
     )
     try:

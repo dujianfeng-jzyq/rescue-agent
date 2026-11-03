@@ -46,7 +46,7 @@
               serverName: mine_data
               transport: streamable-http
               url: !!js "process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'"
-              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_MINE_DATA_TOKEN || process.env.RESCUE_MCP_TOKEN)"
               toolCallTimeoutMs: 60000
               failOnStartupError: false
           - id: mcp-ventnet
@@ -55,7 +55,7 @@
               serverName: ventnet
               transport: streamable-http
               url: !!js "process.env.RESCUE_MCP_VENTNET_URL ?? 'http://127.0.0.1:8102/mcp'"
-              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_VENTNET_TOKEN || process.env.RESCUE_MCP_TOKEN)"
               toolCallTimeoutMs: 60000
               failOnStartupError: false
           - id: mcp-workflow # draft_plan：现场条件和必备步骤由代码生成（只读，只写快照）
@@ -64,7 +64,7 @@
               serverName: workflow
               transport: streamable-http
               url: !!js "process.env.RESCUE_MCP_WORKFLOW_URL ?? 'http://127.0.0.1:8107/mcp'"
-              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_WORKFLOW_TOKEN || process.env.RESCUE_MCP_TOKEN)"
               toolCallTimeoutMs: 120000
               failOnStartupError: false
           - id: mcp-kb
@@ -73,7 +73,7 @@
               serverName: kb
               transport: streamable-http
               url: !!js "process.env.RESCUE_MCP_KB_URL ?? 'http://127.0.0.1:8105/mcp'"
-              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_KB_TOKEN || process.env.RESCUE_MCP_TOKEN)"
               toolCallTimeoutMs: 60000
               failOnStartupError: false
           - id: compaction

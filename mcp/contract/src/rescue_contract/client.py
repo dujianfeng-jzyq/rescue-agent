@@ -39,13 +39,13 @@ class MineDataError(RuntimeError):
 
 
 @asynccontextmanager
-async def connect(target: Any) -> AsyncIterator[Client]:
+async def connect(target: Any, service: str = "mine_data") -> AsyncIterator[Client]:
     """打开到 MCP 服务的客户端会话。
 
-    `target` 是 URL 时，若设置了 RESCUE_MCP_TOKEN 就带上 Bearer 令牌（与 serving 的校验对应）；
+    `target` 是 URL 时，按 `service` 带上该服务的 Bearer 令牌（RESCUE_MCP_<服务>_TOKEN 或 RESCUE_MCP_TOKEN，见 serving）；
     也可以是进程内的 MCPServer 实例（测试用）。所有 Python 侧的 MCP 连接都应经过这里。
     """
-    headers = auth_headers()
+    headers = auth_headers(service)
     if isinstance(target, str) and headers:
         async with httpx2.AsyncClient(headers=headers, timeout=30) as http:
             async with Client(streamable_http_client(target, http_client=http)) as c:

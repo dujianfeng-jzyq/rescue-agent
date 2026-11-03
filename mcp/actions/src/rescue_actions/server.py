@@ -37,7 +37,7 @@ from rescue_contract.models import (
     StepType,
     WarningNotice,
 )
-from rescue_contract.serving import auth_headers
+from rescue_contract.serving import sim_control_headers
 from rescue_contract.snapshots import SnapshotStore
 from rescue_contract.validation import PLAN_TOOLS, check_dispatch, check_escalation, check_warning, plan_notes, precheck, validate_plan
 from starlette.requests import Request
@@ -93,7 +93,7 @@ class Sim:
             return False
         body = json.dumps({"type": iv_type, "params": params or {}, "roadways": roadways or [], "source": "action"}).encode()
         req = urllib.request.Request(
-            f"{self.base}/interventions", data=body, headers={"Content-Type": "application/json", **auth_headers()}, method="POST"
+            f"{self.base}/interventions", data=body, headers={"Content-Type": "application/json", **sim_control_headers()}, method="POST"
         )
         try:
             with urllib.request.urlopen(req, timeout=5):

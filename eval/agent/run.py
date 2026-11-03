@@ -38,7 +38,8 @@ import grade  # noqa: E402
 ROOT = grade.ROOT
 CASES = Path(__file__).resolve().parent / "cases.yaml"
 SIM = os.environ.get("RESCUE_SIM_CONTROL_URL", "http://127.0.0.1:8101/sim").rstrip("/")
-TOKEN = os.environ.get("RESCUE_MCP_TOKEN")
+# 模拟矿井控制令牌，与 rescue_contract.serving.sim_control_token 一致
+TOKEN = os.environ.get("RESCUE_SIM_CONTROL_TOKEN") or os.environ.get("RESCUE_MCP_MINE_DATA_TOKEN") or os.environ.get("RESCUE_MCP_TOKEN")
 
 
 def sim(path: str, body: dict) -> dict:

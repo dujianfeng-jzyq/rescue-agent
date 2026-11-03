@@ -50,7 +50,7 @@
         exemptPrefixes: []
         precheckUrl: !!js "process.env.RESCUE_REDLINE_CHECK_URL ?? 'http://127.0.0.1:8106/redlines/check'"
         precheckTimeoutMs: 5000
-        token: !!js "process.env.RESCUE_MCP_TOKEN"
+        token: !!js "process.env.RESCUE_MCP_ACTIONS_TOKEN || process.env.RESCUE_MCP_TOKEN"   # actions 的令牌（预检接口）
         confirmers:
           publish_warning: 通风部门负责人
           issue_firefighting_plan: 总工程师

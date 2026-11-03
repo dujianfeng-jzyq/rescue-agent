@@ -75,7 +75,7 @@
               serverName: mine_data
               transport: streamable-http
               url: !!js "process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'"
-              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_MINE_DATA_TOKEN || process.env.RESCUE_MCP_TOKEN)"
               toolCallTimeoutMs: 60000
               failOnStartupError: false
           - id: mcp-fire-model
@@ -84,7 +84,7 @@
               serverName: fire_model
               transport: streamable-http
               url: !!js "process.env.RESCUE_MCP_FIRE_MODEL_URL ?? 'http://127.0.0.1:8103/mcp'"
-              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_FIRE_MODEL_TOKEN || process.env.RESCUE_MCP_TOKEN)"
               toolCallTimeoutMs: 60000
               failOnStartupError: false
           - id: mcp-actions
@@ -93,7 +93,7 @@
               serverName: actions
               transport: streamable-http
               url: !!js "process.env.RESCUE_MCP_ACTIONS_URL ?? 'http://127.0.0.1:8106/mcp'"
-              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_ACTIONS_TOKEN || process.env.RESCUE_MCP_TOKEN)"
               toolCallTimeoutMs: 60000
               failOnStartupError: false
           - id: mcp-workflow
@@ -102,7 +102,7 @@
               serverName: workflow
               transport: streamable-http
               url: !!js "process.env.RESCUE_MCP_WORKFLOW_URL ?? 'http://127.0.0.1:8107/mcp'"
-              headers: !!js "process.env.RESCUE_MCP_TOKEN ? { Authorization: 'Bearer ' + process.env.RESCUE_MCP_TOKEN } : {}"
+              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_WORKFLOW_TOKEN || process.env.RESCUE_MCP_TOKEN)"
               toolCallTimeoutMs: 120000
               failOnStartupError: false
           - id: compaction
