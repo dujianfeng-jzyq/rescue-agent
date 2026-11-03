@@ -26,6 +26,7 @@
 
 | 18 | DSH 自带工作流（可选能力，评估是否采用） | 叠加 patch 让 rescue-commander 挂载 `dsh-workflow-ptc` + `dsh-tool-workflow`（见下方“#18”），经网页端让它用 `workflow` 工具运行固定脚本：子 Agent 报告工具和人设、调 fire_model、调 kb、借 delegate 转 rescue-compliance、提交 publish_warning | 记录能否运行、子 Agent 用哪个预设、结构化输出是否可靠、人工确认是否照常 | ✓ 2026-11-02（评估完成，**不采用**，见 ADR 0006）：workspace-write 下能运行；子 Agent 只能用调用方自己的预设（有 actions、没有 kb），不能再委派；结构化输出 5/5 符合 schema；子 Agent 调 actions 时审批被强制为 never，未弹确认即被拒，审计记成“用户拒绝”。详见下方“#18” |
 | 19 | 插件工具编排（确定性工具调用 + 指定预设的子 Agent） | 验证分支 `spike/plugin-workflow`：验证插件 `dsh-bundle/src/spike` 注册工具 `spike_plan_review`，叠加 patch `dsh-bundle/spike/plan-review.patch.yml` 挂到 rescue-commander；评测用例 `spike-plan-review`（s4 第 60 小时）让总指挥调用它（见下方“#19”） | 插件里能调 MCP 工具、能按预设起子 Agent 并拿到结构化结果、审批和审计照常、网页端能显示运行过程 | ✓ 2026-11-02：四项都成立；子 Agent 照抄整份方案作工具参数时 DeepSeek 偶发生成坏 JSON，改为插件做红线检查后 3/3 正常。详见下方“#19” |
+| 20 | 插件登记后台任务（持续检测 → 唤醒 → 询问操作员） | 验证插件 `dsh-bundle/src/spike-watch` 注册工具 `spike_watch`（once / watch），watch 用 `ctx.jobs.start` 登记后台任务；叠加 patch `experiments/spike20/watch.patch.yml`（由 `gen_patch.py` 生成）给 rescue-commander 加 `dsh-tool-jobs` 和 persona 规则；`experiments/spike20/drive.py` 经网页端提问、推进模拟时钟、读会话日志（见下方“#20”） | 插件能登记任务并立即返回；网页端任务列表显示进度、可停止；任务结束时唤醒空闲会话（含网页已关闭、长时间空闲）；唤醒后能读结果、弹出提问并按回答处理；停止、重启时的行为明确 | ✓ 2026-11-03（机制可行，有一处要补救）：登记、进度、两种停止、唤醒、提问（三个选项 + 自由回答）、网页关闭后唤醒和补答都成立；空闲 20 分钟后任务仍在、唤醒正常，但唤醒的这一轮因 DeepSeek 接口错误中断，没有重试，异常没有送到人。DSH 重启或崩溃后任务消失、不通知。详见下方“#20” |
 
 ## 已知需要关注的点
 
@@ -84,3 +85,18 @@
   - 网页端：`dsh-client-ui-workflow-run` 认插件写的 `tool-workflow/*` 事件，工具调用下面显示运行节点（“spike-plan-review · 1 member”），展开为阶段“合规审核”和成员“合规审核（rescue-compliance）Completed”。只显示子 Agent 成员，确定性步骤和 `phase()`/`log()` 不显示。
   - 其他：工具返回值必须是无损 JSON，含值为 `undefined` 的字段会被拒（`INVALID_TOOL_OUTPUT: value is not lossless JSON`）。插件改动后要重启 DSH。
   - 结论：“插件工具按代码顺序编排确定性工具调用和指定预设的子 Agent，指令仍由总指挥提交、人工确认”在 rc.4 上可行。红线检查这类确定性步骤由插件直接做，子 Agent 不要抄写大段 JSON。
+- #20 插件登记后台任务（2026-11-03，s4 第 15→25 小时，等级 none → blue，deepseek-official/deepseek-flash）：
+  - 做法：验证插件 `dsh-bundle/src/spike-watch` 注册工具 `spike_watch`。`once` 检测一次；`watch` 先检测一次作为基线，再用 `ctx.jobs.start({ kind: 'rescue-watch', owner: exec.agent.id, toolCall, run })` 登记后台任务。任务在 DSH 进程里每 2 秒读一次矿井时钟，每过 10 矿井分钟检测一次，等级高于基线就以 `completed`（detail `anomaly`，result 为 JSON）结束。检测借用 workflow 的 `assess_panel`（正式实现换成 `check.py`）。插件自带最小 MCP 客户端（streamable-http，fetch 实现），直接连 mine_data 和 workflow，不经模型的工具范围。叠加 patch 给总指挥加 `dsh-tool-jobs`（`maxConsecutiveWakes: 3`）和 persona 规则：once 照抄回答；watch 返回任务编号后结束本轮、不轮询；收到完成通知后 `job_output`，anomaly 为真时用 `ask_user_question` 问“开始完整研判 / 继续检测 / 暂不处理”，也可自由回答。模拟矿井用手动时钟，`drive.py` 推进。DSH 用单独的 `DSH_HOME`（`.dsh-home/spike20-home`）和 3081 端口。
+  - 前提：rescue 配置档本来就有全局的 `dsh-jobs-local`；`dsh-tool-jobs` 按预设挂载（正式预设里没有，必须加，否则 `ctx.jobs.start` 因没有控制器而失败）。
+  - 登记：工具 0.5 秒返回任务编号，会话日志记 `job/registered`（含 owner、label、创建它的 toolCall）。智能体照规则说明“已开始持续检测”后结束本轮，没有轮询。插件自带的 MCP 客户端正常，`get_clock`、`assess_panel` 每次不到 1 秒。
+  - 进度与停止（网页端）：标题栏显示“1 background job running”，展开后有任务行、`updateProgress` 写的进度行（“基线 none；等待矿井时间推进”）和停止按钮。停止是**两击确认**（首击武装，3 秒内再点才调 `ctx.jobs.kill`）。网页停止后任务以 `killed, cancelled by the user` 结束，**照常通知并唤醒**智能体。
+  - 唤醒：推进到异常后 2 秒内任务结束（`job/settled`），同一秒 `tool-jobs` 投递“background job … finished [status: completed, anomaly]”并开新一轮。智能体 `job_output` 读到检测记录和 result，随即 `ask_user_question`：三个选项（模型给第一项加了“（推荐）”，网页显示为 Recommended 标记）和自带的“Type your answer”输入框。从结束到弹出提问 11–26 秒（含一次模型重试）。
+  - 回答：选“开始完整研判”→ 调 `assess_panel` 并按研判规则回答；自由回答“先不研判，把 1201 上隅角最近的 CO 读数告诉我”→ 不研判，按要求查读数；选“暂不处理”→ 确认结束，并提醒已没有持续检测在运行。
+  - 网页关闭：关闭浏览器后推进到异常，唤醒、`job_output`、提问照常发生（不依赖有人开着网页）。重新打开后会话列表里该会话有橙点，悬停显示“Waiting for answer”；点开后提问卡片还在，约 67 秒后作答正常送达。当前 `ask_user_question` 是阻塞模式（legacy），会一直等人回答。
+  - 空闲 20 分钟（网页关闭）：任务一直在运行，推进到异常后正常结束并开新一轮——Agent 没有因空闲被释放。**但这一轮的模型请求卡了 178 秒，以 `DeepSeek Messages stream ended before message_stop` 结束，没有重试，轮次以 error 结束，没有提问**：异常已检测到、任务已结束，却没有送到人。同一时段 DeepSeek 接口明显过载（单步 80–275 秒，之后还出现 “Service is too busy”），判断为模型服务的问题，不是空闲造成的；未在接口稳定时复测。
+  - 重复启动：同一会话再要求“再启动一次持续检测”，智能体先 `job_list` 发现已有任务在运行，用提问请示是否重启，没有重复启动（插件的“一会话一个任务”检查没有被触发到）。回答“停掉”后调 `job_kill`。
+  - 模型停止：`job_kill` 立即结束（`killed`，cause `kill`，插件的取消处理正常），之后推进到异常没有任何唤醒（模型自己停的任务不再通知，符合 `dsh-tool-jobs` 文档）。插件把停止原因又写进 detail，与 DSH 自动附加的重复，正式实现不要写。
+  - DSH 正常关闭：会话日志记 `job/settled`（`killed`，cause `teardown`，detail `jobs service disposed`），不通知。重启后任务不存在，推进到异常没有任何反应；问“持续检测还在运行吗”时，智能体用 `job_list`/`job_output` 发现任务已停，提问是否重启。
+  - DSH 崩溃（`kill -9`）：会话日志只有 `job/registered`，没有 `job/settled`。
+  - 没有验证：`maxConsecutiveWakes` 的效果；超过 20 分钟的空闲；同时多个会话各有任务。
+  - 结论：“插件登记后台任务、不经模型持续检测、结束时由 DSH 唤醒智能体询问操作员”在 rc.4 上可行，网页关闭也不影响。要补两处：① **唤醒的这一轮失败时异常会丢**（模型接口错误不重试），需要兜底（见设计文档 4.9）；② DSH 重启、崩溃后任务消失且不通知，以后无人值守的恢复服务可以按会话日志判断——有 `job/registered` 而没有 `job/settled`（崩溃），或 `job/settled` 的 cause 为 `teardown`（关闭）。
