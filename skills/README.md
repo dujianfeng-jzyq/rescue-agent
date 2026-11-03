@@ -103,3 +103,20 @@ kinds:                          # 一份清单可以有多种采集，如 check�
 - 自检用上面的方式运行脚本，输出与 `expected` **整体相等**才算通过（浮点数也逐位相等：脚本是确定性的）；
 - 登记了 `svg: true` 的脚本，自检还检查生成了非空的 SVG；
 - 运行：`make skills-check`（`make check` 包含它；镜像构建时也运行）。
+
+## 报告模板（templates/）
+
+`templates/<名>.md` 是 Markdown + 占位符（Mustache 的一个子集），证据插件的 `renderReport` 用它和记录生成报告事实部分，存为报告记录：
+
+- `{{a.b}}` 取值：第一段从内到外在上下文里找，`{{.}}` 是当前项。**键不存在时报错**（模板写错了不悄悄留空）。null 写“缺失”，true/false 写“是/否”，数字按 ECMAScript 写法原样输出（不取整），对象和列表不能直接输出。不做 HTML 转义。
+- `{{#a}}…{{/a}}`：列表逐项、对象压入上下文、其他真值渲染一次；null、false、空字符串、空列表不渲染（0 是真值）。`{{^a}}…{{/a}}` 反之。
+- `{{! 注释 }}` 不输出；只有一个区块标签或注释的行整行去掉，模板可以按行排版。
+- 模板拿到的数据：`{panel, as_of, as_of_text, record_ids: {名: 编号}, <名>: 记录内容, …}`（`rescue_contract.template.report_data`），外加流程给的少量非记录数据（如 `chart_markdown`）。
+- 模板只排版，不计算：要合计、计数、拼接的内容由脚本输出（如 `persons_text`、`data_quality_all`）。
+- 样例：`tests/templates/<名>/<样例>.input.json`（渲染数据）+ 同名 `.expected.md`，每个模板至少一组；`make skills-check` 和 TS 测试各渲染一遍，两边结果必须逐字节相同。
+
+Python 实现在 `rescue_contract.template`，TS 在证据插件的 `src/evidence/template.ts`。
+
+## 样例的生成
+
+火灾闭环的三个技能（fire-assessment、explosion-triangle、emergency-escalation）的样例由 `scripts/make_skill_cases.py` 从模拟矿井的标准场景生成；改了参数或算法后用 `--expected` 只重写期望，并在提交说明里写明。关键字段与第一版服务的一致性由 `mcp/workflow/tests/test_skill_parity.py` 保证。跨技能复制的辅助模块（`_quality.py`、`_evidence.py`、`_skill.py`）有一致性测试，两份一起改。注意辅助模块不要用与标准库内建模块同名的名字（如 `_io`）。
