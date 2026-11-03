@@ -1,0 +1,7 @@
+# 第二版技能的脚本登记（skills/README.md）。
+scripts:
+  explosion_triangle:
+    file: scripts/explosion_triangle.py
+    description: 多组分、温度补偿的爆炸三角形：按工作面逐个束管测点（取最不利）或人工化验单，输出分区和风险图
+    timeout_s: 20
+    svg: true

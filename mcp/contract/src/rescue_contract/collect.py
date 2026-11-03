@@ -37,7 +37,7 @@ def parse_collect_spec(text: str, where: str = "collect.yaml") -> dict[str, Any]
         raise ValueError(f"{where}：缺少 kinds")
     for kind, k in spec["kinds"].items():
         for g in (k or {}).get("sensors") or []:
-            if not g.get("name") or not g.get("select"):
+            if not g.get("name") or not isinstance(g.get("select"), dict):
                 raise ValueError(f"{where}：{kind} 的测点组要有 name 和 select")
     return spec
 

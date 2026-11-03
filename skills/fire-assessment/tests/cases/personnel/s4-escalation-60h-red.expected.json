@@ -1,0 +1,129 @@
+{
+ "algorithm_version": "personnel/1.0.0",
+ "params": {
+  "personnel_level_at_least": "orange",
+  "personnel_source_kind": "working_face",
+  "status": "placeholder",
+  "default_section_m2": 12.0,
+  "default_air_velocity_m_s": 0.5,
+  "min_air_velocity_m_s": 0.2,
+  "walk_speed_m_s": 1.0,
+  "self_rescuer_speed_m_s": 0.7,
+  "non_intake_penalty": 1.5
+ },
+ "warnings": [
+  "到达时间按设计风量估算（未做风量解算），仅供参考"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "computed": true,
+  "note": null,
+  "source_roadway": "R-1201-FACE",
+  "contaminated_roadways": [
+   {
+    "roadway_id": "R-1201-FACE",
+    "arrival_min": 0.0
+   },
+   {
+    "roadway_id": "R-1201-RET",
+    "arrival_min": 1.6
+   },
+   {
+    "roadway_id": "R-RET-MAIN",
+    "arrival_min": 13.6
+   },
+   {
+    "roadway_id": "R-RET-SHAFT",
+    "arrival_min": 16.3
+   }
+  ],
+  "threatened": [
+   {
+    "roadway_id": "R-1201-FACE",
+    "persons": [
+     "C001",
+     "C002",
+     "C003",
+     "C004",
+     "C005",
+     "C006",
+     "C007",
+     "C008",
+     "C009"
+    ],
+    "persons_text": "C001、C002、C003、C004、C005、C006、C007、C008、C009",
+    "count": 9,
+    "arrival_min": 0.0,
+    "escape_route": {
+     "nodes": [
+      "N3",
+      "N2",
+      "N8"
+     ],
+     "roadways": [
+      "R-1201-IN",
+      "R-REFUGE"
+     ],
+     "length_m": 1960,
+     "target": "N8",
+     "from_roadway": "R-1201-FACE",
+     "reachable": true,
+     "target_name": "1201避难硐室",
+     "walk_min": 32.7,
+     "walk_with_self_rescuer_min": 46.7
+    }
+   },
+   {
+    "roadway_id": "R-1201-RET",
+    "persons": [
+     "C013",
+     "C014"
+    ],
+    "persons_text": "C013、C014",
+    "count": 2,
+    "arrival_min": 1.6,
+    "escape_route": {
+     "from_roadway": "R-1201-RET",
+     "reachable": false,
+     "note": "避开受污染巷道后无可达出口或避难硐室，需人工研判"
+    }
+   }
+  ],
+  "total_threatened": 11,
+  "not_threatened": [
+   {
+    "roadway_id": "R-1201-IN",
+    "persons": [
+     "C010",
+     "C011",
+     "C012"
+    ],
+    "count": 3
+   },
+   {
+    "roadway_id": "R-1202-IN",
+    "persons": [
+     "C015",
+     "C016",
+     "C017",
+     "C018",
+     "C019",
+     "C020"
+    ],
+    "count": 6
+   },
+   {
+    "roadway_id": "R-MAIN-IN",
+    "persons": [
+     "C021",
+     "C022"
+    ],
+    "count": 2
+   }
+  ],
+  "total_not_threatened": 11,
+  "total_underground": 22,
+  "method": "网络拓扑 + 设计风量估算（未做风量解算），到达时间仅供参考"
+ }
+}

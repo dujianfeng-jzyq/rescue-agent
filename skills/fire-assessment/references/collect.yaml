@@ -1,0 +1,42 @@
+# 采集清单：证据插件（和 Python 采集小工具）按它从 mine_data 取数（skills/README.md“采集清单”）。
+# 只能用 mine_data 的工具（CLAUDE.md 约定 5）。窗口要不短于脚本用到的窗口（thresholds.yaml 的 window_h、
+# assessment.yaml 的 trend_hours、alarms.yaml 的各 window_h），脚本发现窗口不够会报错。
+#
+# check（风险检测）与 assessment（完整研判）用同一批测点和窗口，检测与研判的等级、阶段、报警一致；
+# 完整研判另取通风网络和人员（受威胁人员）。
+# TODO(专家): 测点和必需项待评审（design-v2 4.9“检测判据”）。
+status: placeholder
+reviewed_by: null
+
+kinds:
+  check:
+    sensors: &sensors
+      - name: tubes               # 采空区束管：预警等级、自燃阶段、标志气体、复燃征兆、爆炸三角形
+        select: {source: bundle_tube, panel: true}
+        window_h: 24
+        required: true
+      - name: upper_corner        # 上隅角
+        select: {ids: ["SM-{panel}-UC"]}
+        window_h: 24
+        required: true
+      - name: return              # 回风巷：与上隅角 CO 交叉校核
+        select: {ids: ["SM-{panel}-RET"]}
+        window_h: 24
+        required: true
+      - name: intake              # 进风巷（辅助）
+        select: {ids: ["SM-{panel}-IN"]}
+        window_h: 24
+      - name: goaf_temperature    # 采空区测温（辅助；爆炸三角形的温度）
+        select: {source: temperature, panel: true}
+        window_h: 24
+      - name: methane             # 全矿巷道甲烷：第75条实时报警（人员可能所在的巷道）
+        select: {source: safety_monitor}
+        require_measurands: [CH4]
+        measurands: [CH4]
+        window_h: 1
+    fire_areas: true
+  assessment:
+    sensors: *sensors
+    fire_areas: true
+    personnel: true
+    network: true

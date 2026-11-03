@@ -1,0 +1,6 @@
+# 第二版技能的脚本登记（skills/README.md）。
+scripts:
+  escalation:
+    file: scripts/escalation.py
+    description: 是否建议升级为应急响应：命中的判据、未命中时逐项说明、引用条文
+    timeout_s: 10

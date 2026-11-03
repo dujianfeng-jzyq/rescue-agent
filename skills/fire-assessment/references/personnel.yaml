@@ -1,0 +1,12 @@
+# 受威胁人员与避灾路线的估算参数（演示用占位值）。由 mcp/ventnet 的 network.py 迁移，数值未改。
+# 方法：网络拓扑 + 设计风量估算（未做风量解算），到达时间仅供参考。
+# TODO(数据): 巷道断面用图纸断面替换；TODO(算法): 风量解算（Hardy Cross）后用解算风量。
+status: placeholder
+reviewed_by: null
+
+default_section_m2: 12.0        # 巷道断面缺省值
+default_air_velocity_m_s: 0.5   # 没有设计风量时的风速
+min_air_velocity_m_s: 0.2
+walk_speed_m_s: 1.0             # 正常步行
+self_rescuer_speed_m_s: 0.7     # 佩戴自救器撤离
+non_intake_penalty: 1.5         # 避灾路线优先走进风巷道：其他巷道的长度乘以此值

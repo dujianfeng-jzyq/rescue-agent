@@ -1,0 +1,22 @@
+# 风险检测的参数（design-v2 4.9“检测判据”初稿，演示用占位值，待专家评审）。
+# check.py 用 anomaly、required；持续检测（P4）另用 interval_min、max_hours、data_gap_cycles。
+status: placeholder
+reviewed_by: null
+
+panels: ["1201"]            # check_mine 缺省检测的工作面
+interval_min: 10            # 持续检测的间隔（矿井分钟）
+max_hours: 72               # 持续检测的最长时长（矿井小时），到时结束并报告“检测到期、未见异常”
+data_gap_cycles: 3          # 必需测点连续这么多个检测周期没有新数据算数据中断
+
+# 必需测点：这些测点组里的这些参数被判为故障、卡值或没有数据时，算“必需测点失效”
+required:
+  tubes: [CO, O2]
+  upper_corner: [CO, CH4]
+  return: [CO, CH4]
+
+# 相对基线，出现任一项算异常（没有基线时与“正常状态”比较：等级无、未见自燃征兆、无报警、无失效测点）
+anomaly:
+  new_alarm: true           # 出现基线里没有的报警（按规则编号 + 测点区分）
+  level_up: true            # 预警等级高于基线
+  stage_up: true            # 自燃阶段推进
+  required_failed: true     # 基线时正常的必需测点失效，或必需测点组没有匹配的测点

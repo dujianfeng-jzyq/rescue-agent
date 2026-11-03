@@ -1,0 +1,30 @@
+{
+ "algorithm_version": "stage/1.0.0",
+ "params": {
+  "stage": {
+   "intense": {
+    "c2h2_ppm": 0.05
+   },
+   "accelerating": {
+    "c2h4_ppm": 0.05
+   },
+   "slow_oxidation": {
+    "tube_co_ppm": 25,
+    "tube_co_rate_ppm_h": 0.2
+   }
+  },
+  "status": "placeholder"
+ },
+ "warnings": [
+  "阶段判据为开发占位值，待专家按本矿煤样程序升温实验审定"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-03T08:00:00",
+  "stage": "no_sign",
+  "stage_name": "未见自燃征兆",
+  "stage_basis": [
+   "各阶段条件均未满足"
+  ]
+ }
+}

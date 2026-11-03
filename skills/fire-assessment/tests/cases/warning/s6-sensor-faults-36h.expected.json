@@ -1,0 +1,129 @@
+{
+ "algorithm_version": "warning/1.0.0",
+ "params": {
+  "thresholds": {
+   "blue": {
+    "uc_co_ppm": 10,
+    "tube_co_ppm": 40,
+    "tube_co_rate_ppm_h": 1
+   },
+   "yellow": {
+    "uc_co_ppm": 18,
+    "tube_co_ppm": 80,
+    "graham_ratio": 0.5
+   },
+   "orange": {
+    "uc_co_ppm": 24,
+    "tube_co_ppm": 200,
+    "c2h4_ppm": 0.3,
+    "graham_ratio": 1.0
+   },
+   "red": {
+    "tube_co_ppm": 1000,
+    "c2h4_ppm": 2.0,
+    "c2h2_ppm": 0.1
+   }
+  },
+  "window_h": 24,
+  "rate_window_h": 12,
+  "status": "placeholder"
+ },
+ "warnings": [
+  "阈值为开发占位值，待专家按本矿自然发火预测预报制度审定"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-03T20:00:00",
+  "level": "none",
+  "level_name": "无",
+  "triggered": [],
+  "indicators": {
+   "上隅角CO(ppm)": 5.379,
+   "束管CO最大值(ppm)": 19.263,
+   "束管CO上升速率(ppm/h)": 0.013,
+   "乙烯(ppm)": 0.0,
+   "乙炔(ppm)": 0.0,
+   "格雷哈姆系数": 0.015
+  },
+  "indicator_list": [
+   {
+    "key": "uc_co_ppm",
+    "label": "上隅角CO(ppm)",
+    "value": 5.379,
+    "sensor_id": "SM-1201-UC"
+   },
+   {
+    "key": "tube_co_ppm",
+    "label": "束管CO最大值(ppm)",
+    "value": 19.263,
+    "sensor_id": "BT-1201-G1"
+   },
+   {
+    "key": "tube_co_rate_ppm_h",
+    "label": "束管CO上升速率(ppm/h)",
+    "value": 0.013,
+    "sensor_id": "BT-1201-G1"
+   },
+   {
+    "key": "c2h4_ppm",
+    "label": "乙烯(ppm)",
+    "value": 0.0,
+    "sensor_id": "BT-1201-G1"
+   },
+   {
+    "key": "c2h2_ppm",
+    "label": "乙炔(ppm)",
+    "value": 0.0,
+    "sensor_id": "BT-1201-G1"
+   },
+   {
+    "key": "graham_ratio",
+    "label": "格雷哈姆系数",
+    "value": 0.015,
+    "sensor_id": "BT-1201-G1"
+   }
+  ],
+  "values": {
+   "uc_co_ppm": 5.379,
+   "tube_co_ppm": 19.263,
+   "tube_co_rate_ppm_h": 0.012719780219780286,
+   "c2h4_ppm": 0.0,
+   "c2h2_ppm": 0.0,
+   "graham_ratio": 0.01485351785016862
+  },
+  "sources": {
+   "uc_co_ppm": {
+    "sensor_id": "SM-1201-UC",
+    "measurand": "CO"
+   },
+   "tube_co_ppm": {
+    "sensor_id": "BT-1201-G1",
+    "measurand": "CO"
+   },
+   "tube_co_rate_ppm_h": {
+    "sensor_id": "BT-1201-G1",
+    "measurand": "CO"
+   },
+   "graham_ratio": {
+    "sensor_id": "BT-1201-G1",
+    "measurand": "CO"
+   },
+   "c2h4_ppm": {
+    "sensor_id": "BT-1201-G1",
+    "measurand": "C2H4"
+   },
+   "c2h2_ppm": {
+    "sensor_id": "BT-1201-G1",
+    "measurand": "C2H2"
+   }
+  },
+  "data_quality": [
+   "SM-1201-RET/CO：25 个点缺数",
+   "BT-1201-G2/CO：读数长时间不变，疑似卡值，已排除"
+  ],
+  "notes": [
+   "BT-1201-G1 氮气浓度 85.5%，可能处于注氮影响范围，格雷哈姆系数偏低失真"
+  ],
+  "method": "阈值分级（references/thresholds.yaml）。阈值为演示占位值，需按本矿自然发火预测预报制度设定；自燃发展阶段与等级独立判定"
+ }
+}

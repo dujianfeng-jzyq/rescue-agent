@@ -1,0 +1,47 @@
+{
+ "algorithm_version": "trend/1.0.0",
+ "params": {
+  "trend_hours": 24,
+  "default_trend_indicators": [
+   "uc_co_ppm",
+   "tube_co_ppm"
+  ],
+  "status": "placeholder"
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "trends": [
+   {
+    "sensor_id": "BT-1201-G1",
+    "measurand": "CO",
+    "hours": 24,
+    "points": 25,
+    "usable_points": 25,
+    "first": 252.431,
+    "first_ts": "2026-11-03T20:00:00",
+    "latest": 1629.091,
+    "latest_ts": "2026-11-04T20:00:00",
+    "change": 1376.66,
+    "rate_per_hour": 56.61,
+    "data_quality": []
+   },
+   {
+    "sensor_id": "BT-1201-G1",
+    "measurand": "C2H4",
+    "hours": 24,
+    "points": 25,
+    "usable_points": 25,
+    "first": 0.743,
+    "first_ts": "2026-11-03T20:00:00",
+    "latest": 4.397,
+    "latest_ts": "2026-11-04T20:00:00",
+    "change": 3.654,
+    "rate_per_hour": 0.156,
+    "data_quality": []
+   }
+  ],
+  "data_quality_all": []
+ }
+}

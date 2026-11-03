@@ -1,0 +1,12 @@
+# 实时红线报警的参数（演示用占位值）。由 mcp/fire-model 的 alarms.py 迁移，数值未改。
+# TODO(专家): 第75条“继续上升”的判据、复燃征兆的判据和参数，按本矿火区管理经验确定。
+status: placeholder
+reviewed_by: null
+
+methane:                   # 第75条：巷道测点（不含采空区束管）甲烷超限且上升
+  limit_pct: 2.0
+  window_h: 1              # 上升速率的计算窗口
+reignition:                # 第164条相关：火区台账里的火区，束管 CO 持续上升
+  window_h: 12
+  co_rate_ppm_h: 0.8
+  co_growth_ratio: 1.3     # 最新值 ≥ 窗口起点 × 此值

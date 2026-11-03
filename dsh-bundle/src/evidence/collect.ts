@@ -52,7 +52,7 @@ export function parseCollectSpec(text: string, where = 'collect.yaml'): CollectS
   if (!spec.kinds || typeof spec.kinds !== 'object') throw new Error(`${where}：缺少 kinds`)
   for (const [kind, k] of Object.entries<any>(spec.kinds)) {
     for (const g of k.sensors ?? []) {
-      if (!g.name || !g.select) throw new Error(`${where}：${kind} 的测点组要有 name 和 select`)
+      if (!g.name || !g.select || typeof g.select !== 'object' || Array.isArray(g.select)) throw new Error(`${where}：${kind} 的测点组要有 name 和 select`)
     }
   }
   return spec as CollectSpec

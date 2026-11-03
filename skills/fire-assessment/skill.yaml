@@ -1,0 +1,26 @@
+# 第二版技能的脚本登记（skills/README.md）。只有登记过的脚本能被证据插件运行。
+scripts:
+  check:
+    file: scripts/check.py
+    description: 风险检测：必需测点、实时报警、预警等级、自燃阶段，与基线比较判定是否异常
+    timeout_s: 20
+  warning:
+    file: scripts/warning.py
+    description: 预警等级（none/blue/yellow/orange/red）、触发条件、指标值和来源测点、数据质量
+    timeout_s: 20
+  stage:
+    file: scripts/stage.py
+    description: 自燃发展阶段（按 warning 的指标原值）
+    timeout_s: 10
+  alarms:
+    file: scripts/alarms.py
+    description: 实时红线报警（第75条甲烷、第164条复燃征兆）
+    timeout_s: 20
+  trend:
+    file: scripts/trend.py
+    description: 触发指标来源测点的趋势（首末值、变化量、速率）
+    timeout_s: 20
+  personnel:
+    file: scripts/personnel.py
+    description: 受威胁人员、有害气体到达时间和避灾路线（等级达到阈值或要求时计算）
+    timeout_s: 20

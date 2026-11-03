@@ -25,7 +25,7 @@ test-py:
 test-ts:
 	cd dsh-bundle && pnpm test && pnpm typecheck
 lint:
-	cd mcp && uv run ruff check . ../eval ../scripts
+	cd mcp && uv run ruff check . ../eval ../scripts ../skills
 check:            ## 提交前：lint + 全部测试 + 技能自检 + patch 离线校验 + 基线评测
 	$(MAKE) lint test skills-check
 	python3 scripts/check_patches.py

@@ -1,0 +1,12 @@
+# 完整研判的取数规则（演示用占位值）。由 mcp/workflow 的 workflow.yaml assessment 节迁移，数值未改。
+status: placeholder
+reviewed_by: null
+
+trend_hours: 24                 # 趋势窗口
+# 没有任何触发条件时也要看趋势的指标（键同 warning 的指标）
+default_trend_indicators: [uc_co_ppm, tube_co_ppm]
+# 受威胁人员：等级达到此级别时计算（也可由调用方要求 options.include_personnel）
+personnel_level_at_least: orange
+# 受威胁人员的源头巷道类型：采空区漏风经上隅角进入工作面回风侧，取工作面巷道偏保守
+# TODO(专家): 确认源头；可选 working_face / goaf
+personnel_source_kind: working_face

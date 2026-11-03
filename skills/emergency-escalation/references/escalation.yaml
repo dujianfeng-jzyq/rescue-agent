@@ -1,0 +1,11 @@
+# 升级为应急响应的建议判据（演示用占位值）。由 mcp/fire-model 的 thresholds.yaml escalation 节迁移，数值未改。
+# TODO(专家): 按本矿火灾专项应急预案的启动条件替换；引用条文同样待审定。
+# 满足任一条件即建议升级。
+status: placeholder
+reviewed_by: null
+
+level_at_least: red        # 预警等级达到即建议升级
+stages: [intense]          # 自燃发展阶段属于其中之一即建议升级
+effect_worsening: true     # 最近一次效果评估为“恶化”即建议升级
+realtime_alarm: true       # 有实时红线报警即建议升级
+articles: [第39条, 第40条, 第73条]   # 建议中引用的《矿山救援规程》条款

@@ -1,0 +1,263 @@
+{
+ "algorithm_version": "explosion-triangle/1.0.0",
+ "params": {
+  "status": "placeholder",
+  "air_o2_pct": 20.93,
+  "n2_per_o2": 3.73,
+  "temperature": {
+   "reference_c": 25.0,
+   "coefficient_per_c": 0.000721,
+   "min_c": -40.0,
+   "max_c": 125.0
+  },
+  "composition_tolerance_pct": 0.5,
+  "sample_window_h": 6,
+  "gases": {
+   "CH4": {
+    "L": [
+     5.0,
+     19.88
+    ],
+    "U": [
+     15.0,
+     17.79
+    ],
+    "S_N2": [
+     5.18,
+     9.47
+    ],
+    "S_CO2": [
+     5.96,
+     12.32
+    ]
+   },
+   "H2": {
+    "L": [
+     4.0,
+     20.09
+    ],
+    "U": [
+     74.2,
+     5.4
+    ],
+    "S_N2": [
+     4.2,
+     5.13
+    ],
+    "S_CO2": [
+     5.2,
+     8.46
+    ]
+   },
+   "CO": {
+    "L": [
+     12.5,
+     18.81
+    ],
+    "U": [
+     74.2,
+     5.4
+    ],
+    "S_N2": [
+     13.06,
+     5.16
+    ],
+    "S_CO2": [
+     15.67,
+     8.01
+    ]
+   },
+   "C2H2": {
+    "L": [
+     2.5,
+     20.41
+    ],
+    "U": [
+     80.0,
+     4.19
+    ],
+    "S_N2": [
+     2.36,
+     5.07
+    ],
+    "S_CO2": [
+     3.27,
+     8.51
+    ]
+   },
+   "C2H4": {
+    "L": [
+     2.75,
+     20.35
+    ],
+    "U": [
+     28.6,
+     14.49
+    ],
+    "S_N2": [
+     2.89,
+     6.06
+    ],
+    "S_CO2": [
+     3.53,
+     9.45
+    ]
+   },
+   "C2H6": {
+    "L": [
+     3.0,
+     20.3
+    ],
+    "U": [
+     12.5,
+     18.31
+    ],
+    "S_N2": [
+     3.12,
+     8.41
+    ],
+    "S_CO2": [
+     3.82,
+     11.17
+    ]
+   },
+   "C3H6": {
+    "L": [
+     2.0,
+     20.51
+    ],
+    "U": [
+     11.1,
+     18.61
+    ],
+    "S_N2": [
+     2.09,
+     7.62
+    ],
+    "S_CO2": [
+     2.5,
+     10.92
+    ]
+   },
+   "C3H8": {
+    "L": [
+     2.12,
+     20.49
+    ],
+    "U": [
+     9.35,
+     18.97
+    ],
+    "S_N2": [
+     2.21,
+     8.36
+    ],
+    "S_CO2": [
+     2.61,
+     11.57
+    ]
+   },
+   "C4H10": {
+    "L": [
+     1.86,
+     20.54
+    ],
+    "U": [
+     8.41,
+     19.17
+    ],
+    "S_N2": [
+     1.93,
+     8.39
+    ],
+    "S_CO2": [
+     2.29,
+     11.57
+    ]
+   }
+  },
+  "explosion_order": [
+   "explosive",
+   "may_become_explosive",
+   "not_explosive"
+  ]
+ },
+ "warnings": [
+  "顶点、温度修正系数等参数为开发占位值，待专家审定；结果用于风险研判，不替代现场检测和指挥决策"
+ ],
+ "result": {
+  "mode": "sample",
+  "panel": null,
+  "as_of": null,
+  "overall": "not_explosive",
+  "overall_name": "当前不在爆炸范围",
+  "worst_sensor_id": null,
+  "points": [
+   {
+    "sensor_id": null,
+    "zone": "IV",
+    "zone_name": "相对安全区",
+    "explosion_risk": "not_explosive",
+    "meaning": "当前组成下单纯混入空气或可燃气体积聚都不会进入爆炸范围；条件变化后须重新计算",
+    "enters_if_air_added": false,
+    "enters_if_combustible_accumulates": false,
+    "state_point": {
+     "combustible_pct": 4.5121,
+     "o2_pct": 8.2
+    },
+    "triangle": {
+     "lower": {
+      "combustible_pct": 4.9946,
+      "o2_pct": 19.8772
+     },
+     "upper": {
+      "combustible_pct": 15.2342,
+      "o2_pct": 17.757
+     },
+     "critical": {
+      "combustible_pct": 5.2731,
+      "o2_pct": 9.7208
+     }
+    },
+    "combustibles_pct": {
+     "CH4": 4.5,
+     "CO": 0.012,
+     "C2H4": 8e-05
+    },
+    "combustible_total_pct": 4.51208,
+    "combustible_weights": {
+     "CH4": 0.9973,
+     "CO": 0.0027,
+     "C2H4": 0.0
+    },
+    "temperature_c": 32.0,
+    "temperature_factor": 0.005047,
+    "inert": {
+     "co2_pct": 3.1,
+     "n2_weight": 30.586,
+     "n2_source": "o2_equivalent"
+    },
+    "warnings": [
+     "顶点、温度修正系数等参数为开发占位值，待专家审定；结果用于风险研判，不替代现场检测和指挥决策",
+     "没有可用的 N2 实测值，S 点按 N2 当量 = 3.73 × O2 合成（不是实测 N2），注氮惰化时结论偏保守",
+     "IV 区只说明当前组成；气体组成或风流变化后须重新计算",
+     "化验单未提供 H2、C2H2、C2H6，未计入；这些组分实际存在时结论偏乐观"
+    ],
+    "method": "温度补偿爆炸三角形合成法（多组分）；分区按混入空气/可燃气体积聚两个方向是否进入三角形判定",
+    "sample": {
+     "source": "人工取样化验单",
+     "inputs": {
+      "o2_pct": 8.2,
+      "co2_pct": 3.1,
+      "temperature_c": 32.0,
+      "ch4_pct": 4.5,
+      "co_ppm": 120.0,
+      "c2h4_ppm": 0.8
+     }
+    }
+   }
+  ],
+  "failures": [],
+  "chart_sensor_id": null
+ }
+}

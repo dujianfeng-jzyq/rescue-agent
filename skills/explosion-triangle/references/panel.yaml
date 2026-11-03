@@ -1,0 +1,7 @@
+# 按工作面计算时怎样汇总多个束管测点（演示用占位值）。由 mcp/workflow 的 workflow.yaml 迁移，规则未改。
+# TODO(专家): 审定汇总规则。
+status: placeholder
+reviewed_by: null
+
+# 取最不利；任一测点算不出来时为 unknown（不放行）
+explosion_order: [explosive, may_become_explosive, not_explosive]

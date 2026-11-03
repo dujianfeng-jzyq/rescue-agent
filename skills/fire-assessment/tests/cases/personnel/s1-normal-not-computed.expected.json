@@ -1,0 +1,21 @@
+{
+ "algorithm_version": "personnel/1.0.0",
+ "params": {
+  "personnel_level_at_least": "orange",
+  "personnel_source_kind": "working_face",
+  "status": "placeholder",
+  "default_section_m2": 12.0,
+  "default_air_velocity_m_s": 0.5,
+  "min_air_velocity_m_s": 0.2,
+  "walk_speed_m_s": 1.0,
+  "self_rescuer_speed_m_s": 0.7,
+  "non_intake_penalty": 1.5
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-03T08:00:00",
+  "computed": false,
+  "note": "预警等级未达到橙色（严重），未计算受威胁人员"
+ }
+}
