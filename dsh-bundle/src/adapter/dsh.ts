@@ -17,3 +17,5 @@ export type {
   ToolExecutionResult,
 } from '@deepseek-ai/dsh-tools'
 export { default as Schema } from '@deepseek-ai/schemastery'
+export { Service } from '@deepseek-ai/cordis'
+export { defineTool } from '@deepseek-ai/dsh-tools'

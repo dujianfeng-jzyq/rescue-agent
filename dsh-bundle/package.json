@@ -2,11 +2,12 @@
   "name": "@rescue/dsh-bundle",
   "version": "0.1.0",
   "private": true,
-  "description": "煤矿应急救援智能体的 DSH bundle：人工确认与红线预检、审计、5 个 Agent 预设",
+  "description": "煤矿应急救援智能体的 DSH bundle：人工确认与红线预检、审计、证据（第二版）、Agent 预设",
   "type": "module",
   "exports": {
     "./approval": "./lib/approval/index.js",
     "./audit": "./lib/audit/index.js",
+    "./evidence": "./lib/evidence/index.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -44,5 +45,8 @@
     "@deepseek-ai/schemastery": "3.18.5",
     "@types/node": "^22.19.0",
     "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
   }
 }

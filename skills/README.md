@@ -75,6 +75,28 @@ reviewed_by: null          # 审定人和日期，status 为 reviewed 时必填
 
 改参数必须同时更新受影响的样例；提交说明写明是占位值还是专家审定值（CLAUDE.md 约定 6）。
 
+## 采集清单（references/collect.yaml）
+
+需要读矿井数据的技能（如 `fire-assessment`）在这里声明“采什么”；证据插件按清单从 mine_data 取数，存为证据记录，再把证据交给脚本。脚本自己不连矿井（它没有令牌，也不该访问网络）。
+
+```yaml
+status: placeholder
+reviewed_by: null
+kinds:                          # 一份清单可以有多种采集，如 check（风险检测）、assessment（完整研判）
+  check:
+    sensors:                    # 测点组
+      - name: tubes             # 证据里 groups.<name>
+        select: {source: bundle_tube, panel: true}   # 按来源、按工作面编号（测点 id 含工作面），或 ids: ["SM-{panel}-UC"]
+        require_measurands: [O2, CO2]                # 可选：测点必须同时具备的参数
+        measurands: [CO, O2, CH4, C2H4, C2H2, H2, CO2, N2]   # 可选：只取这些参数（缺省为测点的全部参数）
+        window_h: 6             # 可选：历史窗口（矿井小时）；缺省只取最新值
+        required: true          # 没有匹配的测点时写进证据的 missing
+    events_h: 6                 # 可选：安全监控事件
+    fire_areas: true            # 可选：火区台账；还有 personnel、inventory、rescue_teams、network
+```
+
+证据内容：`{kind, panel, as_of, groups: {<name>: {sensors, measurands, latest, readings, window_h}}, missing, events?, fire_areas?, …}`。测点按 id、读数按（测点、参数、时间）排序，时间截到秒。只能用 mine_data 的工具（CLAUDE.md 约定 5）。证据插件（TS）和 Python 采集小工具（`python -m rescue_contract.collect`，不经 DSH 的基线评测用）实现同一规则，一致性测试保证两边采到的证据逐字节相同。
+
 ## 自检样例
 
 - 每个登记的脚本至少一组样例：`tests/cases/<脚本名>/<样例名>.input.json` 和同名 `.expected.json`；

@@ -89,3 +89,17 @@ def test_get_missing_or_bad_id(tmp_path, rid):
 def test_store_dir_from_env(tmp_path, monkeypatch):
     monkeypatch.setenv("RESCUE_RECORD_DIR", str(tmp_path / "r"))
     assert RecordStore().dir == tmp_path / "r"
+
+
+def test_reads_record_written_by_typescript(tmp_path):
+    """证据插件（TS）写的记录，Python 侧能按模型解析并通过哈希核对（样例由 dsh-bundle 的 buildRecord 生成，TS 测试比对同一文件）。"""
+    import json
+    from pathlib import Path
+
+    text = (Path(__file__).parent / "fixtures" / "record-from-ts.json").read_text(encoding="utf-8")
+    rec = verify(Record.model_validate_json(text))
+    assert rec.record_id == "RS-20261107T080000-x1y2z3" and rec.content["result"]["ratio"] == 1e-7
+    (tmp_path / f"{rec.record_id}.json").write_text(text, encoding="utf-8")
+    assert RecordStore(tmp_path).get(rec.record_id) == rec
+    # Python 写出的同一条记录，TS 的 verify 也要能过：字段集合相同
+    assert set(json.loads(rec.model_dump_json())) == set(json.loads(text))

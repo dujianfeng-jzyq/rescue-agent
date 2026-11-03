@@ -39,12 +39,12 @@ jobs:
         with: { node-version: 22 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install pyyaml
+      - run: pip install pyyaml ./mcp/contract   # 契约包：TS 测试里运行技能脚本、用 Python 核对 TS 写的记录
       - name: patch 离线校验
         run: python3 scripts/check_patches.py
       - working-directory: dsh-bundle
         run: |
           pnpm install --no-frozen-lockfile   # TODO: 第一次在联网环境安装后提交 pnpm-lock.yaml，并去掉这个参数
           pnpm typecheck
-          pnpm test
+          RESCUE_TEST_PYTHON=python3 pnpm test
           pnpm build
