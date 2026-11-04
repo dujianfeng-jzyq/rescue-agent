@@ -483,8 +483,9 @@ def _norm_lines(text: str) -> str:
 
 
 def _snapshot_ids(obj) -> list[str]:
+    """指令参数里引用的快照（第一版 snapshot_id）或记录（第二版 record_id）编号。"""
     if isinstance(obj, dict):
-        return [v for k, v in obj.items() if k == "snapshot_id" and isinstance(v, str)] + [x for v in obj.values() for x in _snapshot_ids(v)]
+        return [v for k, v in obj.items() if k in ("snapshot_id", "record_id") and isinstance(v, str)] + [x for v in obj.values() for x in _snapshot_ids(v)]
     if isinstance(obj, list):
         return [x for v in obj for x in _snapshot_ids(v)]
     return []
@@ -620,6 +621,8 @@ def grade(root: Session, checks: dict) -> dict:
 
     if checks.get("snapshot_referenced"):
         produced = {r["snapshot_id"] for _, r in wf if r.get("snapshot_id")}
+        # 第二版：固定流程产生的记录编号
+        produced |= {v for t, r in wf if t == "run_fire_assessment" for v in (r.get("record_ids") or {}).values() if isinstance(v, str)}
         bad = []
         for s in sessions:
             for name, args in s.calls():

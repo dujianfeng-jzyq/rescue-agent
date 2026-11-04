@@ -143,7 +143,7 @@ def build_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
         out[(FA, "check", label)] = report_data({"check": fake_record("check", check, 0)})
         if esc_key:
             esc = run(ESC, "escalation", inputs[esc_key])
-            out[(ESC, "report", label)] = report_data({"escalation": fake_record("escalation", esc, 0)})
+            out[(ESC, "report", label)] = report_data({"escalation": fake_record("escalation", esc, 0)}, {"articles": index_articles(esc["result"]["articles"])})
     opts = run(FA, "explanation_options", inputs[(FA, "explanation_options", "s4-escalation-60h-red")])
     fo, ns = opts["result"]["focus_options"], opts["result"]["next_step_options"]
     explanation = {
@@ -152,6 +152,17 @@ def build_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
         "next_steps": [{"id": ns[0]["id"], "label": ns[0]["label"], "reason": "撤人不等待研判"}],
     }
     out[(FA, "explanation", "s4-escalation-60h-red")] = report_data({"options": fake_record("options", opts, 0)}, {"explanation": explanation, "child_id": "case"})
+    return out
+
+
+def index_articles(refs: list[dict]) -> list[dict]:
+    """与知识库插件的 kb_get_articles 相同：从条文索引取原文（每段一行）。"""
+    index = json.loads((ROOT / "dsh-bundle" / "data" / "article-index.json").read_text(encoding="utf-8"))
+    out = []
+    for ref in refs:
+        n = int(ref["article"].strip("第条"))
+        hit = next((a for a in index["articles"].get(ref["document"], []) if a["number"] == n), None)
+        out.append({**ref, "content": "\n".join(hit["paragraphs"]) if hit else None, "source": "index" if hit else "not-found"})
     return out
 
 

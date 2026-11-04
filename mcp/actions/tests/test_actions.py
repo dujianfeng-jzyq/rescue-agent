@@ -88,7 +88,7 @@ def test_wrong_plan_kind_for_tool_is_rejected(tmp_path):
 
 
 def test_all_actions_tools_are_command_tools(tmp_path):
-    """actions 服务只放需要确认的指令；只读自查工具在 kb 服务。"""
+    """actions 服务放需要确认的指令；只读工具必须以 precheck_ 开头（审批插件按这个前缀放行，不弹确认）。"""
     _, server, _ = setup(tmp_path)
 
     async def go():
@@ -96,7 +96,8 @@ def test_all_actions_tools_are_command_tools(tmp_path):
             return {t.name for t in (await c.list_tools()).tools}
 
     names = asyncio.run(go())
-    assert names == {
+    assert {n for n in names if n.startswith("precheck_")} == {"precheck_plan"}
+    assert names - {"precheck_plan"} == {
         "publish_warning",
         "issue_firefighting_plan",
         "escalate_emergency",
@@ -136,3 +137,48 @@ def test_precheck_route_without_mine_clock_blocks_only_timed_tools(tmp_path, mon
         evac = http.post("/redlines/check", json={"tool": "notify_evacuation", "arguments": {}}).json()
     assert not warn["ok"] and "矿井时间" in warn["problems"][0]
     assert evac["ok"], evac
+
+
+def test_precheck_plan_is_read_only_and_lists_rules(tmp_path):
+    holder, server, ledger = setup(tmp_path)
+    plan = sealing_plan(holder.engine.now(), ["evacuate", "temporary_seal", "monitor", "permanent_seal"])
+    r = call(server, "precheck_plan", {"tool": "issue_sealing_plan", "plan": plan})
+    out = r.structured_content
+    assert out["ok"] is False and any("第85条" in p for p in out["problems"])
+    assert out["rules_checked_count"] == len(out["rules_checked"]) and "第85条" in out["rule_articles"]
+    assert not ledger.exists() or ledger.read_text() == ""  # 自查不写台账
+
+
+def _warning_record(tmp_path, holder, level="red", script="warning"):
+    from datetime import UTC, datetime
+
+    from rescue_contract.canonical import content_sha256
+    from rescue_contract.models import Origin, Record, RecordKind
+    from rescue_contract.records import RecordStore, new_record_id
+
+    store = RecordStore(tmp_path / "records")
+    content = {"algorithm_version": "x", "params": {}, "warnings": [], "result": {"level": level}}
+    now = holder.engine.now()
+    rec = Record(
+        record_id=new_record_id(RecordKind.RESULT, now), kind=RecordKind.RESULT, panel="1201", as_of=now, created_at=datetime.now(UTC),
+        origin=Origin(channel="web", trigger="chat"), source={"skill": "fire-assessment", "script": script},
+        content=content, content_sha256=content_sha256(content),
+    )  # fmt: skip
+    return store, store.put(rec).record_id
+
+
+def test_publish_warning_by_record(tmp_path):
+    holder = SimHolder("s4-escalation", manual_clock=True)
+    holder.engine.clock.advance(60)
+    records, rid = _warning_record(tmp_path, holder)
+    ledger = tmp_path / "ledger.jsonl"
+    server = build_server(build_mine(holder), ledger_path=ledger, sim_control_url="", records=records)
+    notice = {"location": "1201 工作面采空区", "level": "red", "summary": "红色预警", "record_id": rid}
+    r = call(server, "publish_warning", {"notice": notice})
+    assert not r.is_error and r.structured_content["status"] == "issued"
+    # 等级与记录不同且没写理由：拒绝并记台账
+    r = call(server, "publish_warning", {"notice": {**notice, "level": "yellow"}})
+    assert r.is_error and "计算结果 红色 不一致" in r.content[0].text
+    rows = [json.loads(x) for x in ledger.read_text(encoding="utf-8").splitlines()]
+    assert [x["status"] for x in rows] == ["issued", "rejected"]
+    assert rows[0]["payload"]["record_id"] == rid

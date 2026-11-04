@@ -19,7 +19,8 @@ def plan(as_of: datetime, kind: str = "sealing", steps=("evacuate", "inert_injec
 
 
 def test_non_plan_tools_pass():
-    assert precheck("publish_warning", {}, NOW) == {"ok": True, "problems": [], "notes": []}
+    r = precheck("publish_warning", {}, NOW)
+    assert (r["ok"], r["problems"], r["notes"]) == (True, [], [])
 
 
 def test_valid_plan_passes():

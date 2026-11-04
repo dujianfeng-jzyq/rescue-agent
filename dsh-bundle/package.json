@@ -9,6 +9,7 @@
     "./audit": "./lib/audit/index.js",
     "./evidence": "./lib/evidence/index.js",
     "./fire-loop": "./lib/fire-loop/index.js",
+    "./knowledge": "./lib/knowledge/index.js",
     "./package.json": "./package.json"
   },
   "files": [

@@ -1,8 +1,8 @@
 /**
  * rescue-fire-loop：火灾闭环的固定流程插件（docs/design-v2.md 4.4，ADR 0007）。本阶段（P1）只有 run_fire_assessment。
  *
- * 进程内调用证据插件的服务 rescueEvidence（采集、运行技能脚本、渲染报告），所以必须和证据插件放在同一个
- * 带 isolate 的 cordis:group 里（profiles/v2.patch.yml）。步骤在 assessment.ts，判据全在技能脚本里。
+ * 进程内调用证据插件的服务 rescueEvidence（采集、运行技能脚本、渲染报告）和知识库插件的 rescueKnowledge（条文原文），
+ * 所以必须和这两个插件放在同一个带 isolate 的 cordis:group 里（profiles/v2.patch.yml）。步骤在 assessment.ts，判据全在技能脚本里。
  *
  * 阶段“研判说明”用 ctx.subagents.startActivation 起子 Agent（与调用方同一组合，delivery: caller，outputSchema），
  * 用 tools.guard 限制它只能调 structured_output（子 Agent 的编号先预留，守卫从第一次调用起就生效；
@@ -19,11 +19,12 @@ import { join } from 'node:path'
 import type { Context } from '../adapter/dsh.ts'
 import { defineTool, Schema } from '../adapter/dsh.ts'
 import type RescueEvidence from '../evidence/index.ts'
+import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
 
 export const name = 'rescue-fire-loop'
-export const inject = ['tools', 'rescueEvidence', 'workingDirectory', 'subagents']
+export const inject = ['tools', 'rescueEvidence', 'rescueKnowledge', 'workingDirectory', 'subagents']
 
 export interface Config {
   /** 起阶段子 Agent 的后端（本机进程内） */
@@ -49,6 +50,7 @@ const toJson = (v: unknown) => JSON.parse(JSON.stringify(v)) as never
 export function apply(ctx: Context, config: Config) {
   const c = ctx as any
   const evidence = (c.rescueEvidence as RescueEvidence).evidence
+  const knowledge = (c.rescueKnowledge as RescueKnowledge).knowledge
   const stageChildren = new Set<string>()
 
   // 阶段子 Agent 只能提交结构化结果
@@ -140,6 +142,7 @@ export function apply(ctx: Context, config: Config) {
             // 风险图导出到会话工作区（records/<会话>/），网页端经 /api/file 显示
             chartPath: async (id) => (await evidence.exportRecord(id, workspace, session)).files[0] ?? null,
             ...(config.disableStage ? {} : { stage: stageRunner(parent, runId) }),
+            getArticles: (document, articles) => knowledge.getArticles(document, articles).results,
           })
 
           // 交付：报告写成 Markdown 文件，连同风险图用 present 交付

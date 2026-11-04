@@ -4,7 +4,8 @@
 #
 # 按 id 覆盖总指挥预设 rescue-commander；第一版的 rescue-plan、rescue-compliance 预设仍在（P3 后移除）。
 # P1：证据插件的 check_mine（一次性检测）、get_record、export_record，固定流程 run_fire_assessment，以及 actions；
-# 封闭方案、复评、持续检测、知识库插件在 P2–P4 加，persona 随之补充。
+# P2：知识库插件（kb_get_articles、kb_search、kb_list_datasets）；预警、升级按记录（record_id）核对。
+# 封闭方案、复评、持续检测在 P3–P4 加，persona 随之补充。
 #
 # 令牌（.env.example）：证据插件用 mine_data 只读令牌，actions 用 actions 令牌；DSH 不拿 /sim 控制令牌。
 - id: preset-rescue-commander
@@ -31,6 +32,7 @@
             - 需要在记录基础上做进一步分析时，可以用 export_record 把记录导出到工作区，按技能用 bash 在沙箱里运行技能脚本试算。沙箱里算出的结果只作参考：回答里要注明“试算，仅供参考”，不能作为指令依据。
             - bash 和文件工具只在会话工作区里使用。不要申请提权（不要用 workspace-write 以外的沙箱权限重试），不要读取工作区以外的配置、密钥或日志文件。
             - 需要发布的指令（预警等级、防灭火方案、升级应急响应、补充撤人名单、调度单、封闭方案、启封）一律通过 actions 工具提交，每次提交都会弹出人工确认。指令被拒绝时，照实转告拒绝原因和条号，不要绕过，不要换个说法重复提交。
+            - 发布预警（publish_warning）的 record_id 照抄 run_fire_assessment 返回的 record_ids.warning，升级应急响应（escalate_emergency）照抄 record_ids.escalation；没有研判记录时先调 run_fire_assessment。等级照抄记录，不要自己改；指挥人员坚持改等级时在 override_reason 写明理由。
             - 方案里需要人确认的现场条件（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）不要替人填写；固定流程缺这些输入时会返回问题清单，用 ask_user 问指挥人员，带着回答重新运行。
             - 有实时红线报警时，在回答开头立即、置顶提示。一旦进入应急响应，提醒调度员按预案立即撤人，撤人不等待你的任何结果；你给出的撤人名单只是补充。
             - 收到后台任务结束的通知时，用 job_output 读一次结果再处理；后台任务被用户停止时，简要确认即可。不要轮询任何工具等待。
@@ -41,7 +43,7 @@
             - 多个测点的数值逐个照抄原值，不要取整、加“约”“左右”、合并成区间。
             - “现在”以记录里的矿井时间（as_of）为准，不使用系统时间。
             - 数据缺失或被判为可疑时，明确说明缺什么、对结论有什么影响；不确定时写“需人工判断”。
-            - 引用规程时，只引用工具给出的条文，照抄文档名和条号；不要凭记忆引用。
+            - 引用规程时，只引用工具给出的条文，照抄文档名、条号和原文；不要凭记忆引用。要条文原文用 kb_get_articles（一次可取多条），不知道条号时先 kb_search，再按结果里的条号取原文。
             - 用中文回答，先给结论，再给依据。
       - id: skill-filesystem
         name: '@deepseek-ai/dsh-skill-filesystem'
@@ -78,6 +80,7 @@
         group: true
         isolate:
           rescueEvidence: true
+          rescueKnowledge: true
         config:
           - id: rescue-evidence
             name: '@rescue/dsh-bundle/evidence'
@@ -88,7 +91,18 @@
               recordDir: !!js "process.env.RESCUE_RECORD_DIR || `${process.env.RESCUE_HOME}/var/records`"
               # 运行技能脚本的解释器：要装有 skills/requirements.txt 的包。Docker 里是镜像自带的 python3
               python: !!js "process.env.RESCUE_SKILL_PYTHON || `${process.env.RESCUE_HOME}/mcp/.venv/bin/python`"
-          # 固定流程：进程内用 rescueEvidence，所以在同一组里
+          # 知识库：条文索引（离线由 scripts/kb/ 建立，随 bundle 发布）+ RAGFlow 检索。
+          # TODO(P5)：RAGFlow 凭据改放 DSH 凭据服务、设置页里配置和测试连接（design-v2 4.7）
+          - id: rescue-knowledge
+            name: '@rescue/dsh-bundle/knowledge'
+            config:
+              indexPath: !!js "`${process.env.RESCUE_HOME}/dsh-bundle/data/article-index.json`"
+              ragflowUrl: !!js "process.env.RAGFLOW_BASE_URL || undefined"
+              ragflowApiKey: !!js "process.env.RAGFLOW_API_KEY || undefined"
+              datasetsRegulations: !!js "(process.env.KB_DATASETS_REGULATIONS || '').split(',').map((s) => s.trim()).filter(Boolean)"
+              datasetsPlans: !!js "(process.env.KB_DATASETS_PLANS || '').split(',').map((s) => s.trim()).filter(Boolean)"
+              datasetsCases: !!js "(process.env.KB_DATASETS_CASES || '').split(',').map((s) => s.trim()).filter(Boolean)"
+          # 固定流程：进程内用 rescueEvidence、rescueKnowledge，所以在同一组里
           - id: rescue-fire-loop
             name: '@rescue/dsh-bundle/fire-loop'
       - id: mcp-actions

@@ -40,6 +40,8 @@ export interface AssessmentOptions {
   onEvent?: (e: FlowEvent) => void
   /** 跑阶段“研判说明”的子 Agent；不给时跳过该阶段（报告只含事实部分） */
   stage?: StageRunner
+  /** 按文档和条号取条文原文（知识库插件的条文索引）；升级建议里的条文用它 */
+  getArticles: (document: string, articles: string[]) => { document: string; article: string; content: string | null; source: string }[]
 }
 
 export interface AssessmentOutcome {
@@ -114,8 +116,14 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       origin,
     }),
   )
+  // 升级建议引用的条文：按脚本给出的条号从条文索引取原文（不由模型、不由脚本写原文）
+  const refs: { document: string; article: string }[] = content(rec.escalation!).articles
+  const docs = [...new Set(refs.map((a) => a.document))]
+  const articles = docs.flatMap((d) =>
+    opts.getArticles(d, refs.filter((a) => a.document === d).map((a) => a.article)).map((a) => ({ document: a.document, article: a.article, content: a.content, source: a.source })),
+  )
   const escReport = await step('escalation_report', () =>
-    ev.renderReport({ skill: 'emergency-escalation', template: 'report', inputs: { escalation: ids.escalation! }, origin }),
+    ev.renderReport({ skill: 'emergency-escalation', template: 'report', inputs: { escalation: ids.escalation! }, extra: { articles }, origin }),
   )
 
   // ── 阶段“研判说明” ──
@@ -170,6 +178,8 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
   if (x.overall === 'unknown') warnings.push('有束管测点算不出爆炸三角形，爆炸危险性按“无法判定”对待')
   if (w.notes.length) warnings.push(...w.notes)
   if (explanationNote) warnings.push(explanationNote)
+  const missingArticles = articles.filter((a) => a.source !== 'index')
+  if (missingArticles.length) warnings.push(`条文索引里没有：${missingArticles.map((a) => `${a.document}${a.article}`).join('、')}`)
   const nextActions = [
     ...(es.recommend ? [{ label: '升级应急响应（escalate_emergency，需人工确认）', tool: null, arguments: {} }] : []),
     { label: '发布预警（publish_warning，需人工确认）', tool: null, arguments: {} },

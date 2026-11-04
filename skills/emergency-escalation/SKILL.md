@@ -29,4 +29,4 @@ version: 0.1.0
 
 ## 边界
 
-是否升级由指挥人员决定；本技能只给建议和依据。条文引自本技能的 `references/articles.yaml`（本地留存），以后由知识库按条号取原文。
+是否升级由指挥人员决定；本技能只给建议和依据。引用的条号在 `references/escalation.yaml`，原文由知识库的条文索引给出（`kb_get_articles`），报告里照抄。

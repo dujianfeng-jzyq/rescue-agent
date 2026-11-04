@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, WithJsonSchema, model_validator
 
-CONTRACT_VERSION = "0.7.0"
+CONTRACT_VERSION = "0.8.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -374,8 +374,11 @@ class WarningNotice(_Model):
     level: WarningLevel
     summary: str
     basis: list[Citation] = Field(default_factory=list)
-    snapshot_id: str | None = None  # 研判快照；发布时必须有，等级按它核对
-    override_reason: str | None = None  # 等级与研判快照不同时必须写明理由（人工改等级）
+    snapshot_id: str | None = None  # 第一版：研判快照；等级按它核对（迁移完成前保留）
+    # 第二版：预警等级的结果记录（fire-assessment/warning，run_fire_assessment 返回的 record_ids.warning）。
+    # 与 snapshot_id 二选一，发布时必须有其一
+    record_id: str | None = None
+    override_reason: str | None = None  # 等级与计算结果不同时必须写明理由（人工改等级）
 
 
 class DispatchLine(_Model):
@@ -405,7 +408,10 @@ class Escalation(_Model):
     reason: str
     recommended_level: str
     basis: list[Citation] = Field(default_factory=list)
-    snapshot_id: str | None = None  # 升级建议快照（workflow 的 recommend_escalation）；发布时必须有
+    snapshot_id: str | None = None  # 第一版：升级建议快照（workflow 的 recommend_escalation）
+    # 第二版：升级建议的结果记录（emergency-escalation/escalation，run_fire_assessment 返回的 record_ids.escalation）。
+    # 与 snapshot_id 二选一，发布时必须有其一
+    record_id: str | None = None
 
 
 # ── 研判快照（workflow 服务生成，指令发布时按编号核对；见 docs/workflow-design.md）──

@@ -2,7 +2,8 @@
 
 输入：{"warning": <fire-assessment/warning.py 的输出>, "stage": <stage.py 的输出>, "alarms": <alarms.py 的输出>,
        "effect": <effect-review 的输出，可省略>}。
-输出 result：recommend、reasons（命中的判据）、not_met（未命中时逐项说明）、criteria、articles（条文原文）、撤人提醒。
+输出 result：recommend、reasons（命中的判据）、not_met（未命中时逐项说明）、criteria、articles（引用的条号）、撤人提醒。
+条文原文不在脚本里：固定流程按 articles 从知识库的条文索引取（kb_get_articles），放进报告。
 是否升级由指挥人员决定；撤人不等待本建议。
 """
 
@@ -14,22 +15,13 @@ NAMES = {"none": "无", "blue": "蓝色（关注）", "yellow": "黄色（预警
 EVACUATION = "一旦进入应急响应，撤人由调度员按预案立即执行，不等待本建议和任何研判结果。"
 
 
-def article_texts(nums, ref):
-    by_num = {a["article"]: a for a in ref["articles"]}
-    missing = [n for n in nums if n not in by_num]
-    if missing:
-        raise ValueError(f"references/articles.yaml 没有这些条文：{'、'.join(missing)}")
-    return [{"document": by_num[n]["document"], "article": n, "content": by_num[n]["text"], "source": "skill-reference"} for n in nums]
-
-
 def run(data, _args):
     w = record_result(data, "warning")
     st = record_result(data, "stage")
     al = record_result(data, "alarms")
     eff = record_result(data, "effect") if data.get("effect") is not None else None
     cfg = load_reference("escalation.yaml")
-    arts = load_reference("articles.yaml")
-    criteria = {k: cfg[k] for k in ("level_at_least", "stages", "effect_worsening", "realtime_alarm", "articles")}
+    criteria = {k: cfg[k] for k in ("level_at_least", "stages", "effect_worsening", "realtime_alarm", "document", "articles")}
 
     reasons = []
     if LEVELS.index(w["level"]) >= LEVELS.index(cfg["level_at_least"]):
@@ -53,7 +45,7 @@ def run(data, _args):
         "reasons": reasons,
         "not_met": not_met,
         "criteria": criteria,
-        "articles": article_texts(cfg["articles"], arts),
+        "articles": [{"document": cfg["document"], "article": a} for a in cfg["articles"]],
         "evacuation_reminder": EVACUATION,
         "level": w["level"],
         "level_name": w["level_name"],

@@ -13,6 +13,7 @@ import { checkMine } from '../src/evidence/check.ts'
 import { McpClient } from '../src/evidence/mcp-client.ts'
 import { Evidence } from '../src/evidence/service.ts'
 import { runFireAssessment } from '../src/fire-loop/assessment.ts'
+import { ArticleStore } from '../src/knowledge/articles.ts'
 
 const [skillsDir, recordDir, workspace, python, panel, url = process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'] = process.argv.slice(2)
 if (!skillsDir || !recordDir || !workspace || !python || !panel) {
@@ -22,10 +23,12 @@ if (!skillsDir || !recordDir || !workspace || !python || !panel) {
 const client = new McpClient({ server: 'mine_data', url, token: process.env.RESCUE_MCP_MINE_DATA_TOKEN })
 const ev = new Evidence({ skillsDir, recordDir, python, mineData: (t, a) => client.call(t, a) })
 const origin = { channel: 'eval', trigger: 'chat' } as const
+const articles = ArticleStore.load(new URL('../data/article-index.json', import.meta.url).pathname)
 const assessment = await runFireAssessment(ev, {
   panel,
   origin,
   chartPath: async (id) => (await ev.exportRecord(id, workspace, 'tool')).files[0] ?? null,
+  getArticles: (document, list) => articles.get(document, list),
 })
 const check = await checkMine(ev, { panels: [panel], origin })
 const records = Object.fromEntries(

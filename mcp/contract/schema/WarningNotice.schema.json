@@ -93,6 +93,18 @@
       "default": null,
       "title": "Snapshot Id"
     },
+    "record_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Record Id"
+    },
     "override_reason": {
       "anyOf": [
         {
@@ -113,5 +125,5 @@
   ],
   "title": "WarningNotice",
   "type": "object",
-  "$comment": "rescue-contract 0.7.0"
+  "$comment": "rescue-contract 0.8.0"
 }

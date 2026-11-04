@@ -1,0 +1,138 @@
+{
+  "$comment": "rescue-contract 0.8.0；由 redlines.RULES 导出",
+  "document": "矿山救援规程",
+  "rules": [
+    {
+      "rule_id": "RL-075",
+      "summary": "甲烷超过2%且上升、风量突变或风流逆转征兆时立即撤出",
+      "articles": [
+        "第75条"
+      ],
+      "applies_to": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ]
+    },
+    {
+      "rule_id": "RL-077",
+      "summary": "反风或风流短路前先撤出受影响区域人员",
+      "articles": [
+        "第77条"
+      ],
+      "applies_to": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ]
+    },
+    {
+      "rule_id": "RL-079",
+      "summary": "用水灭火须同时满足四个条件",
+      "articles": [
+        "第79条"
+      ],
+      "applies_to": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ]
+    },
+    {
+      "rule_id": "RL-084",
+      "summary": "先建临时密闭，确认无爆炸危险后再建永久密闭",
+      "articles": [
+        "第84条"
+      ],
+      "applies_to": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ]
+    },
+    {
+      "rule_id": "RL-085",
+      "summary": "封闭有爆炸危险的火区先注惰抑爆",
+      "articles": [
+        "第85条"
+      ],
+      "applies_to": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ]
+    },
+    {
+      "rule_id": "RL-087",
+      "summary": "火区封闭后进入检查一般在24小时后",
+      "articles": [
+        "第87条"
+      ],
+      "applies_to": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ]
+    },
+    {
+      "rule_id": "RL-088",
+      "summary": "高温浓烟环境的进入限制",
+      "articles": [
+        "第88条"
+      ],
+      "applies_to": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ]
+    },
+    {
+      "rule_id": "RL-098",
+      "summary": "采空区火灾保持通风系统稳定",
+      "articles": [
+        "第98条"
+      ],
+      "applies_to": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ]
+    },
+    {
+      "rule_id": "RL-057",
+      "summary": "进入灾区不少于6人并设待机小队",
+      "articles": [
+        "第57条",
+        "第53条"
+      ],
+      "applies_to": [
+        "firefighting",
+        "sealing",
+        "unsealing"
+      ]
+    },
+    {
+      "rule_id": "RL-164",
+      "summary": "启封前检查、断电、撤人",
+      "articles": [
+        "第164条"
+      ],
+      "applies_to": [
+        "unsealing"
+      ]
+    }
+  ],
+  "articles": [
+    "第53条",
+    "第57条",
+    "第75条",
+    "第77条",
+    "第79条",
+    "第84条",
+    "第85条",
+    "第87条",
+    "第88条",
+    "第98条",
+    "第164条"
+  ]
+}

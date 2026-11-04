@@ -2,7 +2,8 @@
  * 人工确认与红线预检的业务逻辑（不依赖 DSH，可独立测试）。
  *
  * 约定：所有需要人工确认的指令都在 actions MCP 服务里，DSH 中的工具名为 `mcp__actions__<工具名>`，
- * 该服务的每个工具都需要确认（只读自查工具放在 kb 服务）。exemptPrefixes 留作以后需要例外时使用。
+ * 该服务的指令类工具都需要确认；只读工具以 precheck_ 开头（如 precheck_plan），按 exemptPrefixes 放行。
+ * 预检返回 ApprovalSummary（契约 0.8.0）时，确认提示按它列出要做什么、引用的记录、逐项核对结果和需要确认人把关的事项。
  */
 
 export interface ApprovalConfig {
@@ -46,11 +47,22 @@ export type Verdict =
   | { kind: 'deny'; reason: string; code: string }
   | { kind: 'ask'; reason: string; displayReason: { en: string; zh: string } }
 
+/** 契约 ApprovalSummary（rescue_contract.models），由 actions 预检生成 */
+export interface ApprovalSummary {
+  action: string
+  tool: string
+  record_ids: string[]
+  checks: { name: string; ok: boolean; detail?: string | null }[]
+  human_items: string[]
+  override_reason?: string | null
+}
+
 export interface PrecheckResponse {
   ok: boolean
   problems: string[]
   /** 给确认人看的说明（如预警等级与研判快照不同时的人工理由）。 */
   notes?: string[]
+  summary?: ApprovalSummary
 }
 
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>
@@ -63,8 +75,33 @@ export function classify(toolName: string, config: Pick<ApprovalConfig, 'gatedSe
   return { gated: true, rawName }
 }
 
-export function askVerdict(rawName: string, config: Pick<ApprovalConfig, 'confirmers'>, notes: string[] = []): Verdict {
+/** 确认提示的正文：按 ApprovalSummary 逐项列出（不透出工具原始参数） */
+export function summaryText(s: ApprovalSummary): string {
+  const lines: string[] = []
+  if (s.record_ids.length) lines.push(`依据记录：${s.record_ids.join('、')}`)
+  for (const c of s.checks) lines.push(`${c.ok ? '✓' : '✗'} ${c.name}${c.detail ? `：${c.detail}` : ''}`)
+  if (s.human_items.length) lines.push(`请确认人把关：${s.human_items.join('；')}`)
+  return lines.join('\n')
+}
+
+function isSummary(v: unknown): v is ApprovalSummary {
+  const s = v as ApprovalSummary
+  return !!s && typeof s.action === 'string' && Array.isArray(s.checks) && Array.isArray(s.record_ids) && Array.isArray(s.human_items)
+}
+
+export function askVerdict(rawName: string, config: Pick<ApprovalConfig, 'confirmers'>, notes: string[] = [], summary?: ApprovalSummary): Verdict {
   const who = config.confirmers[rawName] ?? '指挥部授权人员'
+  if (summary) {
+    const body = summaryText(summary)
+    return {
+      kind: 'ask',
+      reason: `${summary.action}：需由【${who}】确认后执行（红线预检已通过）\n${body}`,
+      displayReason: {
+        en: `${summary.action} requires confirmation by ${who}. Pre-check passed.\n${body}`,
+        zh: `${summary.action}：需由【${who}】确认后执行。红线预检已通过。\n${body}`,
+      },
+    }
+  }
   const what = ACTION_NAMES[rawName] ?? rawName
   const extra = notes.length ? `\n请注意：${notes.join('；')}` : ''
   return {
@@ -113,5 +150,5 @@ export async function precheck(
     return { kind: 'deny', code: 'RESCUE_RED_LINE', reason: `红线预检未通过，指令已拦截：\n${body.problems.join('\n')}` }
   }
   const notes = Array.isArray(body.notes) ? body.notes.filter((n): n is string => typeof n === 'string') : []
-  return askVerdict(rawName, config, notes)
+  return askVerdict(rawName, config, notes, isSummary(body.summary) ? body.summary : undefined)
 }

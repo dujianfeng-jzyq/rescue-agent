@@ -8,4 +8,5 @@ level_at_least: red        # 预警等级达到即建议升级
 stages: [intense]          # 自燃发展阶段属于其中之一即建议升级
 effect_worsening: true     # 最近一次效果评估为“恶化”即建议升级
 realtime_alarm: true       # 有实时红线报警即建议升级
-articles: [第39条, 第40条, 第73条]   # 建议中引用的《矿山救援规程》条款
+document: 矿山救援规程
+articles: [第39条, 第40条, 第73条]   # 建议中引用的条款（原文由知识库的条文索引给出）

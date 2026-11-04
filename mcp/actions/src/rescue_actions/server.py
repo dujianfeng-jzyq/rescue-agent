@@ -3,7 +3,11 @@
 边界约定：只读和计算类工具分布在其他服务；凡是会对外产生作用的指令（发布预警、下发方案、调度、通知撤人、
 启封……）只能通过本服务，本服务的每个 MCP 工具都需要人工确认。这样 DSH 的审批插件只需拦住
 mcp__actions__ 前缀的工具；只有总指挥协调 Agent 挂载本服务，专业 Agent 无法发布指令。
-方案自查用 kb 服务的 check_plan_redlines（只读，与本服务共用同一套校验逻辑）。
+方案自查用本服务的只读工具 precheck_plan（第二版；第一版的 kb check_plan_redlines 在迁移完成前保留），
+与发布时的强制校验共用 rescue_contract.validation。审批插件按工具名前缀 precheck_ 放行它，不弹确认。
+
+第二版（docs/design-v2.md 4.8）：预警、升级引用证据插件写的结果记录（record_id），本服务只读记录目录
+（RESCUE_RECORD_DIR），发布前重算 content_sha256 并按记录核对；第一版的 snapshot_id 在迁移完成前仍可用。
 
 三道防线：
 1. DSH rescue-approval 插件：调用前先请求 /redlines/check 预检，违规直接拒绝；通过后弹出人工确认。
@@ -18,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import urllib.request
 import uuid
 from datetime import datetime
@@ -37,9 +42,11 @@ from rescue_contract.models import (
     StepType,
     WarningNotice,
 )
+from rescue_contract.records import RecordStore
+from rescue_contract.redlines import RULES
 from rescue_contract.serving import sim_control_headers
 from rescue_contract.snapshots import SnapshotStore
-from rescue_contract.validation import PLAN_TOOLS, check_dispatch, check_escalation, check_warning, plan_notes, precheck, validate_plan
+from rescue_contract.validation import PLAN_TOOLS, check_dispatch, plan_notes, precheck, validate_plan
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -108,11 +115,13 @@ def build_server(
     ledger_path: Path | None = None,
     sim_control_url: str | None = None,
     store: SnapshotStore | None = None,
+    records: RecordStore | None = None,
 ) -> MCPServer:
     md = MineData(mine_data_target) if mine_data_target is not None else MineData.from_env()
     ledger = Ledger(ledger_path or Path(os.environ.get("RESCUE_ACTIONS_LEDGER", "var/actions-ledger.jsonl")))
     sim = Sim(sim_control_url if sim_control_url is not None else os.environ.get("RESCUE_SIM_CONTROL_URL"))
     snapshots = store or SnapshotStore()
+    record_store = records or RecordStore()  # 只读：本服务不写记录
     server = MCPServer("actions", instructions=INSTRUCTIONS)
 
     async def mine_now() -> datetime | None:
@@ -156,6 +165,13 @@ def build_server(
             )
             raise ToolError("指令未发布。\n" + "\n".join(problems))
 
+    async def checked(tool: str, key: str, payload: BaseModel) -> dict[str, Any]:
+        """预警、升级：与审批预检同一套核对（快照或记录），不通过就拒绝并记台账。"""
+        now = await require_now(tool, payload)
+        result = precheck(tool, {key: payload.model_dump(mode="json")}, now, snapshots, record_store)
+        await reject_if(tool, payload, result["problems"])
+        return result
+
     async def issue_plan(tool: str, plan: Plan) -> ActionReceipt:
         now = await require_now(tool, plan)
         problems = validate_plan(tool, plan, now, snapshots)
@@ -172,11 +188,11 @@ def build_server(
 
     @server.tool()
     async def publish_warning(notice: WarningNotice) -> ActionReceipt:
-        """发布自燃预警等级（确认人：通风部门负责人）。snapshot_id 照抄 workflow 的 assess_panel 返回值；
-        等级必须与研判快照一致，人工改等级时在 override_reason 写明理由。"""
-        problems, notes = check_warning(notice, snapshots, await require_now("publish_warning", notice))
-        await reject_if("publish_warning", notice, problems)
-        return await issue("publish_warning", notice, note="；".join(notes) or None)
+        """发布自燃预警等级（确认人：通风部门负责人）。record_id 照抄 run_fire_assessment 返回的 record_ids.warning
+        （第一版：snapshot_id 照抄 workflow 的 assess_panel 返回值），二者只给一个；
+        等级必须与计算结果一致，人工改等级时在 override_reason 写明理由。"""
+        result = await checked("publish_warning", "notice", notice)
+        return await issue("publish_warning", notice, note="；".join(result["notes"]) or None)
 
     @server.tool()
     async def issue_firefighting_plan(plan: Plan) -> ActionReceipt:
@@ -186,10 +202,9 @@ def build_server(
 
     @server.tool()
     async def escalate_emergency(escalation: Escalation) -> ActionReceipt:
-        """建议升级为应急响应（确认人：总工程师或矿长）。snapshot_id 照抄 workflow 的 recommend_escalation 返回值。"""
-        await reject_if(
-            "escalate_emergency", escalation, check_escalation(escalation, snapshots, await require_now("escalate_emergency", escalation))
-        )
+        """建议升级为应急响应（确认人：总工程师或矿长）。record_id 照抄 run_fire_assessment 返回的 record_ids.escalation
+        （第一版：snapshot_id 照抄 workflow 的 recommend_escalation 返回值），只有结论为建议升级的才能提交。"""
+        await checked("escalate_emergency", "escalation", escalation)
         return await issue("escalate_emergency", escalation)
 
     @server.tool()
@@ -223,6 +238,22 @@ def build_server(
         现场条件和必备步骤按快照核对；执行前强制红线校验。"""
         return await issue_plan("approve_unsealing", plan)
 
+    # ── 只读：方案红线自查（审批插件按前缀 precheck_ 放行，不弹确认）──
+
+    @server.tool()
+    def precheck_plan(tool: str, plan: Plan) -> dict[str, Any]:
+        """方案红线自查（只读，不发布、不弹确认）。tool 取 issue_firefighting_plan / issue_sealing_plan / approve_unsealing。
+        返回 ok 和问题清单（含条号）、检查了哪些规则（rules_checked_count 照抄，不要自己数）。
+        与发布时的强制校验是同一套逻辑；不检查数据时效，发布时还会检查。
+        规则所依据的条文原文用 kb_get_articles（document="矿山救援规程"，articles 取 rule_articles）获取。"""
+        result = precheck(tool, {"plan": plan.model_dump(mode="json")}, None, snapshots, record_store)
+        return {
+            **{k: result[k] for k in ("ok", "problems", "notes")},
+            "rules_checked": [f"{r.rule_id} {r.article} {r.summary}" for r in RULES],
+            "rules_checked_count": len(RULES),
+            "rule_articles": sorted({f"第{n}条" for r in RULES for n in re.findall(r"\d+", r.article)}, key=lambda a: int(a[1:-1])),
+        }
+
     # ── DSH 审批插件的预检接口（HTTP，不是 MCP 工具）──
 
     @server.custom_route("/redlines/check", methods=["POST"])
@@ -231,7 +262,7 @@ def build_server(
         now = await mine_now()
         if now is None and body.get("tool", "") in TIMED_TOOLS:  # 撤人名单、调度单不核对时效，时钟故障时不能拦
             return JSONResponse({"ok": False, "problems": [NO_CLOCK], "notes": []})
-        result = precheck(body.get("tool", ""), body.get("arguments") or {}, now, snapshots)
+        result = precheck(body.get("tool", ""), body.get("arguments") or {}, now, snapshots, record_store)
         return JSONResponse(result)
 
     return server

@@ -1,4 +1,4 @@
-{{! 升级建议的事实部分（由第一版 mcp/workflow/reports.py 的 escalation 迁移）。数据：panel、as_of_text、record_ids、escalation。 }}
+{{! 升级建议的事实部分（由第一版 mcp/workflow/reports.py 的 escalation 迁移）。数据：panel、as_of_text、record_ids、escalation，articles（知识库按 escalation 的条号取的原文）。 }}
 【升级建议】{{panel}} 工作面 {{as_of_text}}
 
 {{#escalation.result.recommend}}
@@ -31,8 +31,8 @@
 
 规程依据（条文原文）：
 
-{{#escalation.result.articles}}
-- {{document}} {{article}}：{{content}}
-{{/escalation.result.articles}}
+{{#articles}}
+- {{document}} {{article}}：{{#content}}{{.}}{{/content}}{{^content}}（条文索引里没有这一条）{{/content}}
+{{/articles}}
 
 依据：记录 {{record_ids.escalation}}（升级建议）；升级判据为开发占位值，是否升级由指挥人员决定

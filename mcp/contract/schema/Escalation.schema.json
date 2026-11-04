@@ -78,6 +78,18 @@
       ],
       "default": null,
       "title": "Snapshot Id"
+    },
+    "record_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Record Id"
     }
   },
   "required": [
@@ -86,5 +98,5 @@
   ],
   "title": "Escalation",
   "type": "object",
-  "$comment": "rescue-contract 0.7.0"
+  "$comment": "rescue-contract 0.8.0"
 }

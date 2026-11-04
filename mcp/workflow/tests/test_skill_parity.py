@@ -126,9 +126,8 @@ def test_skills_match_v1_services(scenario, hours, unseal_at):
     e_new = new["escalation"]["result"]
     for k in ("recommend", "reasons", "not_met", "evacuation_reminder", "level", "level_name", "stage_name"):
         assert e_new[k] == old_esc[k], k
-    assert [(a["document"], a["article"], a["content"]) for a in e_new["articles"]] == [
-        (a["document"], a["article"], a["content"]) for a in old_esc["articles"]
-    ]
+    # 条号一致；原文第二版由知识库的条文索引给出（第一版是本地摘要），不在这里比
+    assert [(a["document"], a["article"]) for a in e_new["articles"]] == [(a["document"], a["article"]) for a in old_esc["articles"]]
     # 风险检测与完整研判一致
     c = new["check"]["result"]
     assert (c["level"], c["stage"]) == (w_old["level"], w_old["stage"])
