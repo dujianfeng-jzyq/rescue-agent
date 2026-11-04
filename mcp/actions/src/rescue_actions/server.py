@@ -8,6 +8,7 @@ mcp__actions__ 前缀的工具；只有总指挥协调 Agent 挂载本服务，�
 
 第二版（docs/design-v2.md 4.8）：预警、升级引用证据插件写的结果记录（record_id），本服务只读记录目录
 （RESCUE_RECORD_DIR），发布前重算 content_sha256 并按记录核对；第一版的 snapshot_id 在迁移完成前仍可用。
+封闭方案（P3）只提交 draft_sealing_plan 的审核记录编号，方案从记录里取（不经模型转抄，也不在模型上下文里来回携带）。
 
 三道防线：
 1. DSH rescue-approval 插件：调用前先请求 /redlines/check 预检，违规直接拒绝；通过后弹出人工确认。
@@ -46,7 +47,7 @@ from rescue_contract.records import RecordStore
 from rescue_contract.redlines import RULES
 from rescue_contract.serving import sim_control_headers
 from rescue_contract.snapshots import SnapshotStore
-from rescue_contract.validation import PLAN_TOOLS, check_dispatch, plan_notes, precheck, validate_plan
+from rescue_contract.validation import PLAN_TOOLS, check_dispatch, plan_from_record, plan_notes, precheck, validate_plan
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -172,17 +173,33 @@ def build_server(
         await reject_if(tool, payload, result["problems"])
         return result
 
+    def forward_plan(plan: Plan) -> bool:
+        forwarded = False
+        for step in sorted(plan.steps, key=lambda s: s.order):
+            if step.type in SIM_STEP_TYPES:
+                forwarded = sim.apply(step.type.value, dict(step.params), step.roadways) or forwarded
+        return forwarded
+
     async def issue_plan(tool: str, plan: Plan) -> ActionReceipt:
         now = await require_now(tool, plan)
         problems = validate_plan(tool, plan, now, snapshots)
         if problems:
             ledger.append({"tool": tool, "status": "rejected", "at": now, "problems": problems, "payload": plan.model_dump(mode="json")})
             raise ToolError("指令未发布。\n" + "\n".join(problems))
-        forwarded = False
-        for step in sorted(plan.steps, key=lambda s: s.order):
-            if step.type in SIM_STEP_TYPES:
-                forwarded = sim.apply(step.type.value, dict(step.params), step.roadways) or forwarded
-        return await issue(tool, plan, forward=forwarded, note="；".join(plan_notes(plan, snapshots)) or None)
+        return await issue(tool, plan, forward=forward_plan(plan), note="；".join(plan_notes(plan, snapshots)) or None)
+
+    class PlanRef(BaseModel):
+        record_id: str
+
+    async def issue_plan_record(tool: str, record_id: str) -> ActionReceipt:
+        """第二版：按审核记录取方案、核对后下发。"""
+        ref = PlanRef(record_id=record_id)
+        now = await require_now(tool, ref)
+        plan, problems, notes, _ = plan_from_record(tool, record_id, record_store, now)
+        if plan is None:
+            await reject_if(tool, ref, problems or ["方案记录核对未通过"])
+            raise ToolError("指令未发布。")  # reject_if 一定会抛；这里只为类型
+        return await issue(tool, plan, forward=forward_plan(plan), note="；".join(notes) or None)
 
     # ── 需要确认（DSH 审批插件拦截）──
 
@@ -227,9 +244,14 @@ def build_server(
         return await issue("issue_dispatch_order", order)
 
     @server.tool()
-    async def issue_sealing_plan(plan: Plan) -> ActionReceipt:
-        """下发封闭或灭火方案（确认人：总指挥 + 救护队带队指挥员）。方案必须基于 workflow 的 draft_plan
-        （snapshot_id 照抄），现场条件和必备步骤按快照核对；执行前强制红线校验。"""
+    async def issue_sealing_plan(record_id: str | None = None, plan: Plan | None = None) -> ActionReceipt:
+        """下发封闭方案（确认人：总指挥 + 救护队带队指挥员）。第二版：只给 record_id，照抄 draft_sealing_plan 返回的
+        record_ids.review（合规审核通过的记录），不要提交方案内容——方案由本服务从记录里取，核对后执行强制红线校验。
+        第一版：给 plan（基于 workflow 的 draft_plan，snapshot_id 照抄）。二者只给一个。"""
+        if (record_id is None) == (plan is None):
+            raise ToolError("record_id 和 plan 只给一个：第二版给 record_id（draft_sealing_plan 返回的 record_ids.review）")
+        if record_id is not None:
+            return await issue_plan_record("issue_sealing_plan", record_id)
         return await issue_plan("issue_sealing_plan", plan)
 
     @server.tool()
@@ -241,12 +263,17 @@ def build_server(
     # ── 只读：方案红线自查（审批插件按前缀 precheck_ 放行，不弹确认）──
 
     @server.tool()
-    def precheck_plan(tool: str, plan: Plan) -> dict[str, Any]:
+    def precheck_plan(tool: str, plan: Plan, redlines_only: bool = False) -> dict[str, Any]:
         """方案红线自查（只读，不发布、不弹确认）。tool 取 issue_firefighting_plan / issue_sealing_plan / approve_unsealing。
         返回 ok 和问题清单（含条号）、检查了哪些规则（rules_checked_count 照抄，不要自己数）。
         与发布时的强制校验是同一套逻辑；不检查数据时效，发布时还会检查。
+        redlines_only=true 只查方案类型和红线、不核对第一版快照（第二版固定流程 draft_sealing_plan 用：方案在记录里，下发时按记录核对）。
         规则所依据的条文原文用 kb_get_articles（document="矿山救援规程"，articles 取 rule_articles）获取。"""
-        result = precheck(tool, {"plan": plan.model_dump(mode="json")}, None, snapshots, record_store)
+        if redlines_only:
+            problems = validate_plan(tool, plan, None, None)
+            result = {"ok": not problems, "problems": problems, "notes": []}
+        else:
+            result = precheck(tool, {"plan": plan.model_dump(mode="json")}, None, snapshots, record_store)
         return {
             **{k: result[k] for k in ("ok", "problems", "notes")},
             "rules_checked": [f"{r.rule_id} {r.article} {r.summary}" for r in RULES],

@@ -25,7 +25,8 @@
             "ragflow",
             "local-fallback",
             "data",
-            "calculation"
+            "calculation",
+            "index"
           ],
           "title": "Source",
           "type": "string"
@@ -98,5 +99,5 @@
   ],
   "title": "Escalation",
   "type": "object",
-  "$comment": "rescue-contract 0.8.0"
+  "$comment": "rescue-contract 0.9.0"
 }

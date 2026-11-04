@@ -179,8 +179,8 @@ skills/<技能名>/
 | `fire-assessment` 采空区自燃研判 | `check.py`（风险检测，见 4.9）、`warning.py`（预警等级）、`stage.py`（自燃阶段）、`trend.py`（趋势）、`alarms.py`（实时红线报警）、`personnel.py`（受威胁人员）；`references/collect.yaml`（采集清单）、`references/watch.yaml`（持续检测的判据） | `report.md`（研判报告事实部分）、`check.md`（检测结果） | 本项目 `fire_model` 的 warning、stage、trend、alarms、`ventnet.network.threatened`；SKILL.md 合并本项目 `fire-warning-assessment` 与上一版 `mine-fire-assessment` |
 | `explosion-triangle` 爆炸三角形 | `explosion_triangle.py`（多组分、温度补偿、分区、SVG） | — | 以上一版 `explosion-triangle-synthesis` 的结构为基础，算法与本项目 `fire_model/explosion.py`（含 H₂、重新设计的分区判据）对齐，差异由专家定（第 10 节） |
 | `emergency-escalation` 升级应急响应 | `escalation.py`（升级判据） | `report.md` | 本项目 `rescue_workflow/escalation.py` 与 `thresholds.yaml` 的 escalation 节 |
-| `sealing-plan` 封闭方案 | `skeleton.py`（现场条件与必备步骤）、`materials.py`（密闭材料、注氮量、注浆量） | `plan.md` | 本项目 `rescue_workflow/plan.py`、`context` 规则、`dispatch` 用量；SKILL.md 来自 `sealing-and-unsealing` |
-| `plan-compliance` 方案合规审核 | — （红线由 actions 的红线引擎检查，见 4.8） | `review.md` | 本项目 `red-line-rules`；人工复核项清单 |
+| `sealing-plan` 封闭方案 | `skeleton.py`（现场条件、必备步骤、可选步骤和密闭巷道的选择清单）、`compose.py`（按选择组装方案；密闭材料、注氮量、注浆量与库存比较，算法在 `_materials.py`）；`references/collect.yaml`（plan 清单）、`plan.yaml`、`materials.yaml` | `plan.md` | 本项目 `rescue_workflow/plan.py`、`context` 规则、`dispatch` 用量；SKILL.md 来自 `sealing-and-unsealing` |
+| `plan-compliance` 方案合规审核 | `scope.py`（对照条文、审核项）、`review.py`（结论：红线预检不通过或任一审核项不通过即不通过）；红线由 actions 的红线引擎检查（4.8） | `review.md` | 本项目 `red-line-rules`；人工复核项清单 |
 | `effect-review` 处置效果复评 | `effect.py` | `report.md` | 本项目 `fire_model/effect.py` |
 
 ### 4.3 证据插件 rescue-evidence（DSH 插件，TS + Python 技能脚本）
@@ -276,8 +276,10 @@ class Record(_Model):
 | 工具 | 步骤 |
 | --- | --- |
 | `run_fire_assessment(panel)` | 采集证据 → 运行 alarms、warning、stage、trend、explosion_triangle（逐个束管测点）、escalation；等级 ≥ orange 时运行 personnel → 渲染研判报告（含风险图）→ 阶段“研判说明”：只从给定清单里选关注点和建议的下一步 → 交付 |
-| `draft_sealing_plan(panel, human_inputs?)` | 采集证据 → 运行 skeleton、materials → 阶段“方案编写”（`sealing-plan` 技能）：选择可选步骤、巷道，填写步骤说明 → 调 actions 的红线预检 → 阶段“合规审核”（`plan-compliance` 技能，条文由代码按红线规则表和方案步骤查好后提供）：逐项给出人工复核结论和引用条文编号 → 不通过时把意见交回“方案编写”，最多 2 轮（占位）→ 生成方案记录和方案文本 → 交付，返回方案（含 `record_id`）给主预设提交 |
+| `draft_sealing_plan(panel, human_inputs?, leak_m3_min?, target_o2_pct?)`（P3 实现见下方说明） | 采集证据 → 运行 skeleton、materials → 阶段“方案编写”（`sealing-plan` 技能）：选择可选步骤、巷道，填写步骤说明 → 调 actions 的红线预检 → 阶段“合规审核”（`plan-compliance` 技能，条文由代码按红线规则表和方案步骤查好后提供）：逐项给出人工复核结论和引用条文编号 → 不通过时把意见交回“方案编写”，最多 2 轮（占位）→ 生成方案记录和方案文本 → 交付，返回方案（含 `record_id`）给主预设提交 |
 | `review_effect(panel, since?)` | 采集证据（since 缺省时从指令台账取最近一次下发时间）→ 运行 effect → 渲染复评报告 → 交付 |
+
+`draft_sealing_plan` 的实现（P3，`dsh-bundle/src/fire-loop/sealing.ts`、`plan-stages.ts`）：采集（sealing-plan 的 plan 清单，测点组与完整研判相同）→ explosion_triangle、warning、personnel（总是计算）→ skeleton → 每轮：阶段“方案编写”（选可选步骤、密闭巷道、写补充说明和概述；失败时用缺省选择并注明）→ compose → actions 的 `precheck_plan`（`redlines_only=true`）→ scope → 条文索引取原文 → 方案文本 → 阶段“合规审核”（逐项结论、只能引用给定条号）→ review；不通过时把红线问题和不通过项的意见交回“方案编写”，最多 2 轮。审核记录里带着方案本身，下发时只提交它的编号。红线预检不通过且有缺失的人工确认项时返回 `HumanInputRequest`。
 
 ### 4.5 工具形式与统一约定
 
@@ -361,7 +363,8 @@ class Record(_Model):
 
 - `Plan.snapshot_id`、`WarningNotice.snapshot_id`、`Escalation.snapshot_id` 改为引用记录（字段改名为 `record_id`）。发布前按记录核对现场条件、预警等级、升级建议，并核对记录的时效（`CONTEXT_MAX_AGE`，占位 2 小时，按矿井时间；演示倍速下的处理见 4.10）。
 - 红线引擎暂留在 `rescue_contract/redlines.py`，作为强制执行的规则，不迁入技能脚本（第 10 节待定）。合规技能引用它的规则表。
-- 新增只读工具 `precheck_plan`（从 kb 的 `check_plan_redlines` 搬来）。
+- 新增只读工具 `precheck_plan`（从 kb 的 `check_plan_redlines` 搬来）；`redlines_only=true` 只查方案类型和红线（固定流程用，方案还不在第一版快照里）。
+- 封闭方案（P3，契约 0.9.0）：`issue_sealing_plan(record_id)` 只提交 `draft_sealing_plan` 的审核记录（plan-compliance/review）编号，不提交方案内容。actions 核对：审核结论为通过、审核记录里的方案与上游方案记录（sealing-plan/compose）一致、时效、工作面，再做方案类型和红线的强制校验；审核记录的人工确认项列进审批弹窗。方案不经模型转抄，也不在主预设的上下文里来回携带（第一版 token 高、笔误的来源）。
 - 审批弹窗的内容由预检结果生成**结构化的审批说明**（`ApprovalSummary`：要做什么、引用哪些记录、核对结果、人工确认项），网页端渲染成文字；以后的对外接口直接用同一份数据，不透出工具原始参数（上一版 rescue-api 的要求）。
 - 台账、审计里记录确认人和渠道（`Origin`）。本次只有网页端一个人，字段先留着，按角色限定确认人放到以后。
 - 下发的封闭方案经 actions 转给模拟器执行（现有机制），之后可以复评效果，闭环在模拟矿井里真正跑通。

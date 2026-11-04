@@ -1,5 +1,5 @@
 /**
- * rescue-fire-loop：火灾闭环的固定流程插件（docs/design-v2.md 4.4，ADR 0007）。本阶段（P1）只有 run_fire_assessment。
+ * rescue-fire-loop：火灾闭环的固定流程插件（docs/design-v2.md 4.4，ADR 0007）。run_fire_assessment（P1）、draft_sealing_plan（P3）。
  *
  * 进程内调用证据插件的服务 rescueEvidence（采集、运行技能脚本、渲染报告）和知识库插件的 rescueKnowledge（条文原文），
  * 所以必须和这两个插件放在同一个带 isolate 的 cordis:group 里（profiles/v2.patch.yml）。步骤在 assessment.ts，判据全在技能脚本里。
@@ -10,6 +10,9 @@
  * 报告写进会话工作区，用 present 交付（报告和风险图）。concludeTurn 默认不开：rc.4 网页端在工具结束本轮时
  * 只显示折叠的“Completed”，看不到报告和交付卡片（2026-11-03 截图核对），所以仍由主预设把报告原样放进回答。
  * 运行过程写 tool-workflow/* 事件，网页端在工具调用下显示运行节点（#19）。
+ *
+ * draft_sealing_plan 的红线预检调 actions 的 precheck_plan（ctx.tools.execute，经 DSH 工具管道：审计照常，审批插件按
+ * precheck_ 前缀放行）；两个阶段“方案编写”“合规审核”用同一个 StageRunner。步骤在 sealing.ts，阶段逻辑在 plan-stages.ts。
  */
 
 import { randomUUID } from 'node:crypto'
@@ -22,6 +25,7 @@ import type RescueEvidence from '../evidence/index.ts'
 import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
+import { draftSealingPlan, type HumanInput, type Redline, SEALING_FLOW } from './sealing.ts'
 
 export const name = 'rescue-fire-loop'
 export const inject = ['tools', 'rescueEvidence', 'rescueKnowledge', 'workingDirectory', 'subagents']
@@ -35,6 +39,10 @@ export interface Config {
   disableStage: boolean
   /** 交付报告后结束本轮（concludeTurn）。rc.4 网页端此时看不到报告，默认关 */
   concludeTurn: boolean
+  /** draft_sealing_plan：方案编写与合规审核的轮数上限（占位 2，design-v2 第 10 节第 3 条） */
+  sealingMaxRounds: number
+  /** 红线预检的工具名（actions 的 precheck_plan，dsh-mcp-client 的 serverName 为 actions） */
+  precheckTool: string
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -42,6 +50,8 @@ export const Config: Schema<Config> = Schema.object({
   stageTimeoutS: Schema.number().default(120),
   disableStage: Schema.boolean().default(false),
   concludeTurn: Schema.boolean().default(false),
+  sealingMaxRounds: Schema.natural().min(1).default(2),
+  precheckTool: Schema.string().default('mcp__actions__precheck_plan'),
 })
 
 const STRUCTURED_OUTPUT = 'structured_output'
@@ -56,7 +66,7 @@ export function apply(ctx: Context, config: Config) {
   // 阶段子 Agent 只能提交结构化结果
   c.tools.guard((e: any) => {
     const ids = [e.agent?.id, e.agent?.session?.id].filter(Boolean).map(String)
-    if (ids.some((i) => stageChildren.has(i)) && e.name !== STRUCTURED_OUTPUT) return `“${STAGE}”阶段只能用 ${STRUCTURED_OUTPUT} 提交结果，不能调用 ${e.name}`
+    if (ids.some((i) => stageChildren.has(i)) && e.name !== STRUCTURED_OUTPUT) return `固定流程的阶段只能用 ${STRUCTURED_OUTPUT} 提交结果，不能调用 ${e.name}`
     return undefined
   })
 
@@ -69,7 +79,9 @@ export function apply(ctx: Context, config: Config) {
   }
 
   function stageRunner(parent: any, runId: string): StageRunner {
+    let seq = 0
     return async ({ label, prompt, schema, signal }) => {
+      const n = ++seq
       const childId = randomUUID()
       stageChildren.add(childId)
       const timeout = AbortSignal.timeout(config.stageTimeoutS * 1000)
@@ -84,16 +96,16 @@ export function apply(ctx: Context, config: Config) {
           signal: sig,
           request: { parent, outputSchema: schema, prompt: [{ type: 'text', text: prompt }] },
         })
-        append(parent.session, 'tool-workflow/agent-start', { runId, seq: 1, label, phase: label, childId: String(activation.childId) })
+        append(parent.session, 'tool-workflow/agent-start', { runId, seq: n, label, phase: label, childId: String(activation.childId) })
         const res = await Promise.race([
           activation.result,
           new Promise<never>((_, reject) => sig.addEventListener('abort', () => reject(new Error(timeout.aborted ? `超过 ${config.stageTimeoutS} 秒` : '已取消')), { once: true })),
         ])
         const ok = res?.stopReason === 'completed' && res?.structured !== undefined
-        append(parent.session, 'tool-workflow/agent-end', { runId, seq: 1, outcome: ok ? 'completed' : 'failed' })
+        append(parent.session, 'tool-workflow/agent-end', { runId, seq: n, outcome: ok ? 'completed' : 'failed' })
         return ok ? { ok: true, structured: res.structured, childId } : { ok: false, error: `子 Agent 没有给出结构化结果（${res?.stopReason ?? '未知'}）`, childId }
       } catch (err) {
-        append(parent.session, 'tool-workflow/agent-end', { runId, seq: 1, outcome: 'failed' })
+        append(parent.session, 'tool-workflow/agent-end', { runId, seq: n, outcome: 'failed' })
         return { ok: false, error: `子 Agent 运行失败：${(err as Error).message}`, childId }
       } finally {
         await activation?.dispose?.().catch((err: Error) => ctx.logger.warn(`${FLOW}: 释放子 Agent 失败：${err.message}`))
@@ -166,6 +178,116 @@ export function apply(ctx: Context, config: Config) {
             ? { ok: false, error: presented.error?.message ?? '交付失败' }
             : { ok: true, files: files.map((f) => f.path), note: '报告文件和风险图已交付给用户，不要再调用 present' }
           if (!presented.isError && config.concludeTurn) exec.concludeTurn()
+          return toJson(out)
+        } catch (err) {
+          stopReason = 'failed'
+          throw err
+        } finally {
+          append(parent.session, 'tool-workflow/run-end', { runId, stopReason })
+        }
+      },
+    }),
+  )
+
+  /** actions 的 precheck_plan：经 DSH 工具管道调用（调用方 Agent 必须挂了 actions） */
+  async function precheck(exec: any, plan: Record<string, unknown>, n: number): Promise<Redline> {
+    const r = await c.tools.execute({
+      callId: `${exec.callId}:precheck:${n}`,
+      rootCallId: exec.rootCallId,
+      name: config.precheckTool,
+      arguments: { tool: 'issue_sealing_plan', plan, redlines_only: true },
+      agent: exec.agent,
+      parent: exec.token,
+      signal: exec.signal,
+    })
+    if (r.isError) throw new Error(r.error?.message ?? `${config.precheckTool} 调用失败`)
+    let v: any = r.value
+    if (!v || typeof v !== 'object' || typeof v.ok !== 'boolean') {
+      const text = (r.content ?? []).find((b: any) => b.type === 'text')?.text
+      v = text ? JSON.parse(text) : null
+    }
+    if (!v || typeof v.ok !== 'boolean') throw new Error(`${config.precheckTool} 的结果里没有 ok`)
+    return { ok: v.ok, problems: (v.problems ?? []).map(String), notes: (v.notes ?? []).map(String) }
+  }
+
+  c.tools.register(
+    defineTool({
+      name: SEALING_FLOW,
+      description:
+        '编制采空区火区封闭方案（固定流程，指挥部决定封闭时一律调它，不要自己拼步骤）：按固定步骤采集证据，由代码生成现场条件' +
+        '（甲烷、氧浓度、爆炸危险性、封闭时间、人工确认项）和必备步骤，“方案编写”阶段选可选步骤和密闭巷道，代码计算密闭材料、注浆量、注氮流量并与库存比较，' +
+        '经 actions 红线预检和“合规审核”阶段（只引用条文索引给出的条文），不通过时自动修改重审，轮数有上限。' +
+        '回答时把 report_markdown（方案文本 + 审核意见）原样单独成段放进回答，不要改写、不要另写分析。' +
+        'result.verdict 为 pass 时，下发用 issue_sealing_plan，参数只给 record_id = result.issue_record_id（不要提交方案内容）；' +
+        '不通过时照实转告，不要绕过。返回 human_input_request 时用 ask_user 逐项询问（写明确认人），带着 human_inputs 重新调用。' +
+        '人工确认项（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）只能由人提供，不要替人填写。方案结构和参数为开发占位值。',
+      parameters: {
+        panel: { type: 'string', required: true, description: '工作面编号，如 1201' },
+        human_inputs: {
+          type: 'array',
+          description: '人工确认的现场条件（只填指挥人员明确给出的）：[{field, value, confirmed_by, note?}]，field 取 area_temperature_c、visibility_m、fire_source_confirmed、water_supply_sufficient、return_airway_clear',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              field: { type: 'string', required: true, enum: ['area_temperature_c', 'visibility_m', 'fire_source_confirmed', 'water_supply_sufficient', 'return_airway_clear'] },
+              value: { type: 'json', required: true, description: '温度、能见度为数值；其余为 true / false' },
+              confirmed_by: { type: 'string', required: true, description: '确认人（姓名或岗位）' },
+              note: { type: 'string' },
+            },
+          },
+        },
+        leak_m3_min: { type: 'number', description: '采空区漏风量（m³/min），指挥人员给出时才填；与 target_o2_pct 一起用于由代码估算注氮流量' },
+        target_o2_pct: { type: 'number', description: '注氮的目标氧浓度（%），指挥人员给出时才填' },
+      },
+      output: {
+        schema: { type: 'json' as const },
+        render: (_args: unknown, v: any) => [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ summary: v.card.summary, warnings: v.card.warnings, report_markdown: v.report_markdown, record_ids: v.record_ids, result: v.result, human_input_request: v.human_input_request, delivered: v.delivered }),
+          },
+        ],
+      },
+      execute: async (raw: unknown, exec: any) => {
+        const args = raw as { panel: string; human_inputs?: HumanInput[]; leak_m3_min?: number; target_o2_pct?: number }
+        const parent = exec.agent
+        if (!parent) throw new Error(`${SEALING_FLOW} 需要调用方会话`)
+        const workspace: string = await c.workingDirectory.ensure(parent, exec.signal)
+        const session = String(parent.id)
+        const runId = `${SEALING_FLOW}-${randomUUID()}`
+        append(parent.session, 'tool-workflow/run-start', { runId, name: `${args.panel} 封闭方案` })
+        let stopReason = 'completed'
+        let n = 0
+        try {
+          const out: any = await draftSealingPlan(evidence, {
+            panel: String(args.panel),
+            humanInputs: args.human_inputs ?? [],
+            ...(typeof args.leak_m3_min === 'number' ? { leakM3Min: args.leak_m3_min } : {}),
+            ...(typeof args.target_o2_pct === 'number' ? { targetO2Pct: args.target_o2_pct } : {}),
+            origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
+            signal: exec.signal,
+            maxRounds: config.sealingMaxRounds,
+            ...(config.disableStage ? {} : { stage: stageRunner(parent, runId) }),
+            precheck: (plan) => precheck(exec, plan, ++n),
+            getArticles: (document, articles) => knowledge.getArticles(document, articles).results,
+          })
+          const dir = join(workspace, 'records', session)
+          await mkdir(dir, { recursive: true })
+          const reportPath = join(dir, `${out.card.record_ids[0]}.md`)
+          await writeFile(reportPath, `${out.report_markdown}\n`, 'utf8')
+          const presented = await c.tools.execute({
+            callId: `${exec.callId}:present`,
+            rootCallId: exec.rootCallId,
+            name: 'present',
+            arguments: { files: [{ path: reportPath, description: `${args.panel} 封闭方案与合规审核意见` }] },
+            agent: parent,
+            parent: exec.token,
+            signal: exec.signal,
+          })
+          out.delivered = presented.isError
+            ? { ok: false, error: presented.error?.message ?? '交付失败' }
+            : { ok: true, files: [reportPath], note: '方案文件已交付给用户，不要再调用 present' }
           return toJson(out)
         } catch (err) {
           stopReason = 'failed'

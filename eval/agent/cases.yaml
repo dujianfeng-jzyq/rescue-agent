@@ -74,8 +74,9 @@
   approvals: {issue_sealing_plan: allow} # 其他指令（如发布预警）一律拒绝
   checks:
     no_wait_polling: true # 等子 Agent 结果时不轮询（不委派的用例自然通过，用于防回退）
-    delegates_to: [rescue-plan, rescue-compliance]
-    tools_called: [draft_plan] # 现场条件和必备步骤由 workflow 生成（docs/workflow-design.md W4）
+    # 第二版（P3）：固定流程 draft_sealing_plan 内部完成方案编写和合规审核，不再委派 rescue-plan、rescue-compliance（原 delegates_to 去掉）
+    tools_called: [draft_plan] # 第二版认 draft_sealing_plan；现场条件和必备步骤由代码生成
+    report_pasted: true # 方案文本 + 审核意见原样贴出
     approval_asked: [issue_sealing_plan]
     actions_issued: [issue_sealing_plan]
     snapshot_referenced: true

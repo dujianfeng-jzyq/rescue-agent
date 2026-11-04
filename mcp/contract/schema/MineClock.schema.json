@@ -14,5 +14,5 @@
   ],
   "title": "MineClock",
   "type": "object",
-  "$comment": "rescue-contract 0.8.0"
+  "$comment": "rescue-contract 0.9.0"
 }

@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, WithJsonSchema, model_validator
 
-CONTRACT_VERSION = "0.8.0"
+CONTRACT_VERSION = "0.9.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -317,7 +317,7 @@ class FireContext(_Model):
 class Citation(_Model):
     document: str
     article: str | None = None  # 条号
-    source: Literal["ragflow", "local-fallback", "data", "calculation"] = "ragflow"
+    source: Literal["ragflow", "local-fallback", "data", "calculation", "index"] = "ragflow"  # index：知识库插件的条文索引
     note: str | None = None
 
 
@@ -337,6 +337,9 @@ class Plan(_Model):
     # 方案草案快照（workflow 的 draft_plan 生成）。发布时必须有：context 和必备步骤按它核对
     snapshot_id: str | None = None
     panel: str | None = None  # 工作面编号，用于在指令台账里按工作面查找
+    # 第二版：方案来自哪条审核记录（plan-compliance/review，draft_sealing_plan 生成）。下发时只提交记录编号，
+    # actions 从记录取方案，台账里的方案带上它
+    record_id: str | None = None
 
 
 class HumanInput(_Model):

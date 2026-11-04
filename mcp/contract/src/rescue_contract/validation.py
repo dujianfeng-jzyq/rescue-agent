@@ -8,6 +8,8 @@ now 为 None 时不检查时效（只用于自查）；发布和审批预检必�
 
 第二版（docs/design-v2.md 4.8）：预警、升级引用证据插件写的结果记录（record_id）。核对：记录存在、内容哈希没变、
 是规定技能和脚本的结果、时效、工作面，再按记录内容核对等级或升级结论。迁移完成前 snapshot_id 仍可用，二者只能给一个。
+封闭方案（第二版 P3）只提交审核记录的编号（plan-compliance/review）：方案从记录里取，不经模型转抄；核对审核结论为通过、
+方案与上游的方案记录（sealing-plan/compose）一致，再做方案类型、时效和红线校验。
 预检结果附 ApprovalSummary（审批弹窗的结构化内容）。
 """
 
@@ -151,7 +153,10 @@ def plan_notes(plan: Plan, store: SnapshotStore) -> list[str]:
 RECORD_SOURCES: dict[str, tuple[str, str]] = {
     "publish_warning": ("fire-assessment", "warning"),
     "escalate_emergency": ("emergency-escalation", "escalation"),
+    "issue_sealing_plan": ("plan-compliance", "review"),
 }
+# 审核记录的输入里，方案记录必须是这个技能、这个脚本的结果
+PLAN_RECORD_SOURCE = ("sealing-plan", "compose")
 
 
 def _record(records: RecordStore | None, record_id: str, tool: str, what: str, now: datetime | None) -> tuple[Record | None, list[ApprovalCheck]]:
@@ -233,6 +238,48 @@ def check_escalation_record(esc: Escalation, records: RecordStore | None, now: d
     return [], checks
 
 
+def plan_from_record(
+    tool: str, record_id: str, records: RecordStore | None, now: datetime | None
+) -> tuple[Plan | None, list[str], list[str], list[ApprovalCheck]]:
+    """第二版：按审核记录取方案并核对。返回（方案, 问题, 给确认人看的说明, 核对项）；有问题时方案为 None。"""
+    if tool not in RECORD_SOURCES:
+        msg = f"{tool} 还不支持按记录下发（第二版只有 issue_sealing_plan），请提交完整方案"
+        return None, [msg], [], [ApprovalCheck(name="引用记录", ok=False, detail=msg)]
+    rec, checks = _record(records, record_id, tool, "方案", now)
+
+    def fail(name: str, detail: str) -> tuple[None, list[str], list[str], list[ApprovalCheck]]:
+        checks.append(ApprovalCheck(name=name, ok=False, detail=detail))
+        return None, [c.detail or c.name for c in checks if not c.ok], [], checks
+
+    if rec is None or records is None:
+        return None, [c.detail or c.name for c in checks if not c.ok], [], checks
+    r = _result(rec)
+    if r.get("verdict") != "pass":
+        return fail("合规审核", f"审核记录 {rec.record_id} 的结论是{r.get('verdict_name') or '不通过'}，不能下发；按审核意见修改后重新编制")
+    checks.append(ApprovalCheck(name="合规审核", ok=True, detail=f"审核记录 {rec.record_id} 的结论为通过"))
+    parent = (rec.source.get("inputs") or {}).get("plan")
+    try:
+        prec = records.get(str(parent))
+    except (RecordNotFound, RecordTampered, ValueError) as exc:
+        return fail("方案记录", f"审核记录 {rec.record_id} 引用的方案记录 {parent} 读不出来：{exc}")
+    if (prec.source.get("skill"), prec.source.get("script")) != PLAN_RECORD_SOURCE or prec.kind != RecordKind.RESULT:
+        return fail("方案记录", f"审核记录 {rec.record_id} 引用的 {parent} 不是 {'/'.join(PLAN_RECORD_SOURCE)} 的结果记录")
+    if _result(prec).get("plan") != r.get("plan"):
+        return fail("方案记录", f"审核记录 {rec.record_id} 里的方案与方案记录 {parent} 不一致")
+    checks.append(ApprovalCheck(name="方案记录", ok=True, detail=f"{parent}（{'/'.join(PLAN_RECORD_SOURCE)}）与审核记录一致"))
+    try:
+        plan = Plan.model_validate({**(r.get("plan") or {}), "record_id": rec.record_id})
+    except ValueError as exc:
+        return fail("方案格式", f"记录里的方案不符合数据契约：{exc}")
+    if rec.panel and plan.panel != rec.panel:
+        return fail("工作面", f"方案的工作面 {plan.panel} 与记录的工作面 {rec.panel} 不符")
+    problems = validate_plan(tool, plan, now, None)
+    checks.append(ApprovalCheck(name="方案类型、时效与红线", ok=not problems, detail="；".join(problems) or "通过（与下发时的强制校验同一套规则）"))
+    if problems:
+        return None, problems, [], checks
+    return plan, [], [str(x) for x in r.get("human_items") or []], checks
+
+
 def check_warning(notice: WarningNotice, store: SnapshotStore, now: datetime | None = None) -> tuple[list[str], list[str]]:
     """第一版（快照）：（问题, 给确认人看的说明）。等级与研判快照不同且没写理由 → 拒绝；写了理由 → 放行并在确认时提示。"""
     snap, problems = _snapshot(store, notice.snapshot_id, SnapshotKind.ASSESSMENT, "预警", now)
@@ -280,10 +327,12 @@ ACTION_NAMES = {
 }
 
 
-def _summary(tool: str, arguments: dict[str, Any], problems: list[str], notes: list[str], checks: list[ApprovalCheck]) -> dict[str, Any]:
+def _summary(
+    tool: str, arguments: dict[str, Any], problems: list[str], notes: list[str], checks: list[ApprovalCheck], action: str | None = None
+) -> dict[str, Any]:
     """审批弹窗的结构化内容（ApprovalSummary）：要做什么、引用哪些记录、核对结果、需要确认人把关的事项。"""
     body = next((v for v in arguments.values() if isinstance(v, dict)), arguments) if arguments else {}
-    action = ACTION_NAMES.get(tool, tool)
+    action = action or ACTION_NAMES.get(tool, tool)
     if tool == "publish_warning" and body.get("location"):
         action = f"发布 {body['location']} {NAMES.get(str(body.get('level')), body.get('level'))}预警"
     if not checks:  # 第一版或没有逐项核对的指令：把预检结论作为一项
@@ -302,6 +351,7 @@ def precheck(
     summary 是审批弹窗的结构化内容（ApprovalSummary）。records 为第二版的记录库（引用 record_id 时核对）。"""
     notes: list[str] = []
     checks: list[ApprovalCheck] = []
+    action: str | None = None
     try:
         body = arguments.get({"publish_warning": "notice", "escalate_emergency": "escalation"}.get(tool, ""), arguments)
         has_record = isinstance(body, dict) and bool(body.get("record_id"))
@@ -315,6 +365,13 @@ def precheck(
             problems = _both(e.snapshot_id, e.record_id) or []
             if not problems:
                 problems, checks = check_escalation_record(e, records, now)
+        elif tool in PLAN_TOOLS and isinstance(arguments.get("record_id"), str):
+            if arguments.get("plan") is not None:
+                problems = ["plan 和 record_id 只能给一个：第二版只提交审核记录编号（record_id），方案由 actions 从记录取"]
+            else:
+                plan, problems, notes, checks = plan_from_record(tool, arguments["record_id"], records, now)
+                if plan is not None:
+                    action = f"下发 {plan.title}（{plan.plan_id}）"
         elif tool in PLAN_TOOLS:
             plan = Plan.model_validate(arguments.get("plan", arguments))
             problems = validate_plan(tool, plan, now, store)
@@ -333,7 +390,7 @@ def precheck(
     except Exception as exc:
         problems = [f"指令格式不符合数据契约：{exc}"]
         return {"ok": False, "problems": problems, "notes": [], "summary": _summary(tool, {}, problems, [], [])}
-    return {"ok": not problems, "problems": problems, "notes": notes, "summary": _summary(tool, arguments, problems, notes, checks)}
+    return {"ok": not problems, "problems": problems, "notes": notes, "summary": _summary(tool, arguments, problems, notes, checks, action)}
 
 
 __all__ = [
@@ -344,6 +401,7 @@ __all__ = [
     "check_escalation_record",
     "check_plan_snapshot",
     "check_warning_record",
+    "plan_from_record",
     "plan_notes",
     "precheck",
     "validate_plan",

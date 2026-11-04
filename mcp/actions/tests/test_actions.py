@@ -182,3 +182,61 @@ def test_publish_warning_by_record(tmp_path):
     rows = [json.loads(x) for x in ledger.read_text(encoding="utf-8").splitlines()]
     assert [x["status"] for x in rows] == ["issued", "rejected"]
     assert rows[0]["payload"]["record_id"] == rid
+
+
+def test_issue_sealing_plan_by_review_record(tmp_path):
+    """第二版：只提交审核记录编号，方案从记录取（技能样例：s4-escalation 第 60 小时）。"""
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from rescue_contract.canonical import content_sha256
+    from rescue_contract.models import Origin, Record, RecordKind
+    from rescue_contract.records import RecordStore, new_record_id
+
+    skills = Path(__file__).resolve().parents[3] / "skills"
+    compose = json.loads((skills / "sealing-plan/tests/cases/compose/s4-escalation-60h-full.expected.json").read_text(encoding="utf-8"))
+    review = json.loads((skills / "plan-compliance/tests/cases/review/pass.expected.json").read_text(encoding="utf-8"))
+    holder = SimHolder("s4-escalation", manual_clock=True)
+    holder.engine.clock.advance(60)
+    now = holder.engine.now()
+    assert now.isoformat() == compose["result"]["as_of"]
+    store = RecordStore(tmp_path / "records")
+
+    def put(script_skill, content, inputs):
+        rec = Record(
+            record_id=new_record_id(RecordKind.RESULT, now), kind=RecordKind.RESULT, panel="1201", as_of=now, created_at=datetime.now(UTC),
+            origin=Origin(channel="web", trigger="flow"), source={"skill": script_skill[0], "script": script_skill[1], "inputs": inputs},
+            content=content, content_sha256=content_sha256(content),
+        )  # fmt: skip
+        return store.put(rec).record_id
+
+    pid = put(("sealing-plan", "compose"), compose, {})
+    rid = put(("plan-compliance", "review"), review, {"plan": pid})
+    ledger = tmp_path / "ledger.jsonl"
+    server = build_server(build_mine(holder), ledger_path=ledger, sim_control_url="", records=store)
+    r = call(server, "issue_sealing_plan", {"record_id": rid})
+    assert not r.is_error, r.content[0].text
+    assert r.structured_content["status"] == "issued" and "确认人" in (r.structured_content["note"] or "")
+    # 审核记录编号写错：拒绝并记台账；两个都给、都不给：输入错误
+    r = call(server, "issue_sealing_plan", {"record_id": pid})
+    assert r.is_error and "plan-compliance/review" in r.content[0].text
+    r = call(server, "issue_sealing_plan", {})
+    assert r.is_error and "只给一个" in r.content[0].text
+    rows = [json.loads(x) for x in ledger.read_text(encoding="utf-8").splitlines()]
+    assert [x["status"] for x in rows] == ["issued", "rejected"]
+    assert rows[0]["payload"]["record_id"] == rid and rows[0]["payload"]["steps"][2]["type"] == "inert_injection"
+
+
+def test_precheck_plan_redlines_only_skips_snapshot(tmp_path):
+    """第二版固定流程的自查：方案没有第一版快照，只查类型和红线。"""
+    from pathlib import Path
+
+    skills = Path(__file__).resolve().parents[3] / "skills"
+    plan = json.loads((skills / "sealing-plan/tests/cases/compose/s4-escalation-60h-full.expected.json").read_text(encoding="utf-8"))["result"]["plan"]
+    _, server, _ = setup(tmp_path)
+    assert call(server, "precheck_plan", {"tool": "issue_sealing_plan", "plan": plan}).structured_content["ok"] is False  # 第一版：缺快照
+    out = call(server, "precheck_plan", {"tool": "issue_sealing_plan", "plan": plan, "redlines_only": True}).structured_content
+    assert out["ok"] is True and out["problems"] == []
+    bad = {**plan, "steps": [s for s in plan["steps"] if s["type"] != "inert_injection"], "context": {**plan["context"], "explosion_risk": "unknown"}}
+    out = call(server, "precheck_plan", {"tool": "issue_sealing_plan", "plan": bad, "redlines_only": True}).structured_content
+    assert out["ok"] is False and "第85条" in out["problems"][0]

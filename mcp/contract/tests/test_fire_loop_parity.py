@@ -1,4 +1,4 @@
-"""固定流程 run_fire_assessment 与风险检测（TS，dsh-bundle/tools/fire-assessment.ts）与 Python 侧逐项一致。
+"""固定流程 run_fire_assessment、draft_sealing_plan 与风险检测（TS，dsh-bundle/tools/*.ts）与 Python 侧逐项一致。
 
 起一个手动时钟的模拟矿井（s4-escalation 第 60 小时：红色预警、加速氧化、建议升级、计算受威胁人员），TS 侧跑一次流程，然后：
 - 每条记录能被 Python 的 RecordStore 读出并通过 content_sha256 核对（actions 以后就这样核对）；
@@ -17,6 +17,7 @@ import socket
 import subprocess
 import sys
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,73 @@ def sim_s4_60():
     finally:
         proc.terminate()
         proc.wait(timeout=10)
+
+
+def _rerun_and_render(records: dict) -> tuple[int, int]:
+    """每个结果记录：按登记的输入在 Python 侧重跑同一脚本；每个报告记录：按同样的数据渲染同一模板。返回（结果数, 报告数）。"""
+    n_results = n_reports = 0
+    for rid, rec in records.items():
+        src = rec["source"]
+        if rec["kind"] == "result":
+            data = {name: records[i]["content"] for name, i in src["inputs"].items()}
+            if src["options"]:
+                data["options"] = src["options"]
+            r = run_script(load_skill(SKILLS / src["skill"]).scripts[src["script"]], data)
+            assert r.ok, r.detail
+            assert r.output == rec["content"], f"{rid}（{src['skill']}/{src['script']}）与 Python 运行结果不同"
+            n_results += 1
+        elif rec["kind"] == "report":
+            tpl = (SKILLS / src["skill"] / src["template"]).read_text(encoding="utf-8")
+            data = report_data({name: records[i] for name, i in src["inputs"].items()}, src["extra"])
+            assert render(tpl, data) == rec["content"], f"{rid}（{src['skill']}/{src['template']}）与 Python 渲染结果不同"
+            n_reports += 1
+    return n_results, n_reports
+
+
+@NEED_NODE
+def test_ts_sealing_flow_matches_python(sim_s4_60, tmp_path):
+    rec_dir = tmp_path / "records"
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RESCUE_MCP_")}
+    env["RESCUE_SKILL_PYTHON"] = sys.executable
+    out = subprocess.run(["node", "tools/sealing-plan.ts", str(SKILLS), str(rec_dir), "1201", sim_s4_60], cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=180)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    s, records = got["sealing"], got["records"]
+    # 命令行的写死回答：第 1 轮审核不通过、退回重写，第 2 轮通过
+    assert s["result"]["verdict"] == "pass" and s["result"]["rounds"] == 2
+    assert s["result"]["issue_record_id"] == s["record_ids"]["review"]
+    assert [e["status"] for e in s["events"]].count("failed") == 0
+    assert s["report_markdown"].startswith("【封闭方案】1201 采空区火区封闭方案")
+    assert "【合规审核】" in s["report_markdown"] and "（第 2 轮）" in s["report_markdown"]
+    assert s["human_input_request"] is None  # 红线预检（命令行里视为通过）通过时不问人
+
+    store = RecordStore(rec_dir)
+    for rid in records:
+        store.get(rid)
+    # 审核记录能被 actions 的核对逻辑接受，方案与方案记录一致
+    from rescue_contract.validation import plan_from_record
+
+    rv = records[s["record_ids"]["review"]]
+    plan, problems, _, _ = plan_from_record("issue_sealing_plan", rv["record_id"], store, datetime.fromisoformat(rv["as_of"]))
+    assert not problems and plan.record_id == rv["record_id"]
+
+    spec = parse_collect_spec((SKILLS / "sealing-plan" / "references" / "collect.yaml").read_text(encoding="utf-8"))
+    assert records[s["record_ids"]["evidence"]]["content"] == asyncio.run(collect_from(sim_s4_60, spec, "plan", "1201"))
+    n_results, n_reports = _rerun_and_render(records)
+    # explosion_triangle、warning、personnel、skeleton + 2 轮 ×（compose、scope、review）
+    assert n_results == 4 + 2 * 3
+    assert n_reports == 2 + 1  # 2 轮方案文本 + 审核意见
+
+
+def test_sealing_collect_matches_assessment():
+    """封闭方案的测点组与完整研判相同（同一份证据上运行 warning、personnel、explosion_triangle）。"""
+    import yaml
+
+    fa = yaml.safe_load((SKILLS / "fire-assessment" / "references" / "collect.yaml").read_text(encoding="utf-8"))
+    sp = yaml.safe_load((SKILLS / "sealing-plan" / "references" / "collect.yaml").read_text(encoding="utf-8"))
+    assert sp["kinds"]["plan"]["sensors"] == fa["kinds"]["assessment"]["sensors"]
+    for k in ("fire_areas", "personnel", "network"):
+        assert sp["kinds"]["plan"][k] == fa["kinds"]["assessment"][k]
 
 
 @NEED_NODE
