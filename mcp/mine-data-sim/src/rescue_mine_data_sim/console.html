@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模拟矿井演示控制台</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --muted:#6b7280; --line:#e3e6eb; --accent:#2563eb; --warn:#b45309; --bad:#b91c1c; --ok:#15803d; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background:var(--bg); color:var(--fg); }
+  header { display:flex; gap:12px; align-items:center; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0 12px 0 0; }
+  main { display:grid; grid-template-columns: 340px 1fr; gap:12px; padding:12px 16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:12px; }
+  h2 { font-size:14px; margin:0 0 8px; }
+  .muted { color:var(--muted); } .bad { color:var(--bad); } .warn { color:var(--warn); } .ok { color:var(--ok); }
+  button { font:inherit; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  input, select { font:inherit; padding:3px 6px; border:1px solid var(--line); border-radius:6px; max-width:100%; }
+  .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+  .kv { display:grid; grid-template-columns: 100px 1fr; gap:2px 8px; }
+  ul { margin:0; padding-left:18px; }
+  .sensor { cursor:pointer; padding:2px 4px; border-radius:4px; } .sensor:hover, .sensor.sel { background:#eef2ff; }
+  .tag { display:inline-block; font-size:12px; padding:0 6px; border-radius:10px; background:#fef3c7; color:var(--warn); margin-left:4px; }
+  svg { width:100%; height:260px; background:#fbfcfd; border:1px solid var(--line); border-radius:6px; }
+  #msg { margin-left:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>模拟矿井演示控制台</h1>
+  <label>控制令牌 <input id="token" type="password" size="18" placeholder="RESCUE_SIM_CONTROL_TOKEN"></label>
+  <span id="msg" class="muted"></span>
+</header>
+<main>
+  <div>
+    <section>
+      <h2>运行状态</h2>
+      <div class="kv" id="status"></div>
+      <div class="row">
+        <select id="scenario"></select>
+        <label>倍速 <input id="injectSpeed" type="number" value="600" style="width:70px"></label>
+        <button class="primary" onclick="inject()">开始演示</button>
+      </div>
+      <div class="row">
+        <button onclick="pause(true)">暂停</button>
+        <button onclick="resume()">继续</button>
+        <input id="speed" type="number" value="60" style="width:70px"><button onclick="setSpeed()">调倍速</button>
+      </div>
+      <div class="row">
+        <label><input id="autopause" type="checkbox" onchange="autoPause()"> 检测到异常后自动暂停</label>
+        <button onclick="resetNormal()">重置为常态</button>
+      </div>
+    </section>
+    <section>
+      <h2>测点</h2>
+      <div id="sensors"></div>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2 id="chartTitle">曲线（选择左侧测点）</h2>
+      <div class="row">
+        <select id="measurand" onchange="drawChart()"></select>
+        <label>最近 <input id="hours" type="number" value="6" style="width:56px" onchange="drawChart()"> 小时</label>
+        <span class="muted">蓝：输出值（智能体看到的）；灰：模型值；橙点：人工设置</span>
+      </div>
+      <svg id="chart" viewBox="0 0 800 260" preserveAspectRatio="none"></svg>
+      <h2 style="margin-top:12px">读数设置（只改读数，不改物理模型）</h2>
+      <div class="row">
+        <select id="ovMode">
+          <option value="follow">跟随模型</option><option value="fixed">固定值</option><option value="offset">加偏移</option>
+          <option value="ramp">线性变到</option><option value="fault">故障</option>
+        </select>
+        <input id="ovValue" type="number" step="any" placeholder="值" style="width:90px">
+        <input id="ovMinutes" type="number" placeholder="分钟（线性）" style="width:110px">
+        <select id="ovFault"><option value="dropout">无数据</option><option value="stuck">卡死</option><option value="spike">跳变</option></select>
+        <label><input id="ovAll" type="checkbox"> 该测点全部参数</label>
+        <button class="primary" onclick="setOverride()">应用</button>
+      </div>
+    </section>
+    <section>
+      <h2>事件</h2>
+      <div id="events"></div>
+    </section>
+    <section>
+      <details>
+        <summary><b>真值</b> <span class="muted">（模拟器内部状态，智能体看不到）</span></summary>
+        <div class="kv" id="truth" style="margin-top:8px"></div>
+      </details>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id)
+const SOURCES = { safety_monitor: '安全监控', bundle_tube: '束管', temperature: '测温' }
+let sensors = [], sel = null, state = null
+try { $('token').value = localStorage.getItem('simToken') || '' } catch {}
+$('token').onchange = () => { try { localStorage.setItem('simToken', $('token').value) } catch {} ; load() }
+
+async function api(path, body) {
+  const headers = { 'Content-Type': 'application/json' }
+  if ($('token').value) headers.Authorization = 'Bearer ' + $('token').value
+  const r = await fetch(path, body === undefined ? { headers } : { method: 'POST', headers, body: JSON.stringify(body) })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+  return data
+}
+function say(text, cls = 'muted') { $('msg').textContent = text; $('msg').className = cls }
+async function act(fn, ok) { try { await fn(); say(ok, 'ok'); refresh() } catch (e) { say(e.message, 'bad') } }
+
+const inject = () => act(() => api('/sim/demo/inject', { scenario: $('scenario').value, speed: Number($('injectSpeed').value) }), '已注入事故')
+const pause = (p) => act(() => api('/sim/pause', { paused: p }), '已暂停')
+const resume = () => act(() => api('/sim/demo/resume', {}), '已继续')
+const setSpeed = () => act(() => api('/sim/speed', { speed: Number($('speed').value) }), '已调倍速')
+const autoPause = () => act(() => api('/sim/demo/auto-pause', { enabled: $('autopause').checked }), '已设置')
+const resetNormal = () => { if (confirm('重置为常态会清空模拟矿井的历史和读数设置，确定？')) act(() => api('/sim/demo/normal', { speed: Number($('speed').value) }), '已重置为常态') }
+function setOverride() {
+  if (!sel) return say('先选择测点', 'bad')
+  const body = { sensor_id: sel.id, mode: $('ovMode').value }
+  if (!$('ovAll').checked) body.measurand = $('measurand').value
+  if ($('ovValue').value !== '') body.value = Number($('ovValue').value)
+  if ($('ovMinutes').value !== '') body.minutes = Number($('ovMinutes').value)
+  if (body.mode === 'fault') body.fault = $('ovFault').value
+  act(() => api('/sim/overrides', body), '读数设置已应用')
+}
+
+function kv(el, rows) { el.innerHTML = rows.map(([k, v]) => `<div class="muted">${k}</div><div>${v}</div>`).join('') }
+const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+
+function renderSensors() {
+  const groups = {}
+  for (const s of sensors) (groups[s.source] ??= []).push(s)
+  const manual = new Set((state?.overrides || []).filter((o) => !o.until).map((o) => o.sensor_id))
+  $('sensors').innerHTML = Object.entries(groups).map(([src, list]) => `<div class="muted" style="margin-top:6px">${SOURCES[src] || src}</div>` +
+    list.map((s) => `<div class="sensor ${sel?.id === s.id ? 'sel' : ''}" data-id="${s.id}">${s.id} ${esc(s.name)}${manual.has(s.id) ? '<span class="tag">人工设置</span>' : ''}</div>`).join('')).join('')
+  for (const el of document.querySelectorAll('.sensor')) el.onclick = () => { sel = sensors.find((s) => s.id === el.dataset.id); pickSensor() }
+}
+function pickSensor() {
+  $('measurand').innerHTML = sel.measurands.map((m) => `<option>${m}</option>`).join('')
+  renderSensors(); drawChart()
+}
+
+async function drawChart() {
+  if (!sel) return
+  $('chartTitle').textContent = `曲线：${sel.id} ${sel.name}`
+  let data
+  try { data = await api(`/sim/series?sensor_id=${encodeURIComponent(sel.id)}&measurand=${encodeURIComponent($('measurand').value)}&hours=${Number($('hours').value) || 6}`) } catch (e) { return say(e.message, 'bad') }
+  const pts = data.points, svg = $('chart')
+  const vals = pts.flatMap((p) => [p.model, p.output]).filter((v) => v !== null)
+  if (!pts.length || !vals.length) { svg.innerHTML = '<text x="20" y="30" fill="#6b7280">没有数据</text>'; return }
+  let lo = Math.min(...vals), hi = Math.max(...vals); if (hi === lo) { hi += 1; lo -= 1 }
+  const W = 800, H = 260, P = 30
+  const x = (i) => P + (i / Math.max(1, pts.length - 1)) * (W - 2 * P), y = (v) => H - P - ((v - lo) / (hi - lo)) * (H - 2 * P)
+  const line = (key) => { let d = '', pen = false; pts.forEach((p, i) => { if (p[key] === null) { pen = false; return } d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`; pen = true }); return d }
+  const dots = pts.map((p, i) => p.manual && p.output !== null ? `<circle cx="${x(i)}" cy="${y(p.output)}" r="3" fill="#d97706"/>` : '').join('')
+  svg.innerHTML = `<text x="4" y="14" font-size="11" fill="#6b7280">${hi.toFixed(3)}</text><text x="4" y="${H - 34}" font-size="11" fill="#6b7280">${lo.toFixed(3)}</text>` +
+    `<text x="${P}" y="${H - 8}" font-size="11" fill="#6b7280">${pts[0].ts.replace('T', ' ')}</text><text x="${W - 150}" y="${H - 8}" font-size="11" fill="#6b7280">${pts.at(-1).ts.replace('T', ' ')}</text>` +
+    `<path d="${line('model')}" fill="none" stroke="#9ca3af" stroke-width="1.5"/><path d="${line('output')}" fill="none" stroke="#2563eb" stroke-width="2"/>${dots}`
+}
+
+async function refresh() {
+  try { state = await api('/sim/state') } catch (e) { say(`读不到状态：${e.message}（检查控制令牌）`, 'bad'); return }
+  const phase = state.mode !== 'demo' ? `场景 ${state.scenario.id}` : state.injected.length ? `已注入 ${state.injected.map((i) => `${i.name}（${i.at.replace('T', ' ')}）`).join('；')}` : '常态'
+  kv($('status'), [['矿井时间', state.now.slice(0, 19).replace('T', ' ')], ['阶段', esc(phase)], ['倍速', `${state.speed}（1 真实秒 = ${(state.speed / 60).toFixed(1)} 矿井分钟）`],
+    ['时钟', state.paused ? '<span class="warn">已暂停</span>' : '<span class="ok">运行中</span>'], ['自动暂停', state.auto_pause ? '开' : '关']])
+  $('autopause').checked = state.auto_pause
+  const anomalies = state.anomalies.slice(-8).reverse().map((a) => `<li><span class="bad">异常检测记录</span> ${esc(a.record_id)}（${esc(a.panel)}，${esc(a.as_of)}${a.trigger === 'watch' ? '，持续检测' : ''}）：${esc(a.reasons.join('；'))}${a.paused ? '；已自动暂停' : ''}<br><span class="muted">如果会话里没有出现提问，按退路手动提问“看一下现在矿井是否有异常”</span></li>`)
+  const script = state.script.map((a) => `<li class="${a.applied ? '' : 'muted'}">${a.at.slice(0, 19).replace('T', ' ')} 剧本 ${esc(a.type)} ${esc(JSON.stringify(a.params))}${a.applied ? '' : '（未到）'}</li>`)
+  const actions = state.actions.slice(-10).reverse().map((a) => `<li>${a.at.slice(0, 19).replace('T', ' ')} ${a.source === 'action' ? '<b>指令执行</b>' : a.source} ${esc(a.type)} ${esc(JSON.stringify(a.params))}</li>`)
+  const ovs = state.overrides.filter((o) => !o.until).map((o) => `<li><span class="tag">人工设置</span> ${o.sensor_id}${o.measurand ? '/' + o.measurand : ''} ${o.mode}${o.value != null ? ' ' + o.value : ''}${o.minutes ? `（${o.minutes} 分钟）` : ''}${o.fault ? ' ' + o.fault : ''}，自 ${o.from.slice(0, 19).replace('T', ' ')}</li>`)
+  $('events').innerHTML = `<div class="muted">检测记录（持续检测、一次性检测发现的异常）</div><ul>${anomalies.join('') || '<li class="muted">无</li>'}</ul>` +
+    `<div class="muted" style="margin-top:6px">场景剧本事件</div><ul>${script.join('') || '<li class="muted">无</li>'}</ul>` +
+    `<div class="muted" style="margin-top:6px">已执行的处置（来自 actions 或控制台）</div><ul>${actions.join('') || '<li class="muted">无</li>'}</ul>` +
+    `<div class="muted" style="margin-top:6px">当前的读数设置（记入模拟器日志，复盘时可区分）</div><ul>${ovs.join('') || '<li class="muted">无</li>'}</ul>`
+  const t = state.truth
+  kv($('truth'), [['高温点温度', `${t.temperature_c} ℃`], ['高温点氧浓度', `${t.o2_pct} %`], ['距工作面', `${t.depth_m} m`], ['注氮', `${t.n2_m3_h} m³/h`], ['已封闭', t.sealed ? '是' : '否'], ['明火', t.open_fire ? '<span class="bad">是</span>' : '否']])
+  renderSensors()
+}
+
+async function load() {
+  try {
+    const list = await api('/sim/scenarios')
+    $('scenario').innerHTML = list.filter((s) => s.id !== 's1-normal').map((s) => `<option value="${s.id}" ${s.id === 's4-escalation' ? 'selected' : ''}>${esc(s.name)}（${s.id}）</option>`).join('')
+    sensors = await api('/sim/sensors')
+    say('已连接', 'ok')
+  } catch (e) { say(`连接失败：${e.message}（检查控制令牌）`, 'bad') }
+  refresh()
+}
+load()
+setInterval(() => { if (sensors.length) { refresh(); drawChart() } }, 3000)
+</script>
+</body>
+</html>

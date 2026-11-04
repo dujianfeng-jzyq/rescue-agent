@@ -8,6 +8,11 @@
     python3 scripts/sim.py pause | resume
     python3 scripts/sim.py advance 12          # 快进 12 模拟小时
     python3 scripts/sim.py apply inert_injection rate_m3_h=1000
+    python3 scripts/sim.py normal [倍速]                 # 演示：回到常态连续运行（清空历史）
+    python3 scripts/sim.py inject s4-escalation [倍速]   # 演示：把事故场景接到当前矿井时间上
+    python3 scripts/sim.py continue [倍速]               # 演示：自动暂停之后继续
+    python3 scripts/sim.py override SM-1201-UC CO fixed 30     # 读数设置：fixed/offset 值、ramp 值 分钟、fault dropout|stuck|spike、follow
+    网页控制台：http://127.0.0.1:8101/console（输入控制令牌）
 
 只用标准库；不经过智能体。注意：state 返回的 truth（高温点真实温度）只用于演示讲解和评测，智能体看不到。
 """
@@ -67,6 +72,22 @@ def main(argv: list[str]) -> int:
             r = call("POST", "/pause", {"paused": False})
         case "advance":
             r = call("POST", "/advance", {"hours": float(rest[0])})
+        case "normal":
+            r = call("POST", "/demo/normal", {"speed": float(rest[0])} if rest else {})
+        case "inject":
+            r = call("POST", "/demo/inject", {"scenario": rest[0], **({"speed": float(rest[1])} if len(rest) > 1 else {})})
+        case "continue":
+            r = call("POST", "/demo/resume", {"speed": float(rest[0])} if rest else {})
+        case "override":
+            sid, meas, mode, *more = rest
+            body: dict = {"sensor_id": sid, "measurand": None if meas == "all" else meas, "mode": mode}
+            if mode == "fault":
+                body["fault"] = more[0]
+            elif more:
+                body["value"] = float(more[0])
+                if len(more) > 1:
+                    body["minutes"] = float(more[1])
+            r = call("POST", "/overrides", body)
         case "apply":
             r = call("POST", "/interventions", {"type": rest[0], "params": parse_params(rest[1:]), "source": "control"})
         case _:

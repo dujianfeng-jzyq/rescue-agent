@@ -6,7 +6,7 @@ from .server import build_server
 
 
 def main() -> None:
-    serve(build_server(), "mine_data")
+    serve(build_server(), "mine_data", public_prefixes=("/console",))  # 控制台页面本身公开；它调用的 /sim/ 接口要控制令牌
 
 
 if __name__ == "__main__":

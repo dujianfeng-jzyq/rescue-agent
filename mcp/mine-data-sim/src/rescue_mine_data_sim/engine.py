@@ -147,8 +147,33 @@ class Clock:
         self.speed = speed
 
 
+@dataclass
+class Override:
+    """读数设置（观测层，design-v2 4.10）：只改测点输出的读数，不改物理模型；只作用于设置之后的时刻，历史不变。
+
+    mode：fixed（固定值）、offset（在模型值上加偏移）、ramp（minutes 分钟内从模型值线性变到 value）、
+    fault（fault 取 dropout 无数据 / stuck 卡在设置时的值 / spike 设置后第一个点乘以 value）。"""
+
+    sensor_id: str
+    measurand: Measurand | None  # None：该测点全部参数
+    mode: str
+    from_h: float
+    value: float | None = None
+    minutes: float | None = None
+    fault: str | None = None
+    until_h: float | None = None  # 取消（恢复跟随模型）的时刻
+
+    def active(self, t_h: float) -> bool:
+        # 严格晚于设置时刻：设置时已经产生的读数（含当时的最新值）不变
+        return self.from_h < t_h - 1e-9 and (self.until_h is None or t_h <= self.until_h + 1e-9)
+
+
+OVERRIDE_MODES = ("fixed", "offset", "ramp", "fault")
+FAULT_KINDS = ("dropout", "stuck", "spike")
+
+
 class SimEngine:
-    def __init__(self, scenario: Scenario, manual_clock: bool = False) -> None:
+    def __init__(self, scenario: Scenario, manual_clock: bool = False, continuous: bool = False) -> None:
         self.scenario = scenario
         self.clock = Clock(scenario.speed, manual=manual_clock)
         p = scenario.params
@@ -157,11 +182,90 @@ class SimEngine:
         self._applied = 0
         self.evacuated_roadways: set[str] = set()
         self.action_log: list[Intervention] = []
+        # 连续运行（演示）：没有终点；事故注入后，过程参数从注入时刻起换成事故场景的（物理状态连续）
+        self.continuous = continuous
+        self.duration_h = math.inf if continuous else scenario.duration_h
+        self._params: list[tuple[float, ProcessParams]] = [(0.0, p)]
+        self.faults: list[Fault] = list(scenario.faults)
+        self.injected: list[dict] = []
+        self.overrides: list[Override] = []
+
+    def params_at(self, t_h: float) -> ProcessParams:
+        out = self._params[0][1]
+        for start, prm in self._params:
+            if start <= t_h + 1e-9:
+                out = prm
+        return out
+
+    # ── 演示：事故注入、读数设置 ─────────────────────────────────────────────
+
+    def inject(self, incident: Scenario) -> dict:
+        """把事故场景接到当前矿井时间上：从现在起用它的过程参数，剧本事件和测点故障的时刻相对现在。物理状态连续。"""
+        t = self.now_h()
+        self._advance_to(t)
+        t = self._history[-1].t_h
+        self._params.append((t, incident.params))
+        shifted = [replace(iv, at_h=t + iv.at_h) for iv in incident.script]
+        self._interventions = self._interventions[: self._applied] + sorted(self._interventions[self._applied :] + shifted, key=lambda i: i.at_h)
+        self.faults += [replace(f, start_h=t + f.start_h, end_h=None if f.end_h is None else t + f.end_h) for f in incident.faults]
+        rec = {"scenario": incident.id, "name": incident.name, "at_h": t, "at": self.at(t).isoformat()}
+        self.injected.append(rec)
+        return rec
+
+    def set_override(self, sensor_id: str, measurand: Measurand | None, mode: str, value: float | None = None, minutes: float | None = None, fault: str | None = None) -> Override | None:
+        """设置读数；mode=follow 取消该测点（该参数）现有的设置、恢复跟随模型。返回新设置（follow 时为 None）。"""
+        if sensor_id not in SENSOR_BY_ID:
+            raise ValueError(f"未知测点：{sensor_id}")
+        if measurand is not None and measurand not in SENSOR_BY_ID[sensor_id].measurands:
+            raise ValueError(f"测点 {sensor_id} 没有参数 {measurand.value}")
+        if mode != "follow" and mode not in OVERRIDE_MODES:
+            raise ValueError(f"mode 取 follow、{'、'.join(OVERRIDE_MODES)}")
+        if mode in ("fixed", "offset", "ramp") and value is None:
+            raise ValueError(f"{mode} 需要 value")
+        if mode == "ramp" and not minutes:
+            raise ValueError("ramp 需要 minutes")
+        if mode == "fault" and fault not in FAULT_KINDS:
+            raise ValueError(f"fault 取 {'、'.join(FAULT_KINDS)}")
+        # 校验通过后才取消该测点（该参数）现有的设置：写错的请求不改变现状
+        t = self.now_h()
+        for o in self.overrides:
+            if o.sensor_id == sensor_id and (measurand is None or o.measurand in (None, measurand)) and o.until_h is None:
+                o.until_h = t
+        if mode == "follow":
+            return None
+        o = Override(sensor_id=sensor_id, measurand=measurand, mode=mode, from_h=t, value=value, minutes=minutes, fault=fault)
+        self.overrides.append(o)
+        return o
+
+    def _overridden(self, sensor_id: str, m: Measurand, t_h: float, value: float | None) -> tuple[float | None, bool]:
+        hit = None
+        for o in self.overrides:
+            if o.sensor_id == sensor_id and o.measurand in (None, m) and o.active(t_h):
+                hit = o  # 后设置的优先
+        if hit is None:
+            return value, False
+        if hit.mode == "fixed":
+            return hit.value, True
+        if hit.mode == "offset":
+            return (None if value is None else value + (hit.value or 0)), True
+        if hit.mode == "ramp":
+            if value is None:
+                return None, True
+            frac = min(1.0, max(0.0, (t_h - hit.from_h) / ((hit.minutes or 1) / 60)))
+            return value + ((hit.value or 0) - value) * frac, True
+        if hit.fault == "dropout":
+            return None, True
+        if hit.fault == "stuck":
+            return self._noisy(sensor_id, m, hit.from_h), True
+        step = SAMPLE_INTERVAL_H[SENSOR_BY_ID[sensor_id].source]
+        if value is not None and t_h - hit.from_h <= step + 1e-9:  # spike：设置后第一个点
+            return value * (hit.value or 4.0), True
+        return value, True
 
     # ── 时间 ──────────────────────────────────────────────────────────────
 
     def now_h(self) -> float:
-        return min(self.clock.hours(), self.scenario.duration_h)
+        return min(self.clock.hours(), self.duration_h)
 
     def now(self) -> datetime:
         return self.at(self.now_h())
@@ -175,9 +279,9 @@ class SimEngine:
     # ── 积分 ──────────────────────────────────────────────────────────────
 
     def _advance_to(self, t_h: float) -> None:
-        p = self.scenario.params
         while self._history[-1].t_h + STEP_H <= t_h + 1e-9:
             s = replace(self._history[-1])
+            p = self.params_at(s.t_h)
             # 先应用到期的剧本事件和处置
             while self._applied < len(self._interventions) and self._interventions[self._applied].at_h <= s.t_h + 1e-9:
                 self._apply(s, self._interventions[self._applied])
@@ -237,7 +341,7 @@ class SimEngine:
     # ── 物理量 ────────────────────────────────────────────────────────────
 
     def _air_fraction(self, s: _State, depth_m: float) -> float:
-        p = self.scenario.params
+        p = self.params_at(s.t_h)
         leak = p.leak_m3_min * 60 * s.leak_mult
         n2 = s.n2_m3_h * p.n2_penetration
         return math.exp(-depth_m / p.o2_decay_len_m) * leak / (leak + n2 + 1e-9)
@@ -256,7 +360,7 @@ class SimEngine:
             "o2_pct": round(self._o2_hot(s), 2),
             "depth_m": round(s.depth_m, 1),
             "sealed": s.sealed,
-            "open_fire": s.temp_c >= self.scenario.params.open_fire_c,
+            "open_fire": s.temp_c >= self.params_at(s.t_h).open_fire_c,
             "n2_m3_h": s.n2_m3_h,
         }
 
@@ -277,7 +381,7 @@ class SimEngine:
         ]
 
     def _hot_gases(self, s: _State) -> dict[Measurand, float]:
-        p = self.scenario.params
+        p = self.params_at(s.t_h)
         T, o2 = s.temp_c, self._o2_hot(s)
         ox = o2 / 20.9 + 0.05
         # 经验函数，高温段饱和。TODO(专家): 用程序升温实验数据校准
@@ -292,7 +396,7 @@ class SimEngine:
         return {Measurand.O2: o2, Measurand.CO: co, Measurand.C2H4: c2h4, Measurand.C2H2: c2h2, Measurand.CO2: co2, Measurand.CH4: ch4, Measurand.H2: h2}
 
     def _true_value(self, sensor_id: str, m: Measurand, s: _State) -> float | None:
-        p = self.scenario.params
+        p = self.params_at(s.t_h)
         sensor = SENSOR_BY_ID[sensor_id]
         hot = self._hot_gases(s)
         if sensor.source in (SensorSource.BUNDLE_TUBE, SensorSource.TEMPERATURE):
@@ -360,12 +464,28 @@ class SimEngine:
         value = self._true_value(sensor_id, m, self.state_at(t_h))
         if value is None:
             return None
-        return value * (1 + self.scenario.params.noise_rel * self._noise(sensor_id, m, t_h))
+        return value * (1 + self.params_at(t_h).noise_rel * self._noise(sensor_id, m, t_h))
 
     def reading(self, sensor_id: str, m: Measurand, t_h: float) -> Reading:
-        value = self._noisy(sensor_id, m, t_h)
+        return self.reading_pair(sensor_id, m, t_h)[1]
+
+    def reading_pair(self, sensor_id: str, m: Measurand, t_h: float) -> tuple[float | None, Reading, bool]:
+        """（模型值, 输出读数, 是否被人工设置）。模型值含噪声和场景的测点故障，输出读数再叠加读数设置。"""
+        value = self._model_value(sensor_id, m, t_h)
+        model = None if value is None else round(value, 3)
+        out, manual = self._overridden(sensor_id, m, t_h, value)
         quality = Quality.OK
-        for f in self.scenario.faults:
+        if out is None:
+            quality = Quality.MISSING
+        else:
+            if m in (Measurand.CO, Measurand.C2H4, Measurand.C2H2, Measurand.CH4, Measurand.CO2, Measurand.H2):
+                out = max(0.0, out)
+            out = round(out, 3)
+        return model, Reading(sensor_id=sensor_id, measurand=m, ts=self.at(t_h), value=out, quality=quality), manual
+
+    def _model_value(self, sensor_id: str, m: Measurand, t_h: float) -> float | None:
+        value = self._noisy(sensor_id, m, t_h)
+        for f in self.faults:
             if f.sensor_id != sensor_id or (f.measurand and f.measurand != m):
                 continue
             if t_h < f.start_h or (f.end_h is not None and t_h > f.end_h):
@@ -378,14 +498,8 @@ class SimEngine:
                 value = self._noisy(sensor_id, m, f.start_h)
             elif f.kind == "spike" and value is not None and t_h - f.start_h < 1:
                 value *= f.magnitude
-        # 注意：漂移、卡值不标记 SUSPECT。真实监控系统也不会自报故障，识别它们是 fire-model 数据质量检测的职责（标准场景 6 专门检验这一点）。
-        if value is None:
-            quality = Quality.MISSING
-        else:
-            if m in (Measurand.CO, Measurand.C2H4, Measurand.C2H2, Measurand.CH4, Measurand.CO2, Measurand.H2):
-                value = max(0.0, value)
-            value = round(value, 3)
-        return Reading(sensor_id=sensor_id, measurand=m, ts=self.at(t_h), value=value, quality=quality)
+        # 注意：漂移、卡值不标记 SUSPECT。真实监控系统也不会自报故障，识别它们是数据质量检测的职责（标准场景 6 专门检验这一点）。
+        return value
 
     def readings(self, sensor_ids: list[str], start_h: float, end_h: float, measurands: list[Measurand] | None = None) -> list[Reading]:
         end_h = min(end_h, self.now_h())
@@ -399,6 +513,18 @@ class SimEngine:
                     if measurands is None or m in measurands:
                         out.append(self.reading(sid, m, t))
                 t = round(t + step, 6)
+        return out
+
+    def series(self, sensor_id: str, m: Measurand, start_h: float, end_h: float) -> list[dict]:
+        """控制台的曲线：每个采样点的模型值、输出值和是否被人工设置。"""
+        step = SAMPLE_INTERVAL_H[SENSOR_BY_ID[sensor_id].source]
+        end_h = min(end_h, self.now_h())
+        t = math.ceil(max(0.0, start_h) / step) * step
+        out = []
+        while t <= end_h + 1e-9 and len(out) < MAX_POINTS:
+            model, r, manual = self.reading_pair(sensor_id, m, t)
+            out.append({"ts": r.ts.isoformat(), "model": model, "output": r.value, "manual": manual})
+            t = round(t + step, 6)
         return out
 
     def latest(self, sensor_ids: list[str]) -> list[Reading]:

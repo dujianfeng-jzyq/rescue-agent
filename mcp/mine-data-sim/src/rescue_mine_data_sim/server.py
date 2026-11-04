@@ -5,12 +5,21 @@
 
 另有 /sim/* 控制接口，供演示控制台、评测脚本和 actions 服务（模拟处置执行）使用。
 它们不是 MCP 工具，智能体看不到；真实矿井适配器也没有这些接口。
+
+演示模式（RESCUE_SIM_MODE=demo，docs/design-v2.md 4.10）：启动即按常态（s1-normal 的参数）连续运行、没有终点；
+/sim/demo/inject 把事故场景接到当前矿井时间上；/sim/overrides 设置单个测点的读数（只改读数，不改物理模型）；
+设置了 RESCUE_RECORD_DIR 时只读地看记录目录，出现 anomaly 为真的检测记录就自动暂停（只为演示，不是矿井接口的一部分）。
+演示控制台在 /console（页面本身不需要令牌，调用 /sim/ 接口时带控制令牌）。
 """
 
 from __future__ import annotations
 
+import json
 import os
+import threading
+import time
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -27,7 +36,7 @@ from rescue_contract.models import (
     SensorPoint,
 )
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 
 from .engine import SimEngine, all_sensor_ids
 from .mine import INVENTORY, NETWORK, RESCUE_TEAMS, SENSOR_BY_ID, SENSORS
@@ -40,15 +49,78 @@ INSTRUCTIONS = (
 )
 
 
+NORMAL = "s1-normal"
+
+
 class SimHolder:
-    def __init__(self, scenario_id: str | None = None, manual_clock: bool = False) -> None:
+    def __init__(self, scenario_id: str | None = None, manual_clock: bool = False, mode: str | None = None) -> None:
         self.scenarios = load_all()
-        self.reset(scenario_id or os.environ.get("RESCUE_SIM_SCENARIO", "s2-slow-oxidation"), manual_clock)
+        self.mode = "scenario"
+        self.auto_pause = True
+        self.anomalies: list[dict] = []
+        if (mode or os.environ.get("RESCUE_SIM_MODE", "scenario")) == "demo":
+            self.reset_normal(float(os.environ.get("RESCUE_SIM_SPEED", "60")))
+        else:
+            self.reset(scenario_id or os.environ.get("RESCUE_SIM_SCENARIO", "s2-slow-oxidation"), manual_clock)
 
     def reset(self, scenario_id: str, manual_clock: bool = False) -> None:
         if scenario_id not in self.scenarios:
             raise KeyError(f"未知场景：{scenario_id}，可选：{sorted(self.scenarios)}")
         self.engine = SimEngine(self.scenarios[scenario_id], manual_clock=manual_clock)
+        self.mode = "scenario"
+        self.anomalies = []
+
+    def reset_normal(self, speed: float | None = None) -> None:
+        """演示：回到常态连续运行（s1-normal 的参数，没有终点）。"""
+        self.engine = SimEngine(self.scenarios[NORMAL], continuous=True)
+        if speed is not None:
+            self.engine.clock.set_speed(speed)
+        self.mode = "demo"
+        self.anomalies = []
+        self.resumed_wall = time.time()
+
+
+class RecordWatcher(threading.Thread):
+    """只读地看记录目录：出现 anomaly 为真的检测记录（fire-assessment/check）就暂停模拟时钟（演示的自动暂停）。
+
+    只看本次运行（或上次继续）之后写入的记录；不是矿井接口的一部分，真实矿井适配器不读记录。"""
+
+    def __init__(self, sim: SimHolder, directory: Path, poll_s: float = 2.0) -> None:
+        super().__init__(daemon=True, name="record-watcher")
+        self.sim, self.dir, self.poll_s = sim, directory, poll_s
+        self.seen: set[str] = set()
+
+    def scan(self) -> list[dict]:
+        found = []
+        since = getattr(self.sim, "resumed_wall", 0.0)
+        for path in sorted(self.dir.glob("RS-*.json")) if self.dir.is_dir() else []:
+            if path.name in self.seen:
+                continue
+            self.seen.add(path.name)
+            try:
+                if path.stat().st_mtime < since:
+                    continue
+                rec = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            src, res = rec.get("source") or {}, ((rec.get("content") or {}).get("result") or {}) if isinstance(rec.get("content"), dict) else {}
+            if src.get("skill") == "fire-assessment" and src.get("script") == "check" and res.get("anomaly") is True:
+                found.append({"record_id": rec.get("record_id"), "panel": rec.get("panel"), "as_of": rec.get("as_of"), "reasons": res.get("reasons", []), "trigger": (rec.get("origin") or {}).get("trigger")})
+        return found
+
+    def run(self) -> None:
+        while True:
+            try:
+                hits = self.scan()
+                if hits and self.sim.mode == "demo":
+                    for h in hits:
+                        h["paused"] = bool(self.sim.auto_pause and not self.sim.engine.clock.paused)
+                        if h["paused"]:
+                            self.sim.engine.clock.set_paused(True)
+                        self.sim.anomalies.append(h)
+            except Exception:  # noqa: BLE001  看门狗线程不能退出
+                pass
+            time.sleep(self.poll_s)
 
 
 def _unknown_sensors(ids: list[str]) -> list[str]:
@@ -133,12 +205,29 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
 
     # ── /sim/* 控制接口（不是 MCP 工具）──────────────────────────────────
 
+    record_dir = os.environ.get("RESCUE_RECORD_DIR")
+    if holder is None and record_dir:
+        RecordWatcher(sim, Path(record_dir)).start()
+
     @server.custom_route("/sim/state", methods=["GET"])
     async def sim_state(_req: Request) -> JSONResponse:
         e = sim.engine
         return JSONResponse(
             {
-                "scenario": {"id": e.scenario.id, "name": e.scenario.name, "duration_h": e.scenario.duration_h},
+                "mode": sim.mode,
+                "injected": e.injected,
+                "auto_pause": sim.auto_pause,
+                "anomalies": sim.anomalies,
+                "overrides": [
+                    {"sensor_id": o.sensor_id, "measurand": o.measurand.value if o.measurand else None, "mode": o.mode, "value": o.value,
+                     "minutes": o.minutes, "fault": o.fault, "from": e.at(o.from_h).isoformat(), "until": None if o.until_h is None else e.at(o.until_h).isoformat()}
+                    for o in e.overrides
+                ],  # fmt: skip
+                "script": [
+                    {"type": iv.type, "at": e.at(iv.at_h).isoformat(), "params": iv.params, "applied": iv.at_h <= e.now_h() + 1e-9}
+                    for iv in e._interventions if iv.source == "script"
+                ],
+                "scenario": {"id": e.scenario.id, "name": e.scenario.name, "duration_h": None if e.continuous else e.scenario.duration_h},
                 "now": e.now().isoformat(),
                 "elapsed_h": round(e.now_h(), 3),
                 "speed": e.clock.speed,
@@ -180,6 +269,85 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         body = await req.json()
         sim.engine.clock.advance(float(body["hours"]))
         return JSONResponse({"ok": True, "now": sim.engine.now().isoformat()})
+
+    # ── 演示（RESCUE_SIM_MODE=demo 或 /sim/demo/normal 进入）──
+
+    def bad(msg: str) -> JSONResponse:
+        return JSONResponse({"error": msg}, status_code=400)
+
+    @server.custom_route("/sim/demo/normal", methods=["POST"])
+    async def demo_normal(req: Request) -> JSONResponse:
+        """回到常态连续运行（清空历史、读数设置和事故注入）。"""
+        body = await req.json() if (await req.body()) else {}
+        sim.reset_normal(float(body["speed"]) if body.get("speed") is not None else float(os.environ.get("RESCUE_SIM_SPEED", "60")))
+        return JSONResponse({"ok": True, "now": sim.engine.now().isoformat(), "speed": sim.engine.clock.speed})
+
+    @server.custom_route("/sim/demo/inject", methods=["POST"])
+    async def demo_inject(req: Request) -> JSONResponse:
+        """开始演示：把事故场景接到当前矿井时间上（只在常态连续运行时可用），可同时改倍速。"""
+        body = await req.json()
+        if sim.mode != "demo":
+            return bad("只有常态连续运行时才能注入事故（先 POST /sim/demo/normal）")
+        sc = sim.scenarios.get(body.get("scenario", "s4-escalation"))
+        if sc is None or sc.id == NORMAL:
+            return bad(f"未知事故场景：{body.get('scenario')}")
+        rec = sim.engine.inject(sc)
+        if body.get("speed") is not None:
+            sim.engine.clock.set_speed(float(body["speed"]))
+        return JSONResponse({"ok": True, "injected": rec, "speed": sim.engine.clock.speed})
+
+    @server.custom_route("/sim/demo/resume", methods=["POST"])
+    async def demo_resume(req: Request) -> JSONResponse:
+        """继续（自动暂停之后）：之后写入的异常检测记录才会再次触发暂停。可同时改倍速。"""
+        body = await req.json() if (await req.body()) else {}
+        if body.get("speed") is not None:
+            sim.engine.clock.set_speed(float(body["speed"]))
+        sim.resumed_wall = time.time()
+        sim.engine.clock.set_paused(False)
+        return JSONResponse({"ok": True, "now": sim.engine.now().isoformat(), "speed": sim.engine.clock.speed})
+
+    @server.custom_route("/sim/demo/auto-pause", methods=["POST"])
+    async def demo_auto_pause(req: Request) -> JSONResponse:
+        sim.auto_pause = bool((await req.json()).get("enabled", True))
+        return JSONResponse({"ok": True, "auto_pause": sim.auto_pause})
+
+    @server.custom_route("/sim/overrides", methods=["POST"])
+    async def sim_override(req: Request) -> JSONResponse:
+        """设置单个测点的读数：{sensor_id, measurand?, mode: follow|fixed|offset|ramp|fault, value?, minutes?, fault?}。"""
+        body = await req.json()
+        try:
+            m = Measurand(body["measurand"]) if body.get("measurand") else None
+            o = sim.engine.set_override(
+                str(body["sensor_id"]), m, str(body.get("mode", "follow")),
+                float(body["value"]) if body.get("value") is not None else None,
+                float(body["minutes"]) if body.get("minutes") is not None else None, body.get("fault"),
+            )  # fmt: skip
+        except (KeyError, ValueError) as exc:
+            return bad(str(exc))
+        return JSONResponse({"ok": True, "active": o is not None, "at": sim.engine.now().isoformat()})
+
+    @server.custom_route("/sim/series", methods=["GET"])
+    async def sim_series(req: Request) -> JSONResponse:
+        """控制台曲线：?sensor_id=&measurand=&hours=6，每个采样点的模型值、输出值、是否人工设置。"""
+        q = req.query_params
+        sid = q.get("sensor_id", "")
+        if sid not in SENSOR_BY_ID:
+            return bad(f"未知测点：{sid}")
+        try:
+            m = Measurand(q.get("measurand", ""))
+        except ValueError:
+            return bad("measurand 不合法")
+        e = sim.engine
+        hours = min(float(q.get("hours", 6)), 72)
+        return JSONResponse({"sensor_id": sid, "measurand": m.value, "points": e.series(sid, m, e.now_h() - hours, e.now_h())})
+
+    @server.custom_route("/sim/sensors", methods=["GET"])
+    async def sim_sensors(_req: Request) -> JSONResponse:
+        return JSONResponse([{"id": x.id, "name": x.name, "source": x.source.value, "measurands": [m.value for m in x.measurands]} for x in SENSORS])
+
+    @server.custom_route("/console", methods=["GET"])
+    async def console(_req: Request) -> HTMLResponse:
+        return HTMLResponse((Path(__file__).parent / "console.html").read_text(encoding="utf-8"))
 
     @server.custom_route("/sim/interventions", methods=["POST"])
     async def sim_intervene(req: Request) -> JSONResponse:
