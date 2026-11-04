@@ -21,7 +21,7 @@ export type Config = ApprovalConfig
 
 export const Config: Schema<Config> = Schema.object({
   gatedServer: Schema.string().default('actions'),
-  exemptPrefixes: Schema.array(Schema.string()).default(['precheck_']),  // 只读自查工具（precheck_plan）不弹确认
+  exemptPrefixes: Schema.array(Schema.string()).default(['precheck_', 'query_']),  // 只读工具（precheck_plan、query_last_issued）不弹确认
   precheckUrl: Schema.string().default('http://127.0.0.1:8106/redlines/check'),
   precheckTimeoutMs: Schema.natural().default(5000),
   confirmers: Schema.dict(Schema.string()).default(DEFAULT_CONFIRMERS),

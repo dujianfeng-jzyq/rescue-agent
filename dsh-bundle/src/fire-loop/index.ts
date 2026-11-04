@@ -1,5 +1,5 @@
 /**
- * rescue-fire-loop：火灾闭环的固定流程插件（docs/design-v2.md 4.4，ADR 0007）。run_fire_assessment（P1）、draft_sealing_plan（P3）。
+ * rescue-fire-loop：火灾闭环的固定流程插件（docs/design-v2.md 4.4，ADR 0007）。run_fire_assessment（P1）、draft_sealing_plan（P3）、review_effect（P4）。
  *
  * 进程内调用证据插件的服务 rescueEvidence（采集、运行技能脚本、渲染报告）和知识库插件的 rescueKnowledge（条文原文），
  * 所以必须和这两个插件放在同一个带 isolate 的 cordis:group 里（profiles/v2.patch.yml）。步骤在 assessment.ts，判据全在技能脚本里。
@@ -26,6 +26,7 @@ import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
 import { draftSealingPlan, type HumanInput, type Redline, SEALING_FLOW } from './sealing.ts'
+import { EFFECT_FLOW, EffectInputError, type LastIssued, reviewEffect } from './effect.ts'
 
 export const name = 'rescue-fire-loop'
 export const inject = ['tools', 'rescueEvidence', 'rescueKnowledge', 'workingDirectory', 'subagents']
@@ -43,6 +44,8 @@ export interface Config {
   sealingMaxRounds: number
   /** 红线预检的工具名（actions 的 precheck_plan，dsh-mcp-client 的 serverName 为 actions） */
   precheckTool: string
+  /** 台账查询的工具名（actions 的 query_last_issued；review_effect 缺处置开始时间时用） */
+  lastIssuedTool: string
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -52,6 +55,7 @@ export const Config: Schema<Config> = Schema.object({
   concludeTurn: Schema.boolean().default(false),
   sealingMaxRounds: Schema.natural().min(1).default(2),
   precheckTool: Schema.string().default('mcp__actions__precheck_plan'),
+  lastIssuedTool: Schema.string().default('mcp__actions__query_last_issued'),
 })
 
 const STRUCTURED_OUTPUT = 'structured_output'
@@ -291,6 +295,60 @@ export function apply(ctx: Context, config: Config) {
           return toJson(out)
         } catch (err) {
           stopReason = 'failed'
+          throw err
+        } finally {
+          append(parent.session, 'tool-workflow/run-end', { runId, stopReason })
+        }
+      },
+    }),
+  )
+
+  /** 经 DSH 工具管道调用调用方 Agent 范围内的只读工具，取结构化结果 */
+  async function callJson(exec: any, name: string, args: Record<string, unknown>, tag: string): Promise<any> {
+    const r = await c.tools.execute({ callId: `${exec.callId}:${tag}`, rootCallId: exec.rootCallId, name, arguments: args, agent: exec.agent, parent: exec.token, signal: exec.signal })
+    if (r.isError) throw new Error(r.error?.message ?? `${name} 调用失败`)
+    if (r.value && typeof r.value === 'object' && !Array.isArray(r.value)) return r.value
+    const text = (r.content ?? []).find((b: any) => b.type === 'text')?.text
+    return text ? JSON.parse(text) : null
+  }
+
+  c.tools.register(
+    defineTool({
+      name: EFFECT_FLOW,
+      description:
+        '处置效果复评（固定流程，评估注氮、堵漏、封闭等处置的效果一律调它）：对工作面全部发火指标测点（采空区束管 CO、采空区测温、非进风侧安全监控 CO）' +
+        '比较处置前后的上升速率，给出总体结论（已受控 / 需继续处置 / 恶化 / 观测时间不足）、各结论测点数、逐点结果和下次复评时刻，存为记录。' +
+        'since 为处置开始的矿井时间（指挥人员给了就照填）；不给时取指令台账里本工作面最近一次已下发的封闭方案或防灭火方案的下发时间，台账里也没有时会返回说明，这时问指挥人员。' +
+        '回答时把 report_markdown 原样单独成段放进回答，不要改写、不要另写分析；结论为恶化时建议重新研判（run_fire_assessment）。判据为开发占位值。',
+      parameters: {
+        panel: { type: 'string', required: true, description: '工作面编号，如 1201' },
+        since: { type: 'string', description: '处置开始的矿井时间，如 2026-11-04T00:00:00（不带时区）' },
+      },
+      output: {
+        schema: { type: 'json' as const },
+        render: (_args: unknown, v: any) => [
+          { type: 'text' as const, text: JSON.stringify(v.error ? v : { summary: v.card.summary, warnings: v.card.warnings, report_markdown: v.report_markdown, record_ids: v.record_ids, result: v.result }) },
+        ],
+      },
+      execute: async (raw: unknown, exec: any) => {
+        const args = raw as { panel: string; since?: string }
+        const parent = exec.agent
+        if (!parent) throw new Error(`${EFFECT_FLOW} 需要调用方会话`)
+        const runId = `${EFFECT_FLOW}-${randomUUID()}`
+        append(parent.session, 'tool-workflow/run-start', { runId, name: `${args.panel} 处置效果复评` })
+        let stopReason = 'completed'
+        try {
+          const out = await reviewEffect(evidence, {
+            panel: String(args.panel),
+            ...(args.since ? { since: String(args.since) } : {}),
+            origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
+            signal: exec.signal,
+            lastIssued: async (panel) => ((await callJson(exec, config.lastIssuedTool, { panel }, 'last-issued')) ?? { found: false }) as LastIssued,
+          })
+          return toJson(out)
+        } catch (err) {
+          stopReason = 'failed'
+          if (err instanceof EffectInputError) return toJson({ error: err.message })
           throw err
         } finally {
           append(parent.session, 'tool-workflow/run-end', { runId, stopReason })

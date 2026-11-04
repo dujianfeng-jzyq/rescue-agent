@@ -76,17 +76,33 @@ def _select(sensors: list[dict[str, Any]], g: dict[str, Any], panel: str) -> lis
     return sorted(out, key=lambda s: s["id"])
 
 
-async def collect(call: CallTool, spec: dict[str, Any], kind: str, panel: str) -> dict[str, Any]:
+def since_window_h(as_of: str, since: str, before_h: float) -> float:
+    """从 since 之前 before_h 小时到 as_of 的窗口长度（小时）。与 TS 侧同一算法：整秒差 / 3600 + before_h。"""
+    secs = (datetime.fromisoformat(as_of) - datetime.fromisoformat(since)).total_seconds()
+    if secs < 0:
+        raise ValueError(f"处置开始时间 {since} 晚于矿井当前时间 {as_of}")
+    return int(secs) / 3600 + before_h
+
+
+async def collect(call: CallTool, spec: dict[str, Any], kind: str, panel: str, since: str | None = None) -> dict[str, Any]:
+    """since：处置开始的矿井时间；测点组写了 before_since_h 时，窗口从 since 之前这么多小时取到现在（复评用）。"""
     k = spec["kinds"].get(kind)
     if k is None:
         raise ValueError(f"采集清单没有 {kind}（有：{'、'.join(spec['kinds'])}）")
     as_of = mine_time_to_seconds(str((await call("get_clock", {}))["now"]))
     ev: dict[str, Any] = {"kind": kind, "panel": panel, "as_of": as_of, "groups": {}, "missing": []}
+    if since is not None:
+        since = mine_time_to_seconds(since)
+        ev["since"] = since
     groups = k.get("sensors") or []
     sensors = _unwrap(await call("list_sensors", {})) if groups else []
     for g in groups:
         picked = _select(sensors, g, panel)
         window_h = g.get("window_h") or 0
+        if g.get("before_since_h") is not None:
+            if since is None:
+                raise ValueError(f"采集清单 {kind} 的测点组 {g['name']} 按处置开始时间取窗口，需要给出 since")
+            window_h = since_window_h(as_of, since, g["before_since_h"])
         wanted_by = {s["id"]: sorted(m for m in s["measurands"] if g.get("measurands") is None or m in g["measurands"]) for s in picked}
         ids = [s["id"] for s in picked]
         latest: list[dict[str, Any]] = []
@@ -128,12 +144,12 @@ def mcp_caller(client: Any) -> CallTool:
     return call
 
 
-async def collect_from(target: Any, spec: dict[str, Any], kind: str, panel: str) -> dict[str, Any]:
+async def collect_from(target: Any, spec: dict[str, Any], kind: str, panel: str, since: str | None = None) -> dict[str, Any]:
     """target 是 URL（带 RESCUE_MCP_TOKEN）或进程内的 MCPServer。"""
     from .client import connect
 
     async with connect(target) as c:
-        return await collect(mcp_caller(c), spec, kind, panel)
+        return await collect(mcp_caller(c), spec, kind, panel, since)
 
 
 async def _main(args: argparse.Namespace) -> int:

@@ -1,0 +1,21 @@
+# 处置效果复评的判据（演示用占位值，待专家按本矿制度审定）。
+# 由 mcp/fire-model 的 thresholds.yaml effect 节迁移，数值未改。
+status: placeholder
+reviewed_by: null
+
+baseline_h: 12           # 处置前取多长时间算“处置前速率”（采集清单的 before_since_h 要不小于它）
+min_observe_h: 12        # 处置后至少观测这么久才下结论（一个完整观测周期）
+review_interval_h: 12    # 下次复评时刻 = 现在 + 此值
+controlled_rate: 0.0     # 处置后上升速率 ≤ 此值：停止上升（已受控）
+slowdown_ratio: 0.5      # 处置后速率 ≤ 处置前 × 此值：明显减缓（需继续处置）
+# 只评估“上升即变坏”的发火指标；O2、CH4、N2 等不适用。flat_rate：|速率| 小于此值按“不变”处理（每小时）
+flat_rate:
+  CO: 0.01               # ppm/h
+  TEMP: 0.01             # ℃/h
+  C2H4: 0.001            # ppm/h
+  C2H2: 0.001            # ppm/h
+  CO2: 0.001             # %/h
+# 处置后“新出现”标志气体的检出限：与 fire-assessment 的 thresholds.yaml stage 节相同（同步测试）
+markers:
+  C2H4: 0.05             # = stage.accelerating.c2h4_ppm
+  C2H2: 0.05             # = stage.intense.c2h2_ppm

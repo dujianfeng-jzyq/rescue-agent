@@ -34,6 +34,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel
 from rescue_contract.client import MineData, MineDataError
+from rescue_contract.ledger import for_panel
+from rescue_contract.ledger import records as ledger_records
 from rescue_contract.models import (
     DispatchOrder,
     Escalation,
@@ -280,6 +282,23 @@ def build_server(
             "rules_checked_count": len(RULES),
             "rule_articles": sorted({f"第{n}条" for r in RULES for n in re.findall(r"\d+", r.article)}, key=lambda a: int(a[1:-1])),
         }
+
+    # ── 只读：台账查询（审批插件按前缀 query_ 放行，不弹确认）──
+
+    @server.tool()
+    def query_last_issued(panel: str = "1201") -> dict[str, Any]:
+        """本工作面最近一次已下发（status=issued）的封闭方案或防灭火方案（只读）。固定流程 review_effect 缺处置开始时间时用它，
+        found 为 false 时没有可用的下发记录。返回 tool、action_id、issued_at（矿井时间）、plan_id、title。"""
+        hits = [
+            r
+            for r in ledger_records(ledger.path)
+            if r.get("tool") in ("issue_sealing_plan", "issue_firefighting_plan") and r.get("status") == "issued" and for_panel(r.get("payload") or {}, panel)
+        ]
+        if not hits:
+            return {"found": False, "panel": panel}
+        r = hits[-1]
+        p = r.get("payload") or {}
+        return {"found": True, "panel": panel, "tool": r["tool"], "action_id": r.get("action_id"), "issued_at": str(r.get("issued_at")), "plan_id": p.get("plan_id"), "title": p.get("title")}
 
     # ── DSH 审批插件的预检接口（HTTP，不是 MCP 工具）──
 

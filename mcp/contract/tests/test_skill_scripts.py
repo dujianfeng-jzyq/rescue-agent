@@ -7,9 +7,9 @@ import pytest
 SKILLS = Path(__file__).resolve().parents[3] / "skills"
 # 辅助模块 → 以哪个技能的为准、复制到哪些技能
 SHARED = {
-    "_quality.py": ("fire-assessment", ["explosion-triangle", "sealing-plan"]),
-    "_evidence.py": ("fire-assessment", ["explosion-triangle", "sealing-plan"]),
-    "_skill.py": ("fire-assessment", ["explosion-triangle", "emergency-escalation", "sealing-plan", "plan-compliance"]),
+    "_quality.py": ("fire-assessment", ["explosion-triangle", "sealing-plan", "effect-review"]),
+    "_evidence.py": ("fire-assessment", ["explosion-triangle", "sealing-plan", "effect-review"]),
+    "_skill.py": ("fire-assessment", ["explosion-triangle", "emergency-escalation", "sealing-plan", "plan-compliance", "effect-review"]),
 }
 
 

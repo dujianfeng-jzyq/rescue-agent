@@ -38,6 +38,11 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def _get(url: str) -> dict:
+    with urllib.request.urlopen(url, timeout=10) as r:
+        return json.loads(r.read())
+
+
 def _post(url: str, body: dict) -> dict:
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=10) as r:
@@ -191,3 +196,27 @@ def test_ts_flow_matches_python(sim_s4_60, tmp_path, monkeypatch):
             n_reports += 1
     assert n_results == 9  # 研判 8 个脚本（alarms、warning、stage、trend、explosion_triangle、personnel、escalation、explanation_options）+ 检测 1 个
     assert n_reports == 3  # 研判报告、升级建议、检测结果
+
+
+@NEED_NODE
+def test_ts_effect_flow_matches_python(sim_s4_60, tmp_path):
+    """review_effect：在 s4 第 60 小时注氮并临时密闭，推进 24 小时后复评（模块级的模拟矿井放在最后改状态）。"""
+    base = sim_s4_60.removesuffix("/mcp")
+    clock = _get(f"{base}/sim/state")["now"][:19]
+    _post(f"{base}/sim/interventions", {"type": "inert_injection", "params": {"rate_m3_h": 600}, "source": "eval"})
+    _post(f"{base}/sim/advance", {"hours": 24})
+    rec_dir = tmp_path / "records"
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RESCUE_MCP_")}
+    env["RESCUE_SKILL_PYTHON"] = sys.executable
+    out = subprocess.run(["node", "tools/effect.ts", str(SKILLS), str(rec_dir), "1201", sim_s4_60, clock], cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    e, records = got["effect"], got["records"]
+    assert e["result"]["since"] == clock and e["result"]["observed_h"] == 24
+    assert e["report_markdown"].startswith("【效果评估】1201 工作面")
+    spec = parse_collect_spec((SKILLS / "effect-review" / "references" / "collect.yaml").read_text(encoding="utf-8"))
+    assert records[e["record_ids"]["evidence"]]["content"] == asyncio.run(collect_from(sim_s4_60, spec, "effect", "1201", clock))
+    assert _rerun_and_render(records) == (1, 1)
+    # 台账里没有下发记录、也没给 since：返回说明（不抛错）
+    out = subprocess.run(["node", "tools/effect.ts", str(SKILLS), str(tmp_path / "r2"), "1201", sim_s4_60], cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=60)
+    assert out.returncode != 0 and "请问指挥人员处置是什么时候开始的" in out.stderr

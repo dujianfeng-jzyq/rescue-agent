@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成第二版火灾闭环技能（fire-assessment、explosion-triangle、emergency-escalation、sealing-plan、plan-compliance）的自检样例。
+"""生成第二版火灾闭环技能（fire-assessment、explosion-triangle、emergency-escalation、sealing-plan、plan-compliance、effect-review）的自检样例。
 
 输入取自模拟矿井的标准场景（手动时钟，Python 采集小工具按 fire-assessment 的采集清单取证据），
 期望输出是当前脚本的运行结果（金标准；关键字段与第一版服务的一致性由 mcp/workflow/tests/test_skill_parity.py 保证）。
@@ -26,7 +26,7 @@ from rescue_mine_data_sim.server import SimHolder, build_server
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 FA, XT, ESC = "fire-assessment", "explosion-triangle", "emergency-escalation"
-SP, PC = "sealing-plan", "plan-compliance"
+SP, PC, ER = "sealing-plan", "plan-compliance", "effect-review"
 
 
 def evidence(scenario: str, hours: float, kind: str = "assessment", unseal_at: float | None = None, skill: str = FA) -> dict:
@@ -157,6 +157,35 @@ def sealing_inputs() -> dict[tuple[str, str, str], dict]:
     return out
 
 
+def effect_evidence(scenario: str, at: float, actions: list, then: float) -> dict:
+    """处置后复评的证据：在 at 小时执行处置（同 eval/agent/cases.yaml 的 apply），then 小时按 effect 清单采集。"""
+    holder = SimHolder(scenario, manual_clock=True)
+    holder.engine.clock.advance(at)
+    since = holder.engine.now().isoformat()
+    for t, prm, rw in actions:
+        holder.engine.apply(t, prm, roadways=rw, source="eval")
+    holder.engine.clock.advance(then - at)
+    spec = parse_collect_spec((SKILLS / ER / "references" / "collect.yaml").read_text(encoding="utf-8"))
+    return asyncio.run(collect_from(build_server(holder), spec, "effect", "1201", since))
+
+
+def effect_inputs() -> dict[tuple[str, str, str], dict]:
+    inert = [("inert_injection", {"rate_m3_h": 1000}, None), ("leak_sealing", {"reduction": 0.5}, ["R-1201-RET"])]
+    return {
+        (ER, "effect", "s2-inerting-48h-to-72h-continuing"): {"evidence": effect_evidence("s2-slow-oxidation", 48, inert, 72), "options": {"since_source": "指挥人员给出"}},
+        (ER, "effect", "s2-inerting-48h-to-54h-insufficient"): {"evidence": effect_evidence("s2-slow-oxidation", 48, inert[:1], 54)},
+        (ER, "effect", "s3-inerting-40h-to-64h-worsening"): {"evidence": effect_evidence("s3-accelerating", 40, [("inert_injection", {"rate_m3_h": 600}, None)], 64)},
+    }
+
+
+def effect_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
+    out = {}
+    for case in ("s2-inerting-48h-to-72h-continuing", "s3-inerting-40h-to-64h-worsening"):
+        r = run(ER, "effect", inputs[(ER, "effect", case)])
+        out[(ER, "report", case)] = report_data({"effect": fake_record("effect", r, 0)})
+    return out
+
+
 def sealing_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
     out = {}
     for case in ("s4-escalation-60h-full", "s4-escalation-60h-minimal"):
@@ -264,7 +293,7 @@ def main() -> int:
     ap.add_argument("--expected", action="store_true", help="只按现有输入重写期望")
     args = ap.parse_args()
     if args.expected:
-        for skill in (FA, XT, ESC, SP, PC):
+        for skill in (FA, XT, ESC, SP, PC, ER):
             for inp in sorted((SKILLS / skill / "tests" / "cases").glob("*/*.input.json")):
                 write_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/{inp.parent.name}/{inp.name}")
@@ -272,8 +301,8 @@ def main() -> int:
                 write_template_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/templates/{inp.parent.name}/{inp.name}")
         return 0
-    inputs = {**build_inputs(), **sealing_inputs()}
-    for (skill, template, case), data in {**build_template_inputs(inputs), **sealing_template_inputs(inputs)}.items():
+    inputs = {**build_inputs(), **sealing_inputs(), **effect_inputs()}
+    for (skill, template, case), data in {**build_template_inputs(inputs), **sealing_template_inputs(inputs), **effect_template_inputs(inputs)}.items():
         write_template_case(skill, template, case, data)
         print(f"模板  {skill}/{template}/{case}")
     for (skill, script, case), data in inputs.items():

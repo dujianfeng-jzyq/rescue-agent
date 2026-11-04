@@ -88,7 +88,7 @@ def test_wrong_plan_kind_for_tool_is_rejected(tmp_path):
 
 
 def test_all_actions_tools_are_command_tools(tmp_path):
-    """actions 服务放需要确认的指令；只读工具必须以 precheck_ 开头（审批插件按这个前缀放行，不弹确认）。"""
+    """actions 服务放需要确认的指令；只读工具必须以 precheck_ 或 query_ 开头（审批插件按这两个前缀放行，不弹确认）。"""
     _, server, _ = setup(tmp_path)
 
     async def go():
@@ -96,8 +96,8 @@ def test_all_actions_tools_are_command_tools(tmp_path):
             return {t.name for t in (await c.list_tools()).tools}
 
     names = asyncio.run(go())
-    assert {n for n in names if n.startswith("precheck_")} == {"precheck_plan"}
-    assert names - {"precheck_plan"} == {
+    assert {n for n in names if n.startswith(("precheck_", "query_"))} == {"precheck_plan", "query_last_issued"}
+    assert names - {"precheck_plan", "query_last_issued"} == {
         "publish_warning",
         "issue_firefighting_plan",
         "escalate_emergency",
@@ -240,3 +240,17 @@ def test_precheck_plan_redlines_only_skips_snapshot(tmp_path):
     bad = {**plan, "steps": [s for s in plan["steps"] if s["type"] != "inert_injection"], "context": {**plan["context"], "explosion_risk": "unknown"}}
     out = call(server, "precheck_plan", {"tool": "issue_sealing_plan", "plan": bad, "redlines_only": True}).structured_content
     assert out["ok"] is False and "第85条" in out["problems"][0]
+
+
+def test_query_last_issued(tmp_path):
+    holder, server, ledger = setup(tmp_path)
+    assert call(server, "query_last_issued", {"panel": "1201"}).structured_content == {"found": False, "panel": "1201"}
+    ledger.write_text(
+        json.dumps({"tool": "issue_sealing_plan", "status": "rejected", "issued_at": "2026-11-04T19:00:00", "payload": {"panel": "1201"}}) + "\n"
+        + json.dumps({"tool": "issue_sealing_plan", "status": "issued", "action_id": "A-1", "issued_at": "2026-11-04T20:00:00", "payload": {"panel": "1201", "plan_id": "SP-1", "title": "t"}}) + "\n"
+        + json.dumps({"tool": "publish_warning", "status": "issued", "issued_at": "2026-11-04T21:00:00", "payload": {"location": "1201"}}) + "\n",
+        encoding="utf-8",
+    )  # fmt: skip
+    out = call(server, "query_last_issued", {"panel": "1201"}).structured_content
+    assert out["found"] and out["issued_at"] == "2026-11-04T20:00:00" and out["plan_id"] == "SP-1"
+    assert call(server, "query_last_issued", {"panel": "1202"}).structured_content["found"] is False

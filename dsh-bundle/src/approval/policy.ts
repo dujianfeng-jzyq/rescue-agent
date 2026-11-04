@@ -2,7 +2,7 @@
  * 人工确认与红线预检的业务逻辑（不依赖 DSH，可独立测试）。
  *
  * 约定：所有需要人工确认的指令都在 actions MCP 服务里，DSH 中的工具名为 `mcp__actions__<工具名>`，
- * 该服务的指令类工具都需要确认；只读工具以 precheck_ 开头（如 precheck_plan），按 exemptPrefixes 放行。
+ * 该服务的指令类工具都需要确认；只读工具以 precheck_ 或 query_ 开头（precheck_plan、query_last_issued），按 exemptPrefixes 放行。
  * 预检返回 ApprovalSummary（契约 0.8.0）时，确认提示按它列出要做什么、引用的记录、逐项核对结果和需要确认人把关的事项。
  */
 

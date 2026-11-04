@@ -1,0 +1,27 @@
+# 采集清单：处置效果复评（skills/README.md“采集清单”）。只能用 mine_data 的工具（CLAUDE.md 约定 5）。
+# 窗口随处置开始时间变化：before_since_h 表示从 since 之前这么多小时取到现在（要不小于 effect.yaml 的 baseline_h）。
+# 测点与第一版 fire_model 的 panel_targets 相同：采空区束管 CO、采空区测温、非进风侧安全监控 CO。
+# TODO(专家): 测点范围待评审。
+status: placeholder
+reviewed_by: null
+
+kinds:
+  effect:
+    sensors:
+      - name: tubes               # 采空区束管：CO，以及判断新出现标志气体的 C2H4、C2H2
+        select: {source: bundle_tube, panel: true}
+        require_measurands: [CO]
+        measurands: [CO, C2H4, C2H2]
+        before_since_h: 12
+        required: true
+      - name: goaf_temperature    # 采空区测温
+        select: {source: temperature, panel: true}
+        require_measurands: [TEMP]
+        measurands: [TEMP]
+        before_since_h: 12
+      - name: monitors            # 安全监控 CO（进风巷的由脚本按通风网络排除）
+        select: {source: safety_monitor, panel: true}
+        require_measurands: [CO]
+        measurands: [CO]
+        before_since_h: 12
+    network: true

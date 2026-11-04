@@ -25,6 +25,8 @@ export interface SensorGroupSpec {
   window_h?: number
   /** 没有匹配的测点时记为缺失 */
   required?: boolean
+  /** 窗口按处置开始时间取：从 since 之前这么多小时到现在（复评用；采集时必须给 since） */
+  before_since_h?: number
 }
 
 export interface CollectKindSpec {
@@ -90,6 +92,7 @@ export interface Evidence {
   kind: string
   panel: string
   as_of: string
+  since?: string
   groups: Record<string, { sensors: any[]; measurands: Record<string, string[]>; latest: any[]; readings: any[]; window_h: number }>
   missing: { group: string; reason: string }[]
   events?: any[]
@@ -100,15 +103,28 @@ export interface Evidence {
   network?: any
 }
 
-export async function collect(call: CallTool, spec: CollectSpec, kind: string, panel: string): Promise<Evidence> {
+/** 从 since 之前 beforeH 小时到 asOf 的窗口长度（小时）。与 Python 侧同一算法：整秒差 / 3600 + beforeH */
+export function sinceWindowH(asOf: string, since: string, beforeH: number): number {
+  const secs = Math.trunc((Date.parse(`${asOf}Z`) - Date.parse(`${since}Z`)) / 1000)
+  if (secs < 0) throw new Error(`处置开始时间 ${since} 晚于矿井当前时间 ${asOf}`)
+  return secs / 3600 + beforeH
+}
+
+export async function collect(call: CallTool, spec: CollectSpec, kind: string, panel: string, opts: { since?: string } = {}): Promise<Evidence> {
   const k = spec.kinds[kind]
   if (!k) throw new Error(`采集清单没有 ${kind}（有：${Object.keys(spec.kinds).join('、')}）`)
   const asOf = mineTimeToSeconds(String((await call('get_clock', {})).now))
   const ev: Evidence = { kind, panel, as_of: asOf, groups: {}, missing: [] }
+  const since = opts.since !== undefined ? mineTimeToSeconds(opts.since) : undefined
+  if (since !== undefined) ev.since = since
   const sensors = k.sensors?.length ? unwrap(await call('list_sensors', {})) : []
   for (const g of k.sensors ?? []) {
     const picked = selectSensors(sensors, g, panel)
-    const windowH = g.window_h ?? 0
+    let windowH = g.window_h ?? 0
+    if (g.before_since_h !== undefined) {
+      if (since === undefined) throw new Error(`采集清单 ${kind} 的测点组 ${g.name} 按处置开始时间取窗口，需要给出 since`)
+      windowH = sinceWindowH(asOf, since, g.before_since_h)
+    }
     const measurands: Record<string, string[]> = {}
     for (const s of picked) measurands[s.id] = (g.measurands ? s.measurands.filter((m: string) => g.measurands!.includes(m)) : [...s.measurands]).sort(cmp)
     const ids = picked.map((s) => s.id)

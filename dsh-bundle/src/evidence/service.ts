@@ -53,11 +53,17 @@ export class Evidence {
   }
 
   /** 按技能的采集清单取数，存为证据记录 */
-  async collectEvidence(opts: { skill: string; kind: string; panel: string; origin: Origin }): Promise<RescueRecord> {
+  async collectEvidence(opts: { skill: string; kind: string; panel: string; origin: Origin; since?: string }): Promise<RescueRecord> {
     const skill = await loadSkill(this.cfg.skillsDir, opts.skill)
     const specPath = join(skill.dir, 'references', 'collect.yaml')
     const specText = await readFile(specPath, 'utf8')
-    const ev = await collect(this.cfg.mineData, parseCollectSpec(specText, `${opts.skill}/references/collect.yaml`), opts.kind, opts.panel)
+    const ev = await collect(
+      this.cfg.mineData,
+      parseCollectSpec(specText, `${opts.skill}/references/collect.yaml`),
+      opts.kind,
+      opts.panel,
+      opts.since !== undefined ? { since: opts.since } : {},
+    )
     return this.store.put(
       buildRecord({
         kind: 'evidence',
@@ -68,6 +74,7 @@ export class Evidence {
           skill: skill.name,
           skill_version: skill.version,
           collect_kind: opts.kind,
+          ...(opts.since !== undefined ? { since: ev.since } : {}),
           collect_spec_sha256: createHash('sha256').update(specText).digest('hex'),
         },
         content: ev as unknown as Record<string, unknown>,

@@ -1,0 +1,6 @@
+# 第二版技能的脚本登记（skills/README.md）。只有登记过的脚本能被证据插件运行。
+scripts:
+  effect:
+    file: scripts/effect.py
+    description: 处置效果复评：逐个发火指标测点比较处置前后的上升速率，汇总为总体结论、各结论测点数和下次复评时刻
+    timeout_s: 20

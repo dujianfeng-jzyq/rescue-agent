@@ -43,6 +43,12 @@ kinds:
     events_h: 6
     fire_areas: true
     personnel: true
+  effect:
+    sensors:
+      - name: tubes
+        select: {source: bundle_tube, panel: true}
+        measurands: [CO, C2H4]
+        before_since_h: 12
 """
 
 
@@ -111,3 +117,25 @@ def test_ts_and_python_collect_identically(sim_url, tmp_path, monkeypatch):
     assert py["missing"] == [{"group": "nothing", "reason": "没有匹配的测点"}]
     assert ts["canonical"] == canonical_json(py)
     assert ts["content_sha256"] == content_sha256(py)
+
+
+@pytest.mark.skipif(shutil.which("node") is None or not (BUNDLE / "node_modules" / "yaml").exists(), reason="没有 node 或 dsh-bundle 依赖")
+def test_ts_and_python_collect_since_window_identically(sim_url, tmp_path, monkeypatch):
+    """复评的窗口按处置开始时间取（before_since_h），两边算出的窗口和读数相同。"""
+    monkeypatch.delenv("RESCUE_MCP_TOKEN", raising=False)
+    spec_path = tmp_path / "collect.yaml"
+    spec_path.write_text(SPEC, encoding="utf-8")
+    now = asyncio.run(collect_from(sim_url, parse_collect_spec(SPEC), "check", "1201"))["as_of"]
+    since = minus_hours(now, 7.25)
+    py = asyncio.run(collect_from(sim_url, parse_collect_spec(SPEC), "effect", "1201", since))
+    assert py["since"] == since and py["groups"]["tubes"]["window_h"] == 7.25 + 12
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RESCUE_MCP_")}
+    out = subprocess.run(["node", "tools/collect.ts", str(spec_path), "effect", "1201", sim_url, since], cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout)["canonical"] == canonical_json(py)
+
+
+def test_since_window_needs_since(sim_url):
+    with pytest.raises(BaseException) as info:  # MCP 客户端的任务组把它包成 ExceptionGroup
+        asyncio.run(collect_from(sim_url, parse_collect_spec(SPEC), "effect", "1201"))
+    assert "需要给出 since" in repr(info.value) or "需要给出 since" in str(getattr(info.value, "exceptions", ""))
