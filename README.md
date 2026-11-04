@@ -52,7 +52,15 @@
 ```bash
 make setup          # 或 scripts/setup.sh；只做 MCP/模型开发：make setup-py
 vim .env            # 至少填 DEEPSEEK_API_KEY
-make dev            # 启动 6 个 MCP 服务（含模拟矿井）+ DSH 网页端
+make dev            # 启动 MCP 服务（模拟矿井、actions）+ DSH 网页端
+```
+
+演示（Docker，`docs/demo-script.md`）：
+
+```bash
+make demo-up        # 构建并启动；打印网页端（13080）和控制台（13090/console）地址
+make demo-reset     # 演示前：清空 var/demo 的演示数据，模拟矿井回到常态
+make demo-rehearse  # 彩排：按演示脚本自动走一遍并逐步判定
 ```
 
 不需要大模型也能跑的部分：

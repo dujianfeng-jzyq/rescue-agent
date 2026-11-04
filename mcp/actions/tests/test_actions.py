@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from mcp.client import Client
 from rescue_actions.server import build_server
@@ -254,3 +254,7 @@ def test_query_last_issued(tmp_path):
     out = call(server, "query_last_issued", {"panel": "1201"}).structured_content
     assert out["found"] and out["issued_at"] == "2026-11-04T20:00:00" and out["plan_id"] == "SP-1"
     assert call(server, "query_last_issued", {"panel": "1202"}).structured_content["found"] is False
+    # 台账实际的写法（Ledger.append 用 default=str：空格分隔、带微秒）也要给出 ISO 格式、截到秒
+    with ledger.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"tool": "issue_sealing_plan", "status": "issued", "issued_at": datetime(2026, 11, 4, 22, 0, 5, 406594), "payload": {"panel": "1201"}}, default=str) + "\n")
+    assert call(server, "query_last_issued", {"panel": "1201"}).structured_content["issued_at"] == "2026-11-04T22:00:05"

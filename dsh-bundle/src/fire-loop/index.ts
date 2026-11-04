@@ -27,6 +27,7 @@ import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
 import { draftSealingPlan, type HumanInput, type Redline, SEALING_FLOW } from './sealing.ts'
 import { EFFECT_FLOW, EffectInputError, type LastIssued, reviewEffect } from './effect.ts'
+import { toolValue } from './tool-result.ts'
 
 export const name = 'rescue-fire-loop'
 export const inject = ['tools', 'rescueEvidence', 'rescueKnowledge', 'workingDirectory', 'subagents']
@@ -204,13 +205,8 @@ export function apply(ctx: Context, config: Config) {
       parent: exec.token,
       signal: exec.signal,
     })
-    if (r.isError) throw new Error(r.error?.message ?? `${config.precheckTool} 调用失败`)
-    let v: any = r.value
-    if (!v || typeof v !== 'object' || typeof v.ok !== 'boolean') {
-      const text = (r.content ?? []).find((b: any) => b.type === 'text')?.text
-      v = text ? JSON.parse(text) : null
-    }
-    if (!v || typeof v.ok !== 'boolean') throw new Error(`${config.precheckTool} 的结果里没有 ok`)
+    const v = toolValue(r, config.precheckTool, 'ok')
+    if (typeof v.ok !== 'boolean') throw new Error(`${config.precheckTool} 的结果里没有 ok`)
     return { ok: v.ok, problems: (v.problems ?? []).map(String), notes: (v.notes ?? []).map(String) }
   }
 
@@ -315,12 +311,9 @@ export function apply(ctx: Context, config: Config) {
   }
 
   /** 经 DSH 工具管道调用调用方 Agent 范围内的只读工具，取结构化结果 */
-  async function callJson(exec: any, name: string, args: Record<string, unknown>, tag: string): Promise<any> {
+  async function callJson(exec: any, name: string, args: Record<string, unknown>, tag: string, key: string): Promise<Record<string, any>> {
     const r = await c.tools.execute({ callId: `${exec.callId}:${tag}`, rootCallId: exec.rootCallId, name, arguments: args, agent: exec.agent, parent: exec.token, signal: exec.signal })
-    if (r.isError) throw new Error(r.error?.message ?? `${name} 调用失败`)
-    if (r.value && typeof r.value === 'object' && !Array.isArray(r.value)) return r.value
-    const text = (r.content ?? []).find((b: any) => b.type === 'text')?.text
-    return text ? JSON.parse(text) : null
+    return toolValue(r, name, key)
   }
 
   c.tools.register(
@@ -354,7 +347,7 @@ export function apply(ctx: Context, config: Config) {
             ...(args.since ? { since: String(args.since) } : {}),
             origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
             signal: exec.signal,
-            lastIssued: async (panel) => ((await callJson(exec, config.lastIssuedTool, { panel }, 'last-issued')) ?? { found: false }) as LastIssued,
+            lastIssued: async (panel) => (await callJson(exec, config.lastIssuedTool, { panel }, 'last-issued', 'found')) as LastIssued,
           })
           out.delivered = await deliver(exec, `${out.card.record_ids[0]}.md`, out.report_markdown, `${args.panel} 工作面处置效果复评报告`)
           return toJson(out)

@@ -1,6 +1,8 @@
 #!/bin/sh
-# DSH 容器的健康检查：网页端在监听，且能连到模拟矿井和 actions（证据插件、指令发布都靠它们）。
+# DSH 容器的健康检查：配置档里装了本项目 bundle（入口脚本建完），网页端在监听，且能连到模拟矿井和 actions（证据插件、指令发布都靠它们）。
 set -eu
+test -f "$DSH_HOME/profiles/rescue/.rescue-setup-done"
+grep -q '"@rescue/dsh-bundle"' "$DSH_HOME/profiles/rescue/package.json"
 IP="$(hostname -i | awk '{print $1}')"
 curl -s -o /dev/null --max-time 3 "http://$IP:${DSH_PORT:-3080}/"
 curl -fs --max-time 3 http://mine-sim:8101/healthz >/dev/null

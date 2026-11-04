@@ -40,6 +40,7 @@
       <div class="kv" id="status"></div>
       <div class="row">
         <select id="scenario"></select>
+        <label title="注入后立即快进的矿井小时数；持续检测的下一次检测就看到快进后的状态">快进 <input id="injectAdvance" type="number" value="54" style="width:56px"> 小时</label>
         <label>倍速 <input id="injectSpeed" type="number" value="600" style="width:70px"></label>
         <button class="primary" onclick="inject()">开始演示</button>
       </div>
@@ -47,6 +48,9 @@
         <button onclick="pause(true)">暂停</button>
         <button onclick="resume()">继续</button>
         <input id="speed" type="number" value="60" style="width:70px"><button onclick="setSpeed()">调倍速</button>
+      </div>
+      <div class="row">
+        <input id="advanceHours" type="number" value="24" style="width:56px"><button onclick="advance()">快进（矿井小时）</button>
       </div>
       <div class="row">
         <label><input id="autopause" type="checkbox" onchange="autoPause()"> 检测到异常后自动暂停</label>
@@ -110,7 +114,8 @@ async function api(path, body) {
 function say(text, cls = 'muted') { $('msg').textContent = text; $('msg').className = cls }
 async function act(fn, ok) { try { await fn(); say(ok, 'ok'); refresh() } catch (e) { say(e.message, 'bad') } }
 
-const inject = () => act(() => api('/sim/demo/inject', { scenario: $('scenario').value, speed: Number($('injectSpeed').value) }), '已注入事故')
+const inject = () => act(() => api('/sim/demo/inject', { scenario: $('scenario').value, speed: Number($('injectSpeed').value), advance_h: Number($('injectAdvance').value) || 0 }), '已注入事故')
+const advance = () => act(() => api('/sim/advance', { hours: Number($('advanceHours').value) }), '已快进')
 const pause = (p) => act(() => api('/sim/pause', { paused: p }), '已暂停')
 const resume = () => act(() => api('/sim/demo/resume', {}), '已继续')
 const setSpeed = () => act(() => api('/sim/speed', { speed: Number($('speed').value) }), '已调倍速')

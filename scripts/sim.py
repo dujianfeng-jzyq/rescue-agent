@@ -9,7 +9,7 @@
     python3 scripts/sim.py advance 12          # 快进 12 模拟小时
     python3 scripts/sim.py apply inert_injection rate_m3_h=1000
     python3 scripts/sim.py normal [倍速]                 # 演示：回到常态连续运行（清空历史）
-    python3 scripts/sim.py inject s4-escalation [倍速]   # 演示：把事故场景接到当前矿井时间上
+    python3 scripts/sim.py inject s4-escalation [倍速] [快进小时]   # 演示：把事故场景接到当前矿井时间上（演示脚本用 600 54）
     python3 scripts/sim.py continue [倍速]               # 演示：自动暂停之后继续
     python3 scripts/sim.py override SM-1201-UC CO fixed 30     # 读数设置：fixed/offset 值、ramp 值 分钟、fault dropout|stuck|spike、follow
     网页控制台：http://127.0.0.1:8101/console（输入控制令牌）
@@ -75,7 +75,7 @@ def main(argv: list[str]) -> int:
         case "normal":
             r = call("POST", "/demo/normal", {"speed": float(rest[0])} if rest else {})
         case "inject":
-            r = call("POST", "/demo/inject", {"scenario": rest[0], **({"speed": float(rest[1])} if len(rest) > 1 else {})})
+            r = call("POST", "/demo/inject", {"scenario": rest[0], **({"speed": float(rest[1])} if len(rest) > 1 else {}), **({"advance_h": float(rest[2])} if len(rest) > 2 else {})})
         case "continue":
             r = call("POST", "/demo/resume", {"speed": float(rest[0])} if rest else {})
         case "override":

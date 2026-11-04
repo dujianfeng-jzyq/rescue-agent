@@ -4,7 +4,10 @@
 set -eu
 PORT="${DSH_PORT:-3080}"
 PUBLIC_PORT="${DSH_PUBLIC_PORT:-13080}"
-if [ ! -d "$DSH_HOME/profiles/rescue" ]; then
+# 建好之后写完成标记；没有标记（上次建到一半失败、容器重启）就删掉半成品重建，不带着缺 bundle 的配置档启动
+DONE="$DSH_HOME/profiles/rescue/.rescue-setup-done"
+if [ ! -f "$DONE" ]; then
+  rm -rf "$DSH_HOME/profiles/rescue"
   mkdir -p "$DSH_HOME"
   dsh rescue --from-default-profile web --dump-config >/dev/null
   dsh plugin --profile rescue add /app/dsh-bundle >/dev/null
@@ -22,6 +25,7 @@ if [ ! -d "$DSH_HOME/profiles/rescue" ]; then
     model: ${MODEL#*/}
     reasoningEffort: high
 YAML
+  touch "$DONE"
 fi
 IP="$(hostname -i | awk '{print $1}')"
 exec dsh rescue --patch /app/docker/container.patch.yml --no-open --host "$IP" --port "$PORT" \

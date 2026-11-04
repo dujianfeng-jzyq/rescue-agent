@@ -33,6 +33,10 @@
 
 ## 已知需要关注的点
 
+- 演示环境（Docker，P6 彩排 2026-11-04）：
+  - 镜像里的 pnpm 必须装成固定版本：用 corepack 的话，运行时用户第一次调用 pnpm（`dsh plugin add`）会去 npm 拉最新版，网络抖动时装 bundle 失败；入口脚本以前没有完成标记，容器重启后带着缺 bundle 的配置档启动（新建会话的预设是 standard、弹出预览声明，因为用户层 patch 也没写），健康检查也照样通过。现在镜像装 `pnpm@12.15.0`，入口脚本写完成标记，健康检查查 bundle。
+  - 插件经 `ctx.tools.execute` 调 MCP 工具时，结果的 `value` 不是工具返回的对象本身，要按关键字段判断、取不到时解析文本块（`src/fire-loop/tool-result.ts`）。
+
 - 预设里提供 cordis 服务的插件（第二版的证据插件 `rescueEvidence`）必须放进带 `isolate` 的 `cordis:group`，否则新建会话失败：`agent-preset/invalid: Preset services require isolate realms: rescueEvidence`（2026-11-03，rc.4，`profiles/v2.patch.yml`）。注入该服务的插件（以后的固定流程）放进同一组。新的 `DSH_HOME` 第一次打开网页端要先选工作区，评测运行器目前没有处理这一步。
 - 第二版主预设草稿（2026-11-03，rc.4，deepseek-flash，令牌按服务拆分，DSH 不持有 `/sim` 控制令牌）：`get_record` 读出 Python 写的记录（TS 侧哈希核对通过）、`export_record` 写进 `records/<会话>/`、沙箱里 `cat` 能读、写记录目录返回 `Read-only file system`。
 - `rescue-approval` 在 `tools/pre-execute` 里先调 `next()` 再决定 ask：若上游已 deny/cancel，保持上游结论。需确认 rc.4 的瀑布顺序与预期一致（#9、#10）。

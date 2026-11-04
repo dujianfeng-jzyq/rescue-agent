@@ -35,6 +35,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel
 from rescue_contract.client import MineData, MineDataError
 from rescue_contract.ledger import for_panel
+from rescue_contract.ledger import issued_at as ledger_issued_at
 from rescue_contract.ledger import records as ledger_records
 from rescue_contract.models import (
     DispatchOrder,
@@ -298,7 +299,9 @@ def build_server(
             return {"found": False, "panel": panel}
         r = hits[-1]
         p = r.get("payload") or {}
-        return {"found": True, "panel": panel, "tool": r["tool"], "action_id": r.get("action_id"), "issued_at": str(r.get("issued_at")), "plan_id": p.get("plan_id"), "title": p.get("title")}
+        # 台账按 str(datetime) 写（2026-11-04 15:55:36.406594）；对外给矿井时间的 ISO 格式、截到秒（固定流程只认这种格式，P6 彩排发现）
+        at = ledger_issued_at(r).replace(microsecond=0, tzinfo=None).isoformat()
+        return {"found": True, "panel": panel, "tool": r["tool"], "action_id": r.get("action_id"), "issued_at": at, "plan_id": p.get("plan_id"), "title": p.get("title")}
 
     # ── DSH 审批插件的预检接口（HTTP，不是 MCP 工具）──
 

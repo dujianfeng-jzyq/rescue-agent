@@ -284,17 +284,25 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
 
     @server.custom_route("/sim/demo/inject", methods=["POST"])
     async def demo_inject(req: Request) -> JSONResponse:
-        """开始演示：把事故场景接到当前矿井时间上（只在常态连续运行时可用），可同时改倍速。"""
+        """开始演示：把事故场景接到当前矿井时间上（只在常态连续运行时可用），可同时改倍速。
+
+        advance_h：注入后立即快进这么多矿井小时（物理状态照常逐步计算）。持续检测下一次检测就看到快进之后的状态，
+        与基线比较一次报告（等级、阶段的变化合在一起）；不快进时会在事故发展的第一个变化（如自燃阶段推进）就停下。"""
         body = await req.json()
         if sim.mode != "demo":
             return bad("只有常态连续运行时才能注入事故（先 POST /sim/demo/normal）")
         sc = sim.scenarios.get(body.get("scenario", "s4-escalation"))
         if sc is None or sc.id == NORMAL:
             return bad(f"未知事故场景：{body.get('scenario')}")
+        advance_h = float(body.get("advance_h") or 0)
+        if not 0 <= advance_h <= 240:
+            return bad("advance_h 取 0–240 矿井小时")
         rec = sim.engine.inject(sc)
+        if advance_h:
+            sim.engine.clock.advance(advance_h)
         if body.get("speed") is not None:
             sim.engine.clock.set_speed(float(body["speed"]))
-        return JSONResponse({"ok": True, "injected": rec, "speed": sim.engine.clock.speed})
+        return JSONResponse({"ok": True, "injected": rec, "advanced_h": advance_h, "now": sim.engine.now().isoformat(), "speed": sim.engine.clock.speed})
 
     @server.custom_route("/sim/demo/resume", methods=["POST"])
     async def demo_resume(req: Request) -> JSONResponse:

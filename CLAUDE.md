@@ -2,6 +2,7 @@
 
 煤矿应急救援智能体：基于 DeepSeek Harness（DSH，锁定 0.2.1-rc.4）。一期闭环场景是采空区煤自燃，开发和演示都对着模拟矿井进行。
 
+- 演示脚本（演示人员照着做）：`docs/demo-script.md`
 - 方案（为什么这样做）：`docs/implementation-plan.md`（主版本；同名 PDF 是第一版的带图快照）
 - **第二版设计（实施中，`v2` 分支）**：`docs/design-v2.md`，决策见 `docs/decisions/0007-skills-plugins-fixed-flows.md`
 - 架构（怎么连起来）：`docs/architecture.md`（第二版；第 8 节是过渡期）；设计决策：`docs/decisions/`
@@ -26,6 +27,7 @@ make schema                   # 契约模型改动后重新导出 JSON Schema（
 python3 scripts/sim.py state|reset <场景>|advance <小时>|apply <处置>   # 模拟控制台
 make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API_KEY）
 make demo-up / demo-down / demo-reset   # 演示环境（Docker）：网页端 13080、控制台 13090/console，数据在 var/demo/，令牌在 var/demo/tokens.env
+make demo-rehearse            # 演示彩排：demo-reset 后按 docs/demo-script.md 自动走一遍、逐步判定（代做人工操作、放行指令，只写 var/demo/）
 make skills-check             # 第二版技能自检（结构、import、样例）
 python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清单取一次证据（Python 采集小工具）
 ```
@@ -100,5 +102,6 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
   评测（只有 mine_data、actions + bundle 主预设，deepseek-flash，各 3 次，2026-11-04）：全部通过 20/24。`s4-escalate-1201`、`s4-warning-rejected`、`s4-plan-context-tamper`、`s4-watch-wake-assess` 3/3；`s2-assess-1201`、`s2-effect-after-inerting`、`s4-explosion-risk`、`s4-sealing-plan` 2/3，失败的 4 次都只是 `report_pasted`：模型贴长报告（19–72 行）时改写或漏了 1–3 行。每次 5.5–16 万 token。
 - 报告交付（2026-11-04）：固定流程（run_fire_assessment、review_effect、draft_sealing_plan）的完整报告作为文件交付（present，网页端在回答下方显示交付卡片，点开在右侧预览，按 Markdown 渲染），模型只拿到并原样贴出代码按技能模板（`templates/brief.md`）生成的要点 `brief_markdown`（几行，含风险图）；`grade.py` 的 `report_pasted` 有要点时查要点，忽略加粗标记。要点里避免嵌套括号、带逗号的标签和附加说明句，这些最容易被模型改写。评测（8 个用例各 3 次，无接口错误）：全部通过 23/24，失败的 1 次是模型改写了要点里“研判说明”那一句（阶段模型写的文字，数值仍有依据）。
 - 待办（第二版）：`review_timeline` 迁移；唤醒失败记进记录；第一版 Python 包和 `docs/workflow-design.md` 的清理。
+- P6（2026-11-04）：演示脚本 `docs/demo-script.md`（第 6 节的执行版：每步原话、讲解要点、退路、彩排记录）；彩排 `make demo-rehearse`（`eval/agent/rehearse.py`：demo-reset 后在 Docker 环境按脚本走一遍，代做控制台操作、提问、回答、审批放行，每步按会话日志、模拟矿井状态、台账和审计判定）。“开始演示”改为注入后立即快进 54 矿井小时（`/sim/demo/inject` 的 `advance_h`）：只提高倍速时持续检测在第一个变化（约 7 矿井小时后阶段推进为缓慢氧化、没有预警等级）就唤醒，第 3 步的红色预警不成立；控制台另加快进按钮。彩排修掉：DSH 镜像运行时拉 pnpm（改装固定版本，入口脚本加完成标记，健康检查查 bundle）；固定流程取工具结果按关键字段（`src/fire-loop/tool-result.ts`，原来 `review_effect` 拿不到台账记录）；`query_last_issued` 的时间给 ISO 格式；封闭方案要点“人工确认项”的措辞；`report_pasted` 对阶段子 Agent 写的“研判说明”一行只比前缀和数值。验收：最后两次彩排 9/9、9/9（deepseek-flash，各约 5.5 分钟、53–54 万 token）。预警、升级不转给模拟矿井，控制台事件栏里没有（第 6 节已改）。
 - P5（2026-11-04）：模拟矿井演示模式（`RESCUE_SIM_MODE=demo`：常态连续运行、`/sim/demo/inject` 事故注入（过程参数从注入时刻换、剧本平移、物理状态连续）、`/sim/overrides` 读数设置（只作用于设置之后、历史不变）、只读看记录目录的异常检测记录自动暂停）与演示控制台 `/console`（单页，页面公开、接口带控制令牌）；`scripts/sim.py` 加 normal、inject、continue、override。Docker 部署 `docker/`（Python 服务镜像、DSH 镜像（构建时跑技能自检）、compose：只映射 13080、13090，令牌按服务分开、DSH 不拿控制令牌，技能目录只读挂载）、`scripts/demo.sh`（`make demo-up/down/reset/logs`）。`make demo-up` 从零启动三个容器健康，网页端一次性检测、控制台在容器里可用。
 - 容器部署要点：MCP SDK 的 DNS 重绑定防护缺省只认本机 Host，容器间按服务名访问会 421，用 `RESCUE_MCP_ALLOWED_HOSTS` 加白名单（`rescue_contract.serving.transport_security`）；证据插件的脚本运行目录缺省在记录目录旁，容器里单独给 `RESCUE_RUN_DIR`；DSH 不接受通配地址，入口脚本绑定容器地址并用 `--public-url`、`--trusted-host` 指向宿主机端口；新的 DSH_HOME 会弹预览声明、没有缺省模型，入口脚本第一次建配置档时写用户层 patch。容器里取数失败时模型会申请提权自己建目录（违反 persona），演示中出现提权确认一律拒绝。

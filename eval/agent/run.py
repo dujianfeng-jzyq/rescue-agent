@@ -165,6 +165,8 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float, app
 
 def answer_question(page: Page, option: str) -> bool:
     """在网页的提问卡片里选 option 并提交（选择器按 DSH 0.2.1-rc.4 网页端，验证清单 #20）。"""
+    # 选项文字带“（推荐）”时，网页端去掉这几个字、另显示 Recommended 标记（P6 彩排）：按去掉之后的文字找
+    option = re.sub(r"\s*[（(](?:推荐|Recommended)[）)]\s*$", "", option)
     try:
         exact = page.get_by_text(option, exact=True)
         # 模型常在选项后加“（推荐）”：找不到完全相同的文字时按前缀匹配

@@ -1,5 +1,5 @@
 # 常用命令入口。具体说明见 README.md。
-.PHONY: setup setup-py dev dev-eval up down smoke test test-py test-ts lint check skills-check eval eval-agent schema sim-state clean demo-up demo-down demo-reset demo-logs
+.PHONY: setup setup-py dev dev-eval up down smoke test test-py test-ts lint check skills-check eval eval-agent schema sim-state clean demo-up demo-down demo-reset demo-logs demo-rehearse
 
 UV := uv run --project mcp
 
@@ -24,6 +24,8 @@ demo-reset:       ## 清空 var/demo 的演示数据并重新启动（模拟矿�
 	scripts/demo.sh reset
 demo-logs:
 	scripts/demo.sh logs
+demo-rehearse:    ## 演示彩排：demo-reset 后按 docs/demo-script.md 自动走一遍（人工操作由脚本代做，会放行指令，只写 var/demo/）
+	$(UV) --with playwright python eval/agent/rehearse.py --reset $(ARGS)
 smoke:            ## 对已启动的服务做冒烟测试
 	$(UV) python scripts/smoke.py
 

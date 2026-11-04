@@ -460,3 +460,12 @@ def test_angle_bracket_link_counts_as_pasted():
     rep = "爆炸危险性：当前不在爆炸范围\n\n![风险图](/ws/records/s/RS-1.chart.svg)"
     out = "以下为报告：\n\n爆炸危险性：当前不在爆炸范围\n\n![风险图](</ws/records/s/RS-1.chart.svg>)"
     assert grade._norm_lines(rep) in grade._norm_lines(out)
+
+
+def test_explanation_line_compares_prefix_and_numbers():
+    """要点里阶段子 Agent 写的“研判说明”一行：顺手改字（P6 彩排里“等级红色”→“等级为红色”）不算改写，改数值或改代码生成的行算。"""
+    rep = "- 预警等级：红色（危险）\n- 研判说明：预警等级红色（危险），受威胁 11 人。\n依据：记录 RS-1"
+    norm = lambda t: grade._prose_lines(grade._norm_lines(t))  # noqa: E731
+    assert norm(rep) in norm(rep.replace("预警等级红色", "预警等级为红色"))
+    assert norm(rep) not in norm(rep.replace("11 人", "12 人"))
+    assert norm(rep) not in norm(rep.replace("- 预警等级：红色", "- 预警等级为红色"))

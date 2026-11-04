@@ -121,8 +121,11 @@ def test_demo_routes():
     assert c.post("/sim/demo/normal", json={"speed": 60}).json()["ok"]
     holder.engine.clock.set_paused(True)
     holder.engine.clock.advance(2)
-    r = c.post("/sim/demo/inject", json={"scenario": "s4-escalation", "speed": 600}).json()
-    assert r["injected"]["scenario"] == "s4-escalation" and r["speed"] == 600
+    assert c.post("/sim/demo/inject", json={"scenario": "s4-escalation", "advance_h": -1}).status_code == 400
+    t0 = holder.engine.now_h()
+    r = c.post("/sim/demo/inject", json={"scenario": "s4-escalation", "speed": 600, "advance_h": 3}).json()
+    assert r["injected"]["scenario"] == "s4-escalation" and r["speed"] == 600 and r["advanced_h"] == 3
+    assert abs(holder.engine.now_h() - (t0 + 3)) < 1e-6  # 注入后快进（时钟暂停，没有额外走时）
     st = c.get("/sim/state").json()
     assert st["mode"] == "demo" and st["injected"] and [x["type"] for x in st["script"]] == ["stop_advance", "leak_change"]
     assert c.post("/sim/overrides", json={"sensor_id": "SM-1201-UC", "measurand": "CO", "mode": "fixed", "value": 40}).json()["active"]

@@ -5,11 +5,11 @@ FROM node:22-bookworm-slim AS node
 FROM python:3.12-slim-bookworm
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+# pnpm 装成固定版本，不用 corepack：corepack 的缓存在构建用户（root）的目录里，运行时用户（node）第一次调用 pnpm
+# （入口脚本的 dsh plugin add）会去 npm 拉最新版，断网或网络抖动时入口脚本失败（P6 彩排发现）
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
-    && ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
     && apt-get update && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl && rm -rf /var/lib/apt/lists/* \
-    && npm i -g @deepseek-ai/dsh@0.2.1-rc.4 && npm cache clean --force \
-    && corepack enable pnpm
+    && npm i -g @deepseek-ai/dsh@0.2.1-rc.4 pnpm@12.15.0 && npm cache clean --force
 # 技能脚本只能用 skills/requirements.txt 里的包；技能自检用 rescue_contract
 COPY skills/requirements.txt /tmp/skills-requirements.txt
 COPY mcp/contract /tmp/contract
