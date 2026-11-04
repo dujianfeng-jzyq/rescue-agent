@@ -13,6 +13,7 @@
   },
   "files": [
     "lib",
+    "data",
     "cordis.patch.yml",
     "presets"
   ],
