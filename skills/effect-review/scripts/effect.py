@@ -15,6 +15,8 @@ from _quality import check_series
 from _skill import evidence, load_reference, main
 
 VERSION = "effect/1.0.0"
+# 文字汇总用的短名（不带标点，便于照抄）；结构化的 counts 仍用完整结论名
+SHORT = {"已受控": "已受控", "需继续处置": "需继续处置", "恶化": "恶化", "观测时间不足，暂不下结论": "观测时间不足"}
 SOURCE_NAMES = {"bundle_tube": "采空区束管", "temperature": "采空区测温", "safety_monitor": "安全监控"}
 METHOD = "逐测点处置前后速率比较后汇总（任一恶化→恶化；全部已受控→已受控；否则需继续处置；观测不足的测点不参与）。判据为演示占位值，需按本矿制度审定"
 
@@ -87,12 +89,12 @@ def run(data, _args):
         key = (SOURCE_NAMES.get(p["source"], "其他"), p["measurand"])
         c = groups.setdefault(key, {})
         c[p["effect_name"]] = c.get(p["effect_name"], 0) + 1
-    by_type = [{"type": t, "measurand": mm, "total": sum(c.values()), "counts": c, "counts_text": "，".join(f"{k} {v}" for k, v in c.items())} for (t, mm), c in groups.items()]
+    by_type = [{"type": t, "measurand": mm, "total": sum(c.values()), "counts": c, "counts_text": "、".join(f"{SHORT.get(k, k)} {v} 个" for k, v in c.items())} for (t, mm), c in groups.items()]
     result = {
         "panel": ev["panel"],
         **res,
         "since_source": (data.get("options") or {}).get("since_source") or "调用方给出",
-        "counts_text": "，".join(f"{k} {v}" for k, v in res["counts"].items()),
+        "counts_text": "、".join(f"{SHORT.get(k, k)} {v} 个" for k, v in res["counts"].items()),
         "counts_by_type": by_type,
         "points": [{k: p[k] for k in ("sensor_id", "measurand", "effect", "effect_name", "value_at_since", "latest", "change_since", "rate_before_per_hour", "rate_after_per_hour", "rate_reduction_pct", "new_marker_gases", "basis")} | {"new_marker_gases_text": "、".join(p["new_marker_gases"])} for p in points],
         "escalation_suggested": res["overall"] == "worsening",

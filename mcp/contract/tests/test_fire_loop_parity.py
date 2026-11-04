@@ -129,7 +129,7 @@ def test_ts_sealing_flow_matches_python(sim_s4_60, tmp_path):
     n_results, n_reports = _rerun_and_render(records)
     # explosion_triangle、warning、personnel、skeleton + 2 轮 ×（compose、scope、review）
     assert n_results == 4 + 2 * 3
-    assert n_reports == 2 + 1  # 2 轮方案文本 + 审核意见
+    assert n_reports == 2 + 1 + 1  # 2 轮方案文本 + 审核意见 + 方案要点
 
 
 def test_sealing_collect_matches_assessment():
@@ -195,7 +195,7 @@ def test_ts_flow_matches_python(sim_s4_60, tmp_path, monkeypatch):
             assert render(tpl, data) == rec["content"], f"{rid}（{src['skill']}/{src['template']}）与 Python 渲染结果不同"
             n_reports += 1
     assert n_results == 9  # 研判 8 个脚本（alarms、warning、stage、trend、explosion_triangle、personnel、escalation、explanation_options）+ 检测 1 个
-    assert n_reports == 3  # 研判报告、升级建议、检测结果
+    assert n_reports == 4  # 研判报告、升级建议、研判要点、检测结果
 
 
 @NEED_NODE
@@ -216,7 +216,7 @@ def test_ts_effect_flow_matches_python(sim_s4_60, tmp_path):
     assert e["report_markdown"].startswith("【效果评估】1201 工作面")
     spec = parse_collect_spec((SKILLS / "effect-review" / "references" / "collect.yaml").read_text(encoding="utf-8"))
     assert records[e["record_ids"]["evidence"]]["content"] == asyncio.run(collect_from(sim_s4_60, spec, "effect", "1201", clock))
-    assert _rerun_and_render(records) == (1, 1)
+    assert _rerun_and_render(records) == (1, 2)  # 复评报告、要点
     # 台账里没有下发记录、也没给 since：返回说明（不抛错）
     out = subprocess.run(["node", "tools/effect.ts", str(SKILLS), str(tmp_path / "r2"), "1201", sim_s4_60], cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=60)
     assert out.returncode != 0 and "请问指挥人员处置是什么时候开始的" in out.stderr

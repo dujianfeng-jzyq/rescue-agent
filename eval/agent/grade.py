@@ -482,8 +482,8 @@ def _norm_links(text: str) -> str:
 
 
 def _norm_lines(text: str) -> str:
-    """逐行去掉首尾空白、整行加粗（只是排版，不算改写），忽略空行；链接目标的尖括号去掉。"""
-    lines = (line.strip() for line in _norm_links(text).splitlines())
+    """逐行去掉首尾空白、加粗标记（只是排版，不算改写），忽略空行；链接目标的尖括号去掉。"""
+    lines = (line.strip().replace("**", "") for line in _norm_links(text).splitlines())  # 加粗只是排版
     return "\n".join(_BOLD_LINE.sub(r"\1", line) for line in lines if line)
 
 
@@ -619,7 +619,8 @@ def grade(root: Session, checks: dict) -> dict:
         results["explanation_generated"] = {"ok": not failed, "detail": {"runs": len(runs), "failed": failed}}
 
     if checks.get("report_pasted"):  # 也是 workflow 工具结果是否被如实引用的检查（cited_tools_called 不查 workflow 工具名）
-        reports = [r["report_markdown"] for _, r in wf if r.get("report_markdown")]
+        # 第二版固定流程：模型只拿到 brief_markdown（要点），完整报告作为文件交付；有要点时检查要点
+        reports = [r.get("brief_markdown") or r["report_markdown"] for _, r in wf if r.get("brief_markdown") or r.get("report_markdown")]
         final = _norm_lines(root.final_turn_text())
         pasted = [i for i, rep in enumerate(reports) if _norm_lines(rep) in final]
         results["report_pasted"] = {"ok": bool(pasted), "detail": {"reports": len(reports), "pasted": pasted}}

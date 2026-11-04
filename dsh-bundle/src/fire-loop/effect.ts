@@ -78,6 +78,9 @@ export async function reviewEffect(ev: Evidence, opts: EffectOptions) {
       .then((x) => x.record),
   )
   const report = await step('report', () => ev.renderReport({ skill: ER, template: 'report', inputs: { effect: effect.record_id }, origin }))
+  const brief = await step('brief', () =>
+    ev.renderReport({ skill: ER, template: 'brief', inputs: { effect: effect.record_id }, origin }),
+  )
   const r = (effect.content as any).result
   const warnings = ['判据为开发占位值，待专家审定', ...((effect.content as any).warnings ?? [])]
   return {
@@ -90,6 +93,7 @@ export async function reviewEffect(ev: Evidence, opts: EffectOptions) {
       warnings,
     },
     report_markdown: (report.content as string).trimEnd(),
+    brief_markdown: (brief.content as string).trimEnd(),
     record_ids: ids,
     result: {
       panel: opts.panel,

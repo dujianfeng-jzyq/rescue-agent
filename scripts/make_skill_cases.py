@@ -202,6 +202,7 @@ def effect_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
     for case in ("s2-inerting-48h-to-72h-continuing", "s3-inerting-40h-to-64h-worsening"):
         r = run(ER, "effect", inputs[(ER, "effect", case)])
         out[(ER, "report", case)] = report_data({"effect": fake_record("effect", r, 0)})
+        out[(ER, "brief", case)] = report_data({"effect": fake_record("effect", r, 0)})
     return out
 
 
@@ -211,6 +212,14 @@ def sealing_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
         plan = run(SP, "compose", inputs[(SP, "compose", case)])
         refs = plan["result"]["plan"]["basis"]
         out[(SP, "plan", case)] = report_data({"compose": fake_record("compose", plan, 0)}, {"articles": index_articles([{"document": b["document"], "article": b["article"]} for b in refs])})
+    plan = run(SP, "compose", inputs[(SP, "compose", "s4-escalation-60h-full")])
+    rev = run(PC, "review", inputs[(PC, "review", "pass")])
+    steps = "；".join(f"{x['order']}. {x['type_name']}" for x in plan["result"]["steps_view"])
+    out[(SP, "brief", "s4-escalation-60h-full-pass")] = report_data({"compose": fake_record("compose", plan, 0)}, { "steps_text": steps, "redline_text": "通过", "verdict_text": "合规审核通过（1 轮）",
+        "human_count": len(rev["result"]["human_items"]) or None, "review_id": "RS-20261104T200000-case01",
+    })  # fmt: skip
+    out[(SP, "brief", "s4-escalation-60h-minimal-no-review")] = report_data({"compose": fake_record("compose", run(SP, "compose", inputs[(SP, "compose", "s4-escalation-60h-minimal")]), 0)}, { "steps_text": "1. 撤人", "redline_text": "通过", "verdict_text": "合规审核未完成（2 轮）", "human_count": None, "review_id": None,
+    })  # fmt: skip
     for case in ("pass", "redline-fail-needs-human"):
         data = inputs[(PC, "review", case)]
         rev = run(PC, "review", data)
@@ -259,6 +268,18 @@ def build_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
         recs["evidence"]["as_of"] = ev["as_of"]
         chart = f"![火区混合气体爆炸三角形](records/case/{recs['explosion']['record_id']}.chart.svg)" if res["explosion"]["result"]["points"] else None
         out[(FA, "report", label)] = report_data(recs, {"chart_markdown": chart})
+        if label == "s4-escalation-60h-red":
+            x = res["explosion"]["result"]
+            worst = next((p for p in x["points"] if p["sensor_id"] == x["worst_sensor_id"]), None)
+            esc = run(ESC, "escalation", {k: res[k] for k in ("warning", "stage", "alarms")})
+            brief = {k: recs[k] for k in ("warning", "stage", "alarms", "explosion", "personnel")}
+            brief["escalation"] = fake_record("escalation", esc, 9)
+            out[(FA, "brief", label)] = report_data(brief, {
+                "worst": {k: worst[k] for k in ("sensor_id", "zone", "zone_name")} if worst else None,
+                "articles_text": "、".join(f"{a['document']}{a['article']}" for a in esc["result"]["articles"]),
+                "explanation_summary": "红色预警、加速氧化，建议升级为应急响应",
+                "chart_markdown": chart,
+            })  # fmt: skip
         check = run(FA, "check", {"evidence": ev})
         out[(FA, "check", label)] = report_data({"check": fake_record("check", check, 0)})
         if esc_key:

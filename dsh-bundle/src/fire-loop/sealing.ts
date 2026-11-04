@@ -88,6 +88,8 @@ export interface SealingOutcome {
     warnings: string[]
   }
   report_markdown: string
+  /** 方案要点（短文）：主预设原样贴进回答；完整方案和审核意见作为文件交付 */
+  brief_markdown: string
   /** 给主预设的下一步说明（不是报告的一部分，不用贴进回答） */
   next_step: string
   record_ids: Record<string, string>
@@ -274,6 +276,23 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
   warnings.push(...stageNotes, ...((content(skeletonRec) as any).data_quality ?? []))
   const missingArticles = articles.filter((a) => a.source !== 'index')
   if (missingArticles.length) warnings.push(`条文索引里没有：${missingArticles.map((a) => `${a.document}${a.article}`).join('、')}`)
+  const steps = (p.steps_view as { order: number; type_name: string }[]).map((x) => `${x.order}. ${x.type_name}`).join('；')
+  const humanCount = (rv?.human_items ?? []).length
+  const brief = await step('brief', () =>
+    ev.renderReport({
+      skill: SP,
+      template: 'brief',
+      inputs: { compose: planRec!.record_id },
+      extra: {
+        steps_text: steps,
+        redline_text: redline.ok ? '通过' : `不通过（${redline.problems.join('；')}）`,
+        verdict_text: `${verdictText}（${rounds} 轮）`,
+        human_count: humanCount || null,
+        review_id: reviewRec?.record_id ?? null,
+      },
+      origin,
+    }),
+  )
   const facts = [(planReport!.content as string).trimEnd(), reviewReport ? (reviewReport.content as string).trimEnd() : `【合规审核】未完成：${stageNotes.join('；')}`]
   const tail = passed
     ? `下发：指挥人员确认后用 issue_sealing_plan 提交审核记录 ${reviewRec!.record_id}（会弹出人工确认）。`
@@ -290,6 +309,7 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
       warnings,
     },
     report_markdown: facts.join('\n\n'),
+    brief_markdown: (brief.content as string).trimEnd(),
     next_step: tail,
     record_ids: ids,
     result: {

@@ -54,6 +54,8 @@ export interface AssessmentOutcome {
     warnings: string[]
   }
   report_markdown: string
+  /** 研判要点（短文）：主预设原样贴进回答；完整报告作为文件交付 */
+  brief_markdown: string
   record_ids: Record<string, string>
   result: Record<string, unknown>
   events: FlowEvent[]
@@ -132,6 +134,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
     script(FA, 'explanation_options', Object.fromEntries(['warning', 'stage', 'alarms', 'trend', 'explosion', 'personnel', 'escalation'].map((k) => [k, ids[k]!]))),
   )
   let explanationMd: string | null = null
+  let explanationSummary: string | null = null
   let explanationNote: string
   if (!opts.stage) {
     emit('explanation', 'skipped', [], '没有配置阶段子 Agent')
@@ -152,6 +155,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       const r = await ev.renderReport({ skill: FA, template: 'explanation', inputs: { options: options.record_id }, extra: { explanation: checked.explanation, child_id: run.childId }, origin })
       ids.explanation = r.record_id
       rec.explanation = r
+      explanationSummary = checked.explanation.summary
       explanationMd = (r.content as string).trimEnd()
       explanationNote = ''
       emit('explanation', 'completed', [r.record_id])
@@ -160,6 +164,23 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       emit('explanation', 'failed', [], checked.problems.join('；'))
     }
   }
+
+  // 研判要点：主预设原样贴进回答的短文；完整报告作为文件交付（网页端右侧预览）
+  const worstPoint = x.points.find((p: any) => p.sensor_id === x.worst_sensor_id)
+  const brief = await step('brief', () =>
+    ev.renderReport({
+      skill: FA,
+      template: 'brief',
+      inputs: Object.fromEntries(['warning', 'stage', 'alarms', 'explosion', 'personnel', 'escalation'].map((k) => [k, ids[k]!])),
+      extra: {
+        worst: worstPoint ? { sensor_id: worstPoint.sensor_id, zone: worstPoint.zone, zone_name: worstPoint.zone_name } : null,
+        articles_text: refs.map((a) => `${a.document}${a.article}`).join('、') || '无',
+        explanation_summary: explanationSummary,
+        chart_markdown: chartMarkdown,
+      },
+      origin,
+    }),
+  )
 
   const w = content(rec.warning!)
   const st = content(rec.stage!)
@@ -194,6 +215,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       warnings,
     },
     report_markdown: `${facts}\n\n${explanationMd ?? `【研判说明】${explanationNote}`}`,
+    brief_markdown: (brief.content as string).trimEnd(),
     record_ids: ids,
     result: {
       panel: opts.panel,
