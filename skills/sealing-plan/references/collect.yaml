@@ -1,0 +1,38 @@
+# 采集清单：draft_sealing_plan 的证据（skills/README.md“采集清单”）。只能用 mine_data 的工具（CLAUDE.md 约定 5）。
+#
+# 测点组与 fire-assessment 的 assessment 清单相同（流程在同一份证据上运行 warning、personnel、explosion_triangle，
+# 一致性由 mcp/workflow/tests/test_sealing_parity.py 检查），另取物资台账（材料、制氮产能与库存比较）。
+# TODO(专家): 测点和必需项待评审。
+status: placeholder
+reviewed_by: null
+
+kinds:
+  plan:
+    sensors:
+      - name: tubes               # 采空区束管：爆炸三角形（爆炸危险性、氧浓度）、预警等级
+        select: {source: bundle_tube, panel: true}
+        window_h: 24
+        required: true
+      - name: upper_corner        # 上隅角
+        select: {ids: ["SM-{panel}-UC"]}
+        window_h: 24
+        required: true
+      - name: return              # 回风巷
+        select: {ids: ["SM-{panel}-RET"]}
+        window_h: 24
+        required: true
+      - name: intake              # 进风巷（辅助）
+        select: {ids: ["SM-{panel}-IN"]}
+        window_h: 24
+      - name: goaf_temperature    # 采空区测温（爆炸三角形的温度）
+        select: {source: temperature, panel: true}
+        window_h: 24
+      - name: methane             # 巷道甲烷：方案现场条件的甲烷浓度和是否上升（取本工作面的测点）
+        select: {source: safety_monitor}
+        require_measurands: [CH4]
+        measurands: [CH4]
+        window_h: 1
+    fire_areas: true              # 封闭时间（第87条）
+    personnel: true               # 受威胁人员（撤人巷道）
+    network: true                 # 密闭巷道的候选、注浆量
+    inventory: true               # 材料、制氮产能与库存比较

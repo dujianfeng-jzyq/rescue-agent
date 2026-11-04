@@ -1,0 +1,40 @@
+# 方案合规审核的范围和审核项（开发占位，待通风部门和救护队审定）。
+# 由第一版 skills/compliance/red-line-rules 的“人工复核清单”迁移。红线规则本身在 rescue_contract/redlines.py（不在技能里），
+# 由 actions 的红线预检强制执行；这里的审核项是规则引擎覆盖不到的方面。
+status: placeholder
+reviewed_by: null
+
+document: 矿山救援规程
+
+# 方案里出现某类步骤时，审核要对照的条文（原文由知识库的条文索引给出）
+step_articles:
+  evacuate: [第75条]
+  inert_injection: [第85条]
+  temporary_seal: [第84条, 第86条]
+  permanent_seal: [第84条]
+  monitor: [第85条]
+  # 封闭后的进入检查（第87条）、救护队行动方案（第46条）每次都要对照
+always: [第46条, 第87条]
+
+items:
+  - id: basis
+    label: 依据：方案依据的条文与措施对得上
+  - id: context
+    label: 现场条件：缺失的条件已列为待补充或人工确认项，没有被当成已满足
+  - id: site_survey
+    label: 现场侦察：密闭位置、顶板支护、供电等系统没有数据的条件写明需现场侦察确认
+  - id: sequence
+    label: 封闭顺序：先注惰、先临时后永久，多条巷道先支后主、进回风同时封闭统一指挥
+  - id: boundary
+    label: 职责边界：没有替救护队制定行动细节（救护队行动方案由救护队制定）
+  - id: evacuation
+    label: 撤人：写明撤人按预案立即执行，不等待本方案
+
+conclusions:
+  pass: 通过
+  fail: 不通过
+  needs_human: 需人工决策
+
+limits:
+  max_note_chars: 60
+  max_summary_chars: 100

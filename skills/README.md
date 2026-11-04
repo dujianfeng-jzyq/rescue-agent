@@ -119,4 +119,4 @@ Python 实现在 `rescue_contract.template`，TS 在证据插件的 `src/evidenc
 
 ## 样例的生成
 
-火灾闭环的三个技能（fire-assessment、explosion-triangle、emergency-escalation）的样例由 `scripts/make_skill_cases.py` 从模拟矿井的标准场景生成；改了参数或算法后用 `--expected` 只重写期望，并在提交说明里写明。关键字段与第一版服务的一致性由 `mcp/workflow/tests/test_skill_parity.py` 保证。跨技能复制的辅助模块（`_quality.py`、`_evidence.py`、`_skill.py`）有一致性测试，两份一起改。注意辅助模块不要用与标准库内建模块同名的名字（如 `_io`）。
+火灾闭环的技能（fire-assessment、explosion-triangle、emergency-escalation、sealing-plan、plan-compliance）的样例由 `scripts/make_skill_cases.py` 从模拟矿井的标准场景生成（封闭方案两个模型阶段的选择在脚本里写死）；改了参数或算法后用 `--expected` 只重写期望，并在提交说明里写明。关键字段与第一版服务的一致性由 `mcp/workflow/tests/test_skill_parity.py` 保证。跨技能复制的辅助模块（`_quality.py`、`_evidence.py`、`_skill.py`）有一致性测试（`mcp/contract/tests/test_skill_scripts.py`），两份一起改。注意辅助模块不要用与标准库内建模块同名的名字（如 `_io`）。

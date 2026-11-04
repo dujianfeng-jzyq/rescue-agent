@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成第二版火灾技能（fire-assessment、explosion-triangle、emergency-escalation）的自检样例。
+"""生成第二版火灾闭环技能（fire-assessment、explosion-triangle、emergency-escalation、sealing-plan、plan-compliance）的自检样例。
 
 输入取自模拟矿井的标准场景（手动时钟，Python 采集小工具按 fire-assessment 的采集清单取证据），
 期望输出是当前脚本的运行结果（金标准；关键字段与第一版服务的一致性由 mcp/workflow/tests/test_skill_parity.py 保证）。
@@ -26,16 +26,17 @@ from rescue_mine_data_sim.server import SimHolder, build_server
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 FA, XT, ESC = "fire-assessment", "explosion-triangle", "emergency-escalation"
+SP, PC = "sealing-plan", "plan-compliance"
 
 
-def evidence(scenario: str, hours: float, kind: str = "assessment", unseal_at: float | None = None) -> dict:
+def evidence(scenario: str, hours: float, kind: str = "assessment", unseal_at: float | None = None, skill: str = FA) -> dict:
     holder = SimHolder(scenario, manual_clock=True)
     if unseal_at is not None:
         holder.engine.clock.advance(unseal_at)
         holder.engine.apply("unseal", None, source="eval")
         hours -= unseal_at
     holder.engine.clock.advance(hours)
-    spec = parse_collect_spec((SKILLS / FA / "references" / "collect.yaml").read_text(encoding="utf-8"))
+    spec = parse_collect_spec((SKILLS / skill / "references" / "collect.yaml").read_text(encoding="utf-8"))
     return asyncio.run(collect_from(build_server(holder), spec, kind, "1201"))
 
 
@@ -96,6 +97,77 @@ def build_inputs() -> dict[tuple[str, str, str], dict]:
         (FA, "explanation_options", "s6-sensor-faults-36h"): flow_results(s6_36),
         (FA, "explanation_options", "s1-normal-24h"): flow_results(s1_24),
     }
+
+
+# 封闭方案：“方案编写”“合规审核”两个阶段的选择是模型给的，样例里写死
+SEAL_FULL = {
+    "optional_steps": ["leak_sealing", "grouting", "monitor_after_seal"],
+    "seal_roadways": ["R-1201-IN", "R-1201-RET"],
+    "step_notes": [{"key": "temporary_seal", "note": "进、回风同时封闭，统一指挥"}, {"key": "monitor", "note": ""}],
+    "summary": "先注惰抑爆，再封闭进、回风两侧",
+}
+SEAL_MINIMAL = {"optional_steps": [], "seal_roadways": ["R-1201-RET"], "step_notes": [], "summary": ""}
+REDLINE_OK = {"ok": True, "problems": [], "notes": []}
+REDLINE_FAIL = {"ok": False, "problems": ["红线校验未通过（1 项）：\n- [第85条] 步骤3：火区存在爆炸危险，封闭前必须先注入惰性气体等抑爆，方案缺少前置注惰步骤。"], "notes": []}
+
+
+def review_choice(scope: dict, fail: str | None = None, human: str | None = None) -> dict:
+    items = []
+    for it in scope["result"]["items"]:
+        c = "fail" if it["id"] == fail else "needs_human" if it["id"] == human else "pass"
+        items.append({"id": it["id"], "conclusion": c, "articles": ["第84条"] if it["id"] == "sequence" else [], "note": "密闭位置需现场确认" if c != "pass" else ""})
+    return {"items": items, "summary": "按必备步骤先注惰后封闭"}
+
+
+def sealing_inputs() -> dict[tuple[str, str, str], dict]:
+    s4 = evidence("s4-escalation", 60, "plan", skill=SP)
+    s1 = evidence("s1-normal", 24, "plan", skill=SP)
+    pre = {}
+    for k, ev in (("s4", s4), ("s1", s1)):
+        w = run(FA, "warning", {"evidence": ev})
+        pre[k] = {
+            "evidence": ev,
+            "explosion": run(XT, "explosion_triangle", {"evidence": ev}),
+            "personnel": run(FA, "personnel", {"evidence": ev, "warning": w}),
+        }
+    humans = [
+        {"field": "area_temperature_c", "value": 35, "confirmed_by": "救护队带队指挥员"},
+        {"field": "return_airway_clear", "value": True, "confirmed_by": "通风部门负责人", "note": "现场侦察"},
+    ]
+    sk_full = {**pre["s4"], "options": {"human_inputs": humans, "leak_m3_min": 30, "target_o2_pct": 5}}
+    sk_plain = {**pre["s4"], "options": {"human_inputs": []}}
+    sk_s1 = {**pre["s1"], "options": {"human_inputs": []}}
+    out = {
+        (SP, "skeleton", "s4-escalation-60h-human-inputs"): sk_full,
+        (SP, "skeleton", "s4-escalation-60h"): sk_plain,
+        (SP, "skeleton", "s1-normal-24h-no-personnel"): sk_s1,
+    }
+    full = {"skeleton": run(SP, "skeleton", sk_full), "evidence": s4, "options": {"selection": SEAL_FULL}}
+    minimal = {"skeleton": run(SP, "skeleton", sk_plain), "evidence": s4, "options": {"selection": SEAL_MINIMAL}}
+    out[(SP, "compose", "s4-escalation-60h-full")] = full
+    out[(SP, "compose", "s4-escalation-60h-minimal")] = minimal
+    plan = run(SP, "compose", full)
+    out[(PC, "scope", "s4-escalation-60h-full")] = {"plan": plan}
+    scope = run(PC, "scope", {"plan": plan})
+    out[(PC, "review", "pass")] = {"plan": plan, "scope": scope, "options": {"redline": REDLINE_OK, "review": review_choice(scope), "round": 1}}
+    out[(PC, "review", "item-fail")] = {"plan": plan, "scope": scope, "options": {"redline": REDLINE_OK, "review": review_choice(scope, fail="site_survey"), "round": 1}}
+    out[(PC, "review", "redline-fail-needs-human")] = {
+        "plan": plan, "scope": scope, "options": {"redline": REDLINE_FAIL, "review": review_choice(scope, human="context"), "round": 2},
+    }  # fmt: skip
+    return out
+
+
+def sealing_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
+    out = {}
+    for case in ("s4-escalation-60h-full", "s4-escalation-60h-minimal"):
+        plan = run(SP, "compose", inputs[(SP, "compose", case)])
+        refs = plan["result"]["plan"]["basis"]
+        out[(SP, "plan", case)] = report_data({"compose": fake_record("compose", plan, 0)}, {"articles": index_articles([{"document": b["document"], "article": b["article"]} for b in refs])})
+    for case in ("pass", "redline-fail-needs-human"):
+        data = inputs[(PC, "review", case)]
+        rev = run(PC, "review", data)
+        out[(PC, "review", case)] = report_data({"review": fake_record("review", rev, 0)}, {"articles": index_articles(data["scope"]["result"]["articles"])})
+    return out
 
 
 def flow_results(ev: dict) -> dict:
@@ -192,7 +264,7 @@ def main() -> int:
     ap.add_argument("--expected", action="store_true", help="只按现有输入重写期望")
     args = ap.parse_args()
     if args.expected:
-        for skill in (FA, XT, ESC):
+        for skill in (FA, XT, ESC, SP, PC):
             for inp in sorted((SKILLS / skill / "tests" / "cases").glob("*/*.input.json")):
                 write_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/{inp.parent.name}/{inp.name}")
@@ -200,8 +272,8 @@ def main() -> int:
                 write_template_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/templates/{inp.parent.name}/{inp.name}")
         return 0
-    inputs = build_inputs()
-    for (skill, template, case), data in build_template_inputs(inputs).items():
+    inputs = {**build_inputs(), **sealing_inputs()}
+    for (skill, template, case), data in {**build_template_inputs(inputs), **sealing_template_inputs(inputs)}.items():
         write_template_case(skill, template, case, data)
         print(f"模板  {skill}/{template}/{case}")
     for (skill, script, case), data in inputs.items():

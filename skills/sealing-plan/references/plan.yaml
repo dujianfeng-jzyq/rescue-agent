@@ -1,0 +1,79 @@
+# 封闭方案的结构（开发占位，待救护队带队指挥员和通风部门审定）。
+# 由第一版 mcp/workflow 的 workflow.yaml plan 节、plan.py 的步骤说明和 fire-model thresholds.yaml 的 context 节迁移，内容未改。
+#
+# 必备步骤的类型和相对顺序固定（红线规则逐项检查，actions 发布时按记录核对）；
+# 可选步骤由“方案编写”阶段从清单里选，按 after 插在指定步骤之后（同一位置按本清单的顺序）。
+status: placeholder
+reviewed_by: null
+
+kind: sealing
+title: 采空区火区封闭方案
+plan_id_prefix: SP
+
+# 方案现场条件：灾区甲烷取本工作面巷道安全监控测点（非束管）最近 window_h 小时最新可用值的最大值，
+# 任一测点速率超过 rising_rate_pct_h 为“继续上升”（第75条）。TODO(专家): 确认窗口和速率
+methane_window_h: 1
+methane_rising_rate_pct_h: 0.05
+
+# 密闭位置的候选：本工作面这些类型的巷道（密闭的具体位置按第86条现场选择）
+seal_roadway_kinds: [intake, return]
+# 堵漏步骤作用的巷道类型
+leak_sealing_roadway_kind: return
+
+required_steps:
+  - key: evacuate
+    type: evacuate
+    roadways: threatened          # 受威胁人员所在巷道（fire-assessment 的 personnel）
+    description: 撤出受影响区域人员（撤人按预案立即执行，不等待本方案）
+  - key: inert_injection
+    type: inert_injection
+    description: 封闭前向采空区注入惰性气体抑爆（第85条）
+  - key: temporary_seal
+    type: temporary_seal
+    roadways: seal                # “方案编写”阶段选的密闭巷道
+    description: 先建临时密闭（第84条）；密闭位置按第86条选择，需现场侦察确认；多条巷道先支巷后主巷，进、回风同时封闭时统一指挥
+  - key: monitor
+    type: monitor
+    description: 观测风向、风量、烟雾和气体，确认无爆炸危险；封闭过程中可燃气体浓度迅速增加时所有人员立即撤到安全地点（第85条）
+  - key: permanent_seal
+    type: permanent_seal
+    roadways: seal
+    description: 确认无爆炸危险后建永久或防爆密闭（第84条）
+
+optional_steps:
+  - key: leak_sealing
+    type: leak_sealing
+    after: evacuate
+    roadways: leak
+    label: 回风侧堵漏，减少向采空区漏风
+    description: 回风侧堵漏，减少向采空区漏风
+  - key: inhibitor_spray
+    type: inhibitor_spray
+    after: inert_injection
+    label: 向采空区浮煤喷洒阻化剂
+    description: 向采空区浮煤喷洒阻化剂，抑制煤氧化
+  - key: pressure_balancing
+    type: pressure_balancing
+    after: monitor
+    label: 调节风压，减小密闭两侧压差
+    description: 调节风压，减小密闭两侧压差，减少向火区漏风
+  - key: grouting
+    type: grouting
+    after: permanent_seal
+    label: 封闭后向采空区注浆
+    description: 封闭后向采空区注浆，覆盖浮煤、充填裂隙
+  - key: monitor_after_seal
+    type: monitor
+    after: permanent_seal
+    label: 封闭后加密束管取样，观测火区气体变化
+    description: 封闭后按本矿自然发火预测预报制度加密束管取样，观测火区气体变化（频次由指挥部确定）
+
+# 方案依据（条文原文由知识库的条文索引给出）
+basis:
+  document: 矿山救援规程
+  articles: [第84条, 第85条, 第86条]
+
+# “方案编写”阶段的限制
+limits:
+  max_note_chars: 60
+  max_summary_chars: 100

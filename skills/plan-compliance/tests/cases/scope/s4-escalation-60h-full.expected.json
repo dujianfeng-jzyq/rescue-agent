@@ -1,0 +1,104 @@
+{
+ "algorithm_version": "scope/1.0.0",
+ "params": {
+  "document": "矿山救援规程",
+  "step_articles": {
+   "evacuate": [
+    "第75条"
+   ],
+   "inert_injection": [
+    "第85条"
+   ],
+   "temporary_seal": [
+    "第84条",
+    "第86条"
+   ],
+   "permanent_seal": [
+    "第84条"
+   ],
+   "monitor": [
+    "第85条"
+   ]
+  },
+  "always": [
+   "第46条",
+   "第87条"
+  ]
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "plan_id": "SP-1201-202611042000",
+  "articles": [
+   {
+    "document": "矿山救援规程",
+    "article": "第46条"
+   },
+   {
+    "document": "矿山救援规程",
+    "article": "第75条"
+   },
+   {
+    "document": "矿山救援规程",
+    "article": "第84条"
+   },
+   {
+    "document": "矿山救援规程",
+    "article": "第85条"
+   },
+   {
+    "document": "矿山救援规程",
+    "article": "第86条"
+   },
+   {
+    "document": "矿山救援规程",
+    "article": "第87条"
+   }
+  ],
+  "items": [
+   {
+    "id": "basis",
+    "label": "依据：方案依据的条文与措施对得上"
+   },
+   {
+    "id": "context",
+    "label": "现场条件：缺失的条件已列为待补充或人工确认项，没有被当成已满足"
+   },
+   {
+    "id": "site_survey",
+    "label": "现场侦察：密闭位置、顶板支护、供电等系统没有数据的条件写明需现场侦察确认"
+   },
+   {
+    "id": "sequence",
+    "label": "封闭顺序：先注惰、先临时后永久，多条巷道先支后主、进回风同时封闭统一指挥"
+   },
+   {
+    "id": "boundary",
+    "label": "职责边界：没有替救护队制定行动细节（救护队行动方案由救护队制定）"
+   },
+   {
+    "id": "evacuation",
+    "label": "撤人：写明撤人按预案立即执行，不等待本方案"
+   }
+  ],
+  "conclusions": [
+   {
+    "id": "pass",
+    "label": "通过"
+   },
+   {
+    "id": "fail",
+    "label": "不通过"
+   },
+   {
+    "id": "needs_human",
+    "label": "需人工决策"
+   }
+  ],
+  "limits": {
+   "max_note_chars": 60,
+   "max_summary_chars": 100
+  }
+ }
+}

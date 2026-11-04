@@ -1,0 +1,10 @@
+# 第二版技能的脚本登记（skills/README.md）。只有登记过的脚本能被证据插件运行。
+scripts:
+  scope:
+    file: scripts/scope.py
+    description: 合规审核的范围：按方案步骤和方案依据给出要查的条文、审核项清单
+    timeout_s: 10
+  review:
+    file: scripts/review.py
+    description: 核对“合规审核”阶段的选择，结合红线预检给出审核结论、需要确认人把关的事项
+    timeout_s: 10

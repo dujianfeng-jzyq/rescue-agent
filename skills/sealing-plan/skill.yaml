@@ -1,0 +1,10 @@
+# 第二版技能的脚本登记（skills/README.md）。只有登记过的脚本能被证据插件运行。
+scripts:
+  skeleton:
+    file: scripts/skeleton.py
+    description: 封闭方案骨架：现场条件（甲烷、氧浓度、爆炸危险性、封闭时间、人工确认项）、必备步骤、可选步骤和密闭巷道的选择清单
+    timeout_s: 20
+  compose:
+    file: scripts/compose.py
+    description: 按“方案编写”阶段的选择组装封闭方案，计算密闭材料、注氮流量、注浆量并与库存比较
+    timeout_s: 20

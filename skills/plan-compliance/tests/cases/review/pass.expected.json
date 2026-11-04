@@ -1,0 +1,216 @@
+{
+ "algorithm_version": "review/1.0.0",
+ "params": {
+  "verdict_rule": "红线预检不通过或任一审核项不通过即为不通过"
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "plan_id": "SP-1201-202611042000",
+  "round": 1,
+  "verdict": "pass",
+  "verdict_name": "通过",
+  "redline": {
+   "ok": true,
+   "problems": [],
+   "notes": []
+  },
+  "items": [
+   {
+    "id": "basis",
+    "label": "依据：方案依据的条文与措施对得上",
+    "conclusion": "pass",
+    "conclusion_name": "通过",
+    "articles": [],
+    "articles_text": "",
+    "note": ""
+   },
+   {
+    "id": "context",
+    "label": "现场条件：缺失的条件已列为待补充或人工确认项，没有被当成已满足",
+    "conclusion": "pass",
+    "conclusion_name": "通过",
+    "articles": [],
+    "articles_text": "",
+    "note": ""
+   },
+   {
+    "id": "site_survey",
+    "label": "现场侦察：密闭位置、顶板支护、供电等系统没有数据的条件写明需现场侦察确认",
+    "conclusion": "pass",
+    "conclusion_name": "通过",
+    "articles": [],
+    "articles_text": "",
+    "note": ""
+   },
+   {
+    "id": "sequence",
+    "label": "封闭顺序：先注惰、先临时后永久，多条巷道先支后主、进回风同时封闭统一指挥",
+    "conclusion": "pass",
+    "conclusion_name": "通过",
+    "articles": [
+     "第84条"
+    ],
+    "articles_text": "第84条",
+    "note": ""
+   },
+   {
+    "id": "boundary",
+    "label": "职责边界：没有替救护队制定行动细节（救护队行动方案由救护队制定）",
+    "conclusion": "pass",
+    "conclusion_name": "通过",
+    "articles": [],
+    "articles_text": "",
+    "note": ""
+   },
+   {
+    "id": "evacuation",
+    "label": "撤人：写明撤人按预案立即执行，不等待本方案",
+    "conclusion": "pass",
+    "conclusion_name": "通过",
+    "articles": [],
+    "articles_text": "",
+    "note": ""
+   }
+  ],
+  "failed_items": [],
+  "failed_count": 0,
+  "needs_human_count": 0,
+  "human_items": [
+   "能见度（米）：系统没有数据，需现场确认后作为人工输入（写明确认人）重新编制",
+   "火源是否明确：系统没有数据，需现场确认后作为人工输入（写明确认人）重新编制",
+   "水源、人力和物力是否充足：系统没有数据，需现场确认后作为人工输入（写明确认人）重新编制"
+  ],
+  "has_human_items": true,
+  "summary": "按必备步骤先注惰后封闭",
+  "plan": {
+   "plan_id": "SP-1201-202611042000",
+   "kind": "sealing",
+   "title": "1201 采空区火区封闭方案",
+   "context": {
+    "fire_type": "goaf_spontaneous_combustion",
+    "as_of": "2026-11-04T20:00:00",
+    "methane_pct": 0.671,
+    "methane_rising": false,
+    "o2_pct": 7.947,
+    "area_temperature_c": 35.0,
+    "visibility_m": null,
+    "explosion_risk": "not_explosive",
+    "fire_source_confirmed": null,
+    "water_supply_sufficient": null,
+    "return_airway_clear": true,
+    "sealed_at": null
+   },
+   "steps": [
+    {
+     "order": 1,
+     "type": "evacuate",
+     "description": "撤出受影响区域人员（撤人按预案立即执行，不等待本方案）",
+     "roadways": [
+      "R-1201-FACE",
+      "R-1201-RET"
+     ],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    },
+    {
+     "order": 2,
+     "type": "leak_sealing",
+     "description": "回风侧堵漏，减少向采空区漏风",
+     "roadways": [
+      "R-1201-RET"
+     ],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    },
+    {
+     "order": 3,
+     "type": "inert_injection",
+     "description": "封闭前向采空区注入惰性气体抑爆（第85条）",
+     "roadways": [],
+     "team_size": null,
+     "standby_team": null,
+     "params": {
+      "gas": "N2",
+      "rate_m3_h": 1179
+     }
+    },
+    {
+     "order": 4,
+     "type": "temporary_seal",
+     "description": "先建临时密闭（第84条）；密闭位置按第86条选择，需现场侦察确认；多条巷道先支巷后主巷，进、回风同时封闭时统一指挥。补充：进、回风同时封闭，统一指挥",
+     "roadways": [
+      "R-1201-IN",
+      "R-1201-RET"
+     ],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    },
+    {
+     "order": 5,
+     "type": "monitor",
+     "description": "观测风向、风量、烟雾和气体，确认无爆炸危险；封闭过程中可燃气体浓度迅速增加时所有人员立即撤到安全地点（第85条）",
+     "roadways": [],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    },
+    {
+     "order": 6,
+     "type": "permanent_seal",
+     "description": "确认无爆炸危险后建永久或防爆密闭（第84条）",
+     "roadways": [
+      "R-1201-IN",
+      "R-1201-RET"
+     ],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    },
+    {
+     "order": 7,
+     "type": "grouting",
+     "description": "封闭后向采空区注浆，覆盖浮煤、充填裂隙",
+     "roadways": [],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    },
+    {
+     "order": 8,
+     "type": "monitor",
+     "description": "封闭后按本矿自然发火预测预报制度加密束管取样，观测火区气体变化（频次由指挥部确定）",
+     "roadways": [],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    }
+   ],
+   "basis": [
+    {
+     "document": "矿山救援规程",
+     "article": "第84条",
+     "source": "index",
+     "note": null
+    },
+    {
+     "document": "矿山救援规程",
+     "article": "第85条",
+     "source": "index",
+     "note": null
+    },
+    {
+     "document": "矿山救援规程",
+     "article": "第86条",
+     "source": "index",
+     "note": null
+    }
+   ],
+   "panel": "1201"
+  }
+ }
+}

@@ -1,0 +1,202 @@
+{
+ "algorithm_version": "skeleton/1.0.0",
+ "params": {
+  "methane_window_h": 1,
+  "methane_rising_rate_pct_h": 0.05,
+  "seal_roadway_kinds": [
+   "intake",
+   "return"
+  ],
+  "leak_sealing_roadway_kind": "return"
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "kind": "sealing",
+  "title": "1201 采空区火区封闭方案",
+  "plan_id": "SP-1201-202611042000",
+  "context": {
+   "fire_type": "goaf_spontaneous_combustion",
+   "as_of": "2026-11-04T20:00:00",
+   "methane_pct": 0.671,
+   "methane_rising": false,
+   "o2_pct": 7.947,
+   "area_temperature_c": null,
+   "visibility_m": null,
+   "explosion_risk": "not_explosive",
+   "fire_source_confirmed": null,
+   "water_supply_sufficient": null,
+   "return_airway_clear": null,
+   "sealed_at": null
+  },
+  "context_sources": {
+   "methane_pct": "工作面 1201 巷道安全监控测点最近 1 小时最新可用 CH4 的最大值",
+   "methane_rising": "任一测点速率 > 0.05 %/h 为是；算不出速率为缺失",
+   "o2_pct": "爆炸危险性最不利测点 BT-1201-G1 的 O2",
+   "explosion_risk": "爆炸三角形（多测点取最不利）",
+   "sealed_at": "火区台账中本工作面已封闭火区的封闭时间",
+   "human": "只来自人工输入（写明确认人）"
+  },
+  "explosion": {
+   "overall": "not_explosive",
+   "overall_name": "当前不在爆炸范围",
+   "worst_sensor_id": "BT-1201-G1"
+  },
+  "human_inputs": [],
+  "inert_inputs": {
+   "leak_m3_min": null,
+   "target_o2_pct": null
+  },
+  "missing_inputs": [
+   {
+    "field": "area_temperature_c",
+    "label": "灾区温度（℃）",
+    "value_type": "number",
+    "kind": "human",
+    "note": "系统没有数据，需现场确认后作为人工输入（写明确认人）重新编制"
+   },
+   {
+    "field": "visibility_m",
+    "label": "能见度（米）",
+    "value_type": "number",
+    "kind": "human",
+    "note": "系统没有数据，需现场确认后作为人工输入（写明确认人）重新编制"
+   },
+   {
+    "field": "fire_source_confirmed",
+    "label": "火源是否明确",
+    "value_type": "bool",
+    "kind": "human",
+    "note": "系统没有数据，需现场确认后作为人工输入（写明确认人）重新编制"
+   },
+   {
+    "field": "water_supply_sufficient",
+    "label": "水源、人力和物力是否充足",
+    "value_type": "bool",
+    "kind": "human",
+    "note": "系统没有数据，需现场确认后作为人工输入（写明确认人）重新编制"
+   },
+   {
+    "field": "return_airway_clear",
+    "label": "回风道是否畅通",
+    "value_type": "bool",
+    "kind": "human",
+    "note": "系统没有数据，需现场确认后作为人工输入（写明确认人）重新编制"
+   },
+   {
+    "field": "inert_rate",
+    "label": "注氮流量",
+    "value_type": "number",
+    "kind": "calculation",
+    "note": "给出漏风量 leak_m3_min 和目标氧浓度 target_o2_pct 后由代码按注氮稀释公式估算"
+   }
+  ],
+  "required_steps": [
+   {
+    "key": "evacuate",
+    "type": "evacuate",
+    "description": "撤出受影响区域人员（撤人按预案立即执行，不等待本方案）",
+    "roadways": "threatened"
+   },
+   {
+    "key": "inert_injection",
+    "type": "inert_injection",
+    "description": "封闭前向采空区注入惰性气体抑爆（第85条）"
+   },
+   {
+    "key": "temporary_seal",
+    "type": "temporary_seal",
+    "description": "先建临时密闭（第84条）；密闭位置按第86条选择，需现场侦察确认；多条巷道先支巷后主巷，进、回风同时封闭时统一指挥",
+    "roadways": "seal"
+   },
+   {
+    "key": "monitor",
+    "type": "monitor",
+    "description": "观测风向、风量、烟雾和气体，确认无爆炸危险；封闭过程中可燃气体浓度迅速增加时所有人员立即撤到安全地点（第85条）"
+   },
+   {
+    "key": "permanent_seal",
+    "type": "permanent_seal",
+    "description": "确认无爆炸危险后建永久或防爆密闭（第84条）",
+    "roadways": "seal"
+   }
+  ],
+  "optional_steps": [
+   {
+    "key": "leak_sealing",
+    "type": "leak_sealing",
+    "description": "回风侧堵漏，减少向采空区漏风",
+    "roadways": "leak",
+    "after": "evacuate",
+    "label": "回风侧堵漏，减少向采空区漏风"
+   },
+   {
+    "key": "inhibitor_spray",
+    "type": "inhibitor_spray",
+    "description": "向采空区浮煤喷洒阻化剂，抑制煤氧化",
+    "after": "inert_injection",
+    "label": "向采空区浮煤喷洒阻化剂"
+   },
+   {
+    "key": "pressure_balancing",
+    "type": "pressure_balancing",
+    "description": "调节风压，减小密闭两侧压差，减少向火区漏风",
+    "after": "monitor",
+    "label": "调节风压，减小密闭两侧压差"
+   },
+   {
+    "key": "grouting",
+    "type": "grouting",
+    "description": "封闭后向采空区注浆，覆盖浮煤、充填裂隙",
+    "after": "permanent_seal",
+    "label": "封闭后向采空区注浆"
+   },
+   {
+    "key": "monitor_after_seal",
+    "type": "monitor",
+    "description": "封闭后按本矿自然发火预测预报制度加密束管取样，观测火区气体变化（频次由指挥部确定）",
+    "after": "permanent_seal",
+    "label": "封闭后加密束管取样，观测火区气体变化"
+   }
+  ],
+  "seal_roadway_options": [
+   {
+    "roadway_id": "R-1201-IN",
+    "name": "1201运输巷",
+    "kind": "intake"
+   },
+   {
+    "roadway_id": "R-1201-RET",
+    "name": "1201回风巷",
+    "kind": "return"
+   }
+  ],
+  "evacuate_roadways": [
+   "R-1201-FACE",
+   "R-1201-RET"
+  ],
+  "leak_roadways": [
+   "R-1201-RET"
+  ],
+  "basis": [
+   {
+    "document": "矿山救援规程",
+    "article": "第84条"
+   },
+   {
+    "document": "矿山救援规程",
+    "article": "第85条"
+   },
+   {
+    "document": "矿山救援规程",
+    "article": "第86条"
+   }
+  ],
+  "limits": {
+   "max_note_chars": 60,
+   "max_summary_chars": 100
+  },
+  "data_quality": []
+ }
+}

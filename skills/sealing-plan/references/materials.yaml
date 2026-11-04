@@ -1,0 +1,27 @@
+# 物资用量估算参数。由 mcp/dispatch 的 params.yaml 和 estimate_inerting 迁移，数值未改。全部是开发占位值，不代表本矿取值。
+# TODO(专家): 由救护队和防灭火专业按本矿密闭设计、注浆工艺和材料规格确定。
+status: placeholder
+reviewed_by: null
+
+seal:
+  # 巷道断面（m²）。网络数据没有断面时使用；有图纸断面后改为按巷道取值
+  default_section_m2: 12.0
+  permanent:
+    wall_thickness_m: 0.8          # 永久密闭墙厚
+    bricks_per_m3: 512             # 标准砖用量（块/m³ 砌体）
+    mortar_m3_per_m3: 0.24         # 砂浆用量（m³/m³ 砌体）
+    cement_kg_per_m3_mortar: 404   # 1:3 水泥砂浆
+    sand_m3_per_m3_mortar: 1.02
+  temporary:
+    kits_per_wall: 1               # 每道临时密闭用快速密闭材料（套）
+
+grout:
+  # 注浆量 = 采空区长 × 宽 × 采高 × 注浆系数；干料体积 = 浆液体积 ÷ (水土比 + 1)；干料质量 = 干料体积 × 堆积密度
+  mining_height_m: 3.0
+  coefficient: 0.05
+  water_soil_ratio: 5
+  bulk_density_t_m3: 1.5
+
+inert:
+  # 注氮稀释估算：O₂_target = O₂_current × Q_leak / (Q_leak + η·Q_N₂)；η 为注入氮气进入漏风流的比例
+  penetration: 0.9
