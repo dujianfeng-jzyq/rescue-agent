@@ -453,3 +453,10 @@ def test_reads_after_child_finished_are_not_polling(tmp_path):
     _write(tmp_path, ROOT_ID, events, "rescue-commander")
     r = grade.grade(grade.load_tree(ROOT_ID, tmp_path), {"no_wait_polling": 0})["checks"]["no_wait_polling"]
     assert not r["ok"] and "轮询 1 轮" in r["detail"][0], r
+
+
+def test_angle_bracket_link_counts_as_pasted():
+    """模型把图片路径写成 ](<路径>) 不算改写报告（第二版评测里出现过）。"""
+    rep = "爆炸危险性：当前不在爆炸范围\n\n![风险图](/ws/records/s/RS-1.chart.svg)"
+    out = "以下为报告：\n\n爆炸危险性：当前不在爆炸范围\n\n![风险图](</ws/records/s/RS-1.chart.svg>)"
+    assert grade._norm_lines(rep) in grade._norm_lines(out)

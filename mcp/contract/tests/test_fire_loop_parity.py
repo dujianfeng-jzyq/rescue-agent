@@ -86,6 +86,9 @@ def test_ts_flow_matches_python(sim_s4_60, tmp_path, monkeypatch):
     assert a["result"]["escalation"]["recommend"] is True
     assert a["result"]["personnel"]["computed"] is True
     assert [e["status"] for e in a["events"]].count("failed") == 0
+    # 命令行工具没有阶段子 Agent：研判说明跳过，报告注明未生成
+    assert a["result"]["explanation"]["generated"] is False
+    assert "【研判说明】研判说明未生成" in a["report_markdown"]
     assert a["result"]["explosion"]["chart_markdown"] and Path(a["result"]["explosion"]["chart_markdown"].split("](")[1][:-1]).is_file()
     assert a["report_markdown"].startswith("【预警研判】1201 工作面")
     assert "【升级建议】1201 工作面" in a["report_markdown"]
@@ -118,5 +121,5 @@ def test_ts_flow_matches_python(sim_s4_60, tmp_path, monkeypatch):
             data = report_data({name: records[i] for name, i in src["inputs"].items()}, src["extra"])
             assert render(tpl, data) == rec["content"], f"{rid}（{src['skill']}/{src['template']}）与 Python 渲染结果不同"
             n_reports += 1
-    assert n_results == 8  # 研判 7 个脚本（alarms、warning、stage、trend、explosion_triangle、personnel、escalation）+ 检测 1 个
+    assert n_results == 9  # 研判 8 个脚本（alarms、warning、stage、trend、explosion_triangle、personnel、escalation、explanation_options）+ 检测 1 个
     assert n_reports == 3  # 研判报告、升级建议、检测结果

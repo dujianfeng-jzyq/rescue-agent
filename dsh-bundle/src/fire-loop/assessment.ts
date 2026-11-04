@@ -6,14 +6,16 @@
  *   → escalation（emergency-escalation）
  *   → 研判报告（fire-assessment/templates/report.md，含风险图）+ 升级建议（emergency-escalation/templates/report.md）
  *
- * 每步发出流程事件（FlowEvent），随结果返回。阶段“研判说明”（模型只从给定清单里选关注点和下一步）以后加；
- * 现在由主预设在报告后面写“分析与建议”。
+ *   → explanation_options（选择清单）→ 阶段“研判说明”（模型只从清单里选关注点和下一步，代码核对；失败时报告只含事实部分）
+ *
+ * 每步发出流程事件（FlowEvent），随结果返回。
  */
 
 import { randomInt } from 'node:crypto'
 
 import type { Origin, RescueRecord } from '../evidence/records.ts'
 import type { Evidence } from '../evidence/service.ts'
+import { checkExplanation, type Options, STAGE, type StageRunner, stagePrompt, stageSchema } from './explanation.ts'
 
 export const FLOW = 'run_fire_assessment'
 const FA = 'fire-assessment'
@@ -36,6 +38,8 @@ export interface AssessmentOptions {
   /** 把记录附带的风险图放到网页端能显示的地方，返回路径；不给时报告里不放图 */
   chartPath?: (recordId: string) => Promise<string | null>
   onEvent?: (e: FlowEvent) => void
+  /** 跑阶段“研判说明”的子 Agent；不给时跳过该阶段（报告只含事实部分） */
+  stage?: StageRunner
 }
 
 export interface AssessmentOutcome {
@@ -114,6 +118,41 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
     ev.renderReport({ skill: 'emergency-escalation', template: 'report', inputs: { escalation: ids.escalation! }, origin }),
   )
 
+  // ── 阶段“研判说明” ──
+  const facts = `${(report.content as string).trimEnd()}\n\n${(escReport.content as string).trimEnd()}`
+  const options = await step('explanation_options', () =>
+    script(FA, 'explanation_options', Object.fromEntries(['warning', 'stage', 'alarms', 'trend', 'explosion', 'personnel', 'escalation'].map((k) => [k, ids[k]!]))),
+  )
+  let explanationMd: string | null = null
+  let explanationNote: string
+  if (!opts.stage) {
+    emit('explanation', 'skipped', [], '没有配置阶段子 Agent')
+    explanationNote = '研判说明未生成（没有配置阶段子 Agent）'
+  } else {
+    emit('explanation', 'started')
+    const o = content(options) as Options
+    const skill = await ev.skill(FA)
+    const material = [facts, JSON.stringify(o), ...['warning', 'stage', 'trend', 'explosion', 'personnel', 'escalation'].map((k) => JSON.stringify(content(rec[k]!)))].join('\n')
+    const run = await opts.stage({
+      label: STAGE,
+      prompt: stagePrompt({ skillName: skill.name, skillVersion: skill.version, skillBody: skill.body, facts, options: o }),
+      schema: stageSchema(o),
+      ...sig,
+    })
+    const checked = run.ok ? checkExplanation(run.structured, o, material) : { ok: false as const, problems: [run.error] }
+    if (checked.ok) {
+      const r = await ev.renderReport({ skill: FA, template: 'explanation', inputs: { options: options.record_id }, extra: { explanation: checked.explanation, child_id: run.childId }, origin })
+      ids.explanation = r.record_id
+      rec.explanation = r
+      explanationMd = (r.content as string).trimEnd()
+      explanationNote = ''
+      emit('explanation', 'completed', [r.record_id])
+    } else {
+      explanationNote = `研判说明未生成（${checked.problems.join('；')}）`
+      emit('explanation', 'failed', [], checked.problems.join('；'))
+    }
+  }
+
   const w = content(rec.warning!)
   const st = content(rec.stage!)
   const al = content(rec.alarms!)
@@ -130,6 +169,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
   const warnings = ['阈值和判据为开发占位值，待专家审定']
   if (x.overall === 'unknown') warnings.push('有束管测点算不出爆炸三角形，爆炸危险性按“无法判定”对待')
   if (w.notes.length) warnings.push(...w.notes)
+  if (explanationNote) warnings.push(explanationNote)
   const nextActions = [
     ...(es.recommend ? [{ label: '升级应急响应（escalate_emergency，需人工确认）', tool: null, arguments: {} }] : []),
     { label: '发布预警（publish_warning，需人工确认）', tool: null, arguments: {} },
@@ -138,12 +178,12 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
     card: {
       title: `${opts.panel} 工作面研判`,
       summary,
-      record_ids: [report.record_id, escReport.record_id, ids.warning!, ids.explosion!, ids.escalation!],
+      record_ids: [report.record_id, escReport.record_id, ...(ids.explanation ? [ids.explanation] : []), ids.warning!, ids.explosion!, ids.escalation!],
       files: rec.explosion!.files,
       next_actions: nextActions,
       warnings,
     },
-    report_markdown: `${(report.content as string).trimEnd()}\n\n${(escReport.content as string).trimEnd()}`,
+    report_markdown: `${facts}\n\n${explanationMd ?? `【研判说明】${explanationNote}`}`,
     record_ids: ids,
     result: {
       panel: opts.panel,
@@ -160,6 +200,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       },
       personnel: pe.computed ? { computed: true, total_threatened: pe.total_threatened, total_underground: pe.total_underground } : { computed: false, note: pe.note },
       escalation: { recommend: es.recommend, articles: es.articles.map((a: any) => ({ document: a.document, article: a.article })) },
+      explanation: explanationMd ? { generated: true, record_id: ids.explanation } : { generated: false, note: explanationNote },
     },
     events,
   }

@@ -1,0 +1,80 @@
+{
+ "algorithm_version": "explanation-options/1.0.0",
+ "params": {
+  "limits": {
+   "max_focus": 4,
+   "max_next_steps": 3,
+   "max_note_chars": 80,
+   "max_summary_chars": 120
+  },
+  "conditions": {
+   "alarm_or_escalation": false,
+   "escalation_recommended": false,
+   "level_not_none": false,
+   "any_sign": false,
+   "data_problem": false,
+   "explosion_failure": false,
+   "zone_ii": true,
+   "zone_iii": false,
+   "accelerating_or_worse": false,
+   "severe": false,
+   "no_sign": true
+  },
+  "status": "placeholder"
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-03T08:00:00",
+  "focus_options": [
+   {
+    "id": "level",
+    "label": "预警等级 无"
+   },
+   {
+    "id": "stage",
+    "label": "自燃发展阶段 未见自燃征兆（各阶段条件均未满足）"
+   },
+   {
+    "id": "trend:SM-1201-UC/CO",
+    "label": "SM-1201-UC CO 近 24 小时 5.484 → 5.242，变化 -0.242，速率 -0.001/h"
+   },
+   {
+    "id": "trend:BT-1201-G1/CO",
+    "label": "BT-1201-G1 CO 近 24 小时 18.854 → 19.188，变化 0.334，速率 0.014/h"
+   },
+   {
+    "id": "explosion",
+    "label": "爆炸危险性（总体）可能进入爆炸范围（减风积聚或混入空气）"
+   },
+   {
+    "id": "explosion:BT-1201-G1",
+    "label": "BT-1201-G1 II 区 减风危险区：可燃气体继续积聚（如减风、停风）会进入爆炸范围"
+   },
+   {
+    "id": "personnel",
+    "label": "预警等级未达到橙色（严重），未计算受威胁人员"
+   },
+   {
+    "id": "escalation",
+    "label": "暂不建议升级为应急响应（升级判据均未命中）"
+   }
+  ],
+  "next_step_options": [
+   {
+    "id": "keep_ventilation_stable",
+    "label": "保持风量稳定，避免无计划减风、停风（减风危险区）"
+   },
+   {
+    "id": "routine_monitoring",
+    "label": "保持常规监测，按制度复查"
+   }
+  ],
+  "limits": {
+   "max_focus": 4,
+   "max_next_steps": 3,
+   "max_note_chars": 80,
+   "max_summary_chars": 120
+  }
+ }
+}

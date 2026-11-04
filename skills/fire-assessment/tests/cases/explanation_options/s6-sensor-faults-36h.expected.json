@@ -1,0 +1,104 @@
+{
+ "algorithm_version": "explanation-options/1.0.0",
+ "params": {
+  "limits": {
+   "max_focus": 4,
+   "max_next_steps": 3,
+   "max_note_chars": 80,
+   "max_summary_chars": 120
+  },
+  "conditions": {
+   "alarm_or_escalation": false,
+   "escalation_recommended": false,
+   "level_not_none": false,
+   "any_sign": false,
+   "data_problem": true,
+   "explosion_failure": true,
+   "zone_ii": true,
+   "zone_iii": false,
+   "accelerating_or_worse": false,
+   "severe": false,
+   "no_sign": true
+  },
+  "status": "placeholder"
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-03T20:00:00",
+  "focus_options": [
+   {
+    "id": "level",
+    "label": "预警等级 无"
+   },
+   {
+    "id": "stage",
+    "label": "自燃发展阶段 未见自燃征兆（各阶段条件均未满足）"
+   },
+   {
+    "id": "trend:SM-1201-UC/CO",
+    "label": "SM-1201-UC CO 近 24 小时 5.443 → 5.379，变化 -0.064，速率 0.013/h"
+   },
+   {
+    "id": "trend:BT-1201-G1/CO",
+    "label": "BT-1201-G1 CO 近 24 小时 19.476 → 19.263，变化 -0.213，速率 -0.003/h"
+   },
+   {
+    "id": "explosion",
+    "label": "爆炸危险性（总体）无法判定（有测点算不出来，按有爆炸危险对待）"
+   },
+   {
+    "id": "explosion:BT-1201-G1",
+    "label": "BT-1201-G1 II 区 减风危险区：可燃气体继续积聚（如减风、停风）会进入爆炸范围"
+   },
+   {
+    "id": "explosion-failure:BT-1201-G2",
+    "label": "BT-1201-G2 未能计算爆炸三角形：测点 BT-1201-G2 最近 6 小时没有同一时刻完整可用的一组读数（需 CO、CH4、C2H4、C2H2、H2、O2、CO2），不能计算。数据质量：BT-1201-G2/CO：读数长时间不变，疑似卡值，已排除；BT-1201-G2/CH4：读数长时间不变，疑似卡值，已排除；BT-1201-G2/C2H4：读数长时间不变，疑似卡值，已排除；BT-1201-G2/C2H2：读数长时间不变，疑似卡值，已排除；BT-1201-G2/H2：读数长时间不变，疑似卡值，已排除；BT-1201-G2/O2：读数长时间不变，疑似卡值，已排除；BT-1201-G2/CO2：读数长时间不变，疑似卡值，已排除；BT-1201-G2/N2：读数长时间不变，疑似卡值，已排除"
+   },
+   {
+    "id": "personnel",
+    "label": "预警等级未达到橙色（严重），未计算受威胁人员"
+   },
+   {
+    "id": "data-quality:0",
+    "label": "数据质量：SM-1201-RET/CO：25 个点缺数"
+   },
+   {
+    "id": "data-quality:1",
+    "label": "数据质量：BT-1201-G2/CO：读数长时间不变，疑似卡值，已排除"
+   },
+   {
+    "id": "note:0",
+    "label": "说明：BT-1201-G1 氮气浓度 85.5%，可能处于注氮影响范围，格雷哈姆系数偏低失真"
+   },
+   {
+    "id": "escalation",
+    "label": "暂不建议升级为应急响应（升级判据均未命中）"
+   }
+  ],
+  "next_step_options": [
+   {
+    "id": "verify_sensors",
+    "label": "现场核查失效或可疑的测点"
+   },
+   {
+    "id": "manual_gas_sample",
+    "label": "对算不出爆炸三角形的测点人工取样化验后复算"
+   },
+   {
+    "id": "keep_ventilation_stable",
+    "label": "保持风量稳定，避免无计划减风、停风（减风危险区）"
+   },
+   {
+    "id": "routine_monitoring",
+    "label": "保持常规监测，按制度复查"
+   }
+  ],
+  "limits": {
+   "max_focus": 4,
+   "max_next_steps": 3,
+   "max_note_chars": 80,
+   "max_summary_chars": 120
+  }
+ }
+}

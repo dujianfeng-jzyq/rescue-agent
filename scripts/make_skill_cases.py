@@ -92,7 +92,22 @@ def build_inputs() -> dict[tuple[str, str, str], dict]:
         (ESC, "escalation", "s4-escalation-60h-recommend"): {"warning": w["s4-60"], "stage": st["s4-60"], "alarms": al["s4-60"]},
         (ESC, "escalation", "s1-normal-24h-not-met"): {"warning": w["s1-24"], "stage": st["s1-24"], "alarms": al["s1-24"]},
         (ESC, "escalation", "s5-unsealed-312h-alarm"): {"warning": w["s5-312"], "stage": st["s5-312"], "alarms": al["s5-312"]},
+        (FA, "explanation_options", "s4-escalation-60h-red"): flow_results(s4_60),
+        (FA, "explanation_options", "s6-sensor-faults-36h"): flow_results(s6_36),
+        (FA, "explanation_options", "s1-normal-24h"): flow_results(s1_24),
     }
+
+
+def flow_results(ev: dict) -> dict:
+    """研判流程各脚本的输出（explanation_options 的输入）。"""
+    r = {"warning": run(FA, "warning", {"evidence": ev})}
+    r["stage"] = run(FA, "stage", {"warning": r["warning"]})
+    r["alarms"] = run(FA, "alarms", {"evidence": ev})
+    r["trend"] = run(FA, "trend", {"evidence": ev, "warning": r["warning"]})
+    r["explosion"] = run(XT, "explosion_triangle", {"evidence": ev})
+    r["personnel"] = run(FA, "personnel", {"evidence": ev if "network" in ev else {**ev, "groups": {}}, "warning": r["warning"]})
+    r["escalation"] = run(ESC, "escalation", {k: r[k] for k in ("warning", "stage", "alarms")})
+    return r
 
 
 def fake_record(name: str, content: dict, i: int) -> dict:
@@ -129,6 +144,14 @@ def build_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
         if esc_key:
             esc = run(ESC, "escalation", inputs[esc_key])
             out[(ESC, "report", label)] = report_data({"escalation": fake_record("escalation", esc, 0)})
+    opts = run(FA, "explanation_options", inputs[(FA, "explanation_options", "s4-escalation-60h-red")])
+    fo, ns = opts["result"]["focus_options"], opts["result"]["next_step_options"]
+    explanation = {
+        "summary": "红色预警、加速氧化，建议升级为应急响应",
+        "focus": [{"id": fo[0]["id"], "label": fo[0]["label"], "note": "束管 CO 已达红色阈值"}, {"id": fo[-1]["id"], "label": fo[-1]["label"], "note": ""}],
+        "next_steps": [{"id": ns[0]["id"], "label": ns[0]["label"], "reason": "撤人不等待研判"}],
+    }
+    out[(FA, "explanation", "s4-escalation-60h-red")] = report_data({"options": fake_record("options", opts, 0)}, {"explanation": explanation, "child_id": "case"})
     return out
 
 

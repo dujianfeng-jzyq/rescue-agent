@@ -140,6 +140,18 @@ class Session:
                 out += [a[k] for k in ("prompt", "message") if isinstance(a.get(k), str)]
         return out
 
+    def final_turn_text(self) -> str:
+        """最后一轮里 assistant 写的全部文字（用户在这一轮看到的回答）。模型可能先贴报告、再在工具调用后补一段，
+        只看最后一条会漏掉报告；“是否展示给用户”类检查用它。"""
+        start = max((i for i, e in enumerate(self.events) if e["type"] == "turn/start"), default=0)
+        texts = []
+        for e in self.events[start:]:
+            if e["type"] == "assistant/message":
+                text = "".join(c["text"] for c in e["data"]["message"]["content"] if c.get("type") == "text")
+                if text.strip():
+                    texts.append(text)
+        return "\n\n".join(texts) or self.final_text()
+
     def final_text(self) -> str:
         """最后一条带文字的 assistant 消息。"""
         for e in reversed(self.events):
@@ -456,9 +468,17 @@ def workflow_results(sessions: list[Session]) -> list[tuple[str, dict]]:
 _BOLD_LINE = re.compile(r"^\*\*(.+)\*\*$")
 
 
+_ANGLE_LINK = re.compile(r"\]\(<([^<>\n]+)>\)")
+
+
+def _norm_links(text: str) -> str:
+    """Markdown 链接目标写成 <路径> 与不加尖括号是同一个链接（模型有时这样写带空格或特殊字符的路径）。"""
+    return _ANGLE_LINK.sub(r"](\1)", text)
+
+
 def _norm_lines(text: str) -> str:
-    """逐行去掉首尾空白、整行加粗（只是排版，不算改写），忽略空行。"""
-    lines = (line.strip() for line in text.splitlines())
+    """逐行去掉首尾空白、整行加粗（只是排版，不算改写），忽略空行；链接目标的尖括号去掉。"""
+    lines = (line.strip() for line in _norm_links(text).splitlines())
     return "\n".join(_BOLD_LINE.sub(r"\1", line) for line in lines if line)
 
 
@@ -530,7 +550,7 @@ def grade(root: Session, checks: dict) -> dict:
         names += [r["result"].get("stage_name") for t, r in wf if t == "recommend_escalation" and "result" in r]
         names += [r["result"]["warning"].get("stage_name") for t, r in wf if t == "run_fire_assessment" and "result" in r]
         want = next((n for n in reversed(names) if n), None)
-        final = root.final_text()
+        final = root.final_turn_text()
         results["stage_reported"] = {"ok": want is not None and want in final, "detail": {"tool": want}}
 
     if checks.get("tools_called"):
@@ -564,16 +584,16 @@ def grade(root: Session, checks: dict) -> dict:
             explosion.append(worst)
     if checks.get("explosion_reported"):
         want = explosion[-1].get("zone_name") if explosion else None
-        results["explosion_reported"] = {"ok": want is not None and want in root.final_text(), "detail": {"tool": want}}
+        results["explosion_reported"] = {"ok": want is not None and want in root.final_turn_text(), "detail": {"tool": want}}
 
     if checks.get("chart_shown"):
-        final = root.final_text()
+        final = root.final_turn_text()
         charts = [r["chart"] for r in explosion if isinstance(r.get("chart"), dict) and "svg_path" in r["chart"]]
         shown = [c["svg_path"] for c in charts if f"]({c['svg_path']})" in final and c["download_svg"] in final]
         # 第二版：风险图随结果记录导出到会话工作区，报告里是 Markdown 图片（经 DSH 的 /api/file 显示、下载）
         v2 = [x["chart_markdown"] for t, r in wf if t == "run_fire_assessment" and (x := (r.get("result") or {}).get("explosion") or {}).get("chart_markdown")]
         charts += v2
-        shown += [m for m in v2 if m in final]
+        shown += [m for m in v2 if m in _norm_links(final)]
         results["chart_shown"] = {"ok": bool(shown), "detail": {"charts": len(charts), "shown": shown}}
 
     if checks.get("kb_cited"):
@@ -582,13 +602,19 @@ def grade(root: Session, checks: dict) -> dict:
             for name, text in s.tool_results():
                 if (name.startswith(("mcp__kb__", "mcp__workflow__")) or name in V2_FLOW_TOOLS) and text.lstrip().startswith("{"):
                     articles.update(re.sub(r"\s+", "", a) for a in re.findall(r'"article":\s*"([^"]+)"', text))
-        final = re.sub(r"\s+", "", root.final_text())
+        final = re.sub(r"\s+", "", root.final_turn_text())
         hit = sorted(a for a in articles if a in final)
         results["kb_cited"] = {"ok": bool(hit), "detail": {"kb_articles": sorted(articles), "cited": hit}}
 
+    if checks.get("explanation_generated"):
+        # 第二版固定流程的阶段“研判说明”生成了（没调用 run_fire_assessment 的运行不适用，算通过）
+        runs = [(r.get("result") or {}).get("explanation") or {} for t, r in wf if t == "run_fire_assessment"]
+        failed = [x.get("note") for x in runs if not x.get("generated")]
+        results["explanation_generated"] = {"ok": not failed, "detail": {"runs": len(runs), "failed": failed}}
+
     if checks.get("report_pasted"):  # 也是 workflow 工具结果是否被如实引用的检查（cited_tools_called 不查 workflow 工具名）
         reports = [r["report_markdown"] for _, r in wf if r.get("report_markdown")]
-        final = _norm_lines(root.final_text())
+        final = _norm_lines(root.final_turn_text())
         pasted = [i for i, rep in enumerate(reports) if _norm_lines(rep) in final]
         results["report_pasted"] = {"ok": bool(pasted), "detail": {"reports": len(reports), "pasted": pasted}}
 

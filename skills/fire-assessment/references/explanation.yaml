@@ -1,0 +1,47 @@
+# 阶段“研判说明”（design-v2 4.4，第五稿审定第 2 条）给模型的选择清单与限制（演示用占位值，待专家审定）。
+# 模型只能从“关注点”（explanation_options.py 按本次结果列出的事实）和下面的“下一步”里选，并写简短说明；
+# 说明里出现的数值必须能在本次记录里找到，否则阶段判为失败，报告只含事实部分。
+# 每条下一步的 when 是 explanation_options.py 里的条件名，满足时才列为可选。
+status: placeholder
+reviewed_by: null
+
+limits:
+  max_focus: 4            # 最多选几个关注点
+  max_next_steps: 3       # 最多选几个下一步
+  max_note_chars: 80      # 每条说明的字数上限
+  max_summary_chars: 120  # 总述的字数上限
+
+next_steps:
+  - id: evacuate_per_plan
+    label: 提醒调度员按预案立即撤人（不等待研判结果）
+    when: alarm_or_escalation
+  - id: escalate_emergency
+    label: 提请指挥人员决定是否升级为应急响应（escalate_emergency，需人工确认）
+    when: escalation_recommended
+  - id: publish_warning
+    label: 按研判等级发布预警（publish_warning，需人工确认）
+    when: level_not_none
+  - id: increase_monitoring
+    label: 加密束管取样和人工检测，跟踪标志气体变化
+    when: any_sign
+  - id: verify_sensors
+    label: 现场核查失效或可疑的测点
+    when: data_problem
+  - id: manual_gas_sample
+    label: 对算不出爆炸三角形的测点人工取样化验后复算
+    when: explosion_failure
+  - id: keep_ventilation_stable
+    label: 保持风量稳定，避免无计划减风、停风（减风危险区）
+    when: zone_ii
+  - id: prevent_air_ingress
+    label: 防止漏风，避免增风、启封（增风危险区）
+    when: zone_iii
+  - id: study_inerting
+    label: 研究注氮等惰化、防灭火措施
+    when: accelerating_or_worse
+  - id: study_sealing
+    label: 研究封闭火区方案
+    when: severe
+  - id: routine_monitoring
+    label: 保持常规监测，按制度复查
+    when: no_sign

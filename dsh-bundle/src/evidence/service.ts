@@ -12,7 +12,7 @@ import { join, relative } from 'node:path'
 
 import { collect, parseCollectSpec, type CallTool } from './collect.ts'
 import { buildRecord, RECORD_ID_PATTERN, RecordNotFound, RecordStore, type Origin, type RecordFile, type RescueRecord } from './records.ts'
-import { loadSkill, runScript, type RunResult } from './skills.ts'
+import { loadSkill, runScript, type RunResult, type Skill } from './skills.ts'
 import { render, reportData } from './template.ts'
 
 export interface EvidenceConfig {
@@ -170,6 +170,11 @@ export class Evidence {
         parentIds: names.map((n) => opts.inputs[n]!),
       }),
     )
+  }
+
+  /** 读技能（SKILL.md 的 frontmatter、正文和脚本登记）；固定流程的阶段用 SKILL.md 正文作指令 */
+  skill(name: string): Promise<Skill> {
+    return loadSkill(this.cfg.skillsDir, name)
   }
 
   getRecord(id: string): Promise<RescueRecord> {

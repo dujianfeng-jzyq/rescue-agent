@@ -1,0 +1,96 @@
+{
+ "algorithm_version": "explanation-options/1.0.0",
+ "params": {
+  "limits": {
+   "max_focus": 4,
+   "max_next_steps": 3,
+   "max_note_chars": 80,
+   "max_summary_chars": 120
+  },
+  "conditions": {
+   "alarm_or_escalation": true,
+   "escalation_recommended": true,
+   "level_not_none": true,
+   "any_sign": true,
+   "data_problem": false,
+   "explosion_failure": false,
+   "zone_ii": false,
+   "zone_iii": false,
+   "accelerating_or_worse": true,
+   "severe": true,
+   "no_sign": false
+  },
+  "status": "placeholder"
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "focus_options": [
+   {
+    "id": "level",
+    "label": "预警等级 红色（危险）（红色（危险）：束管CO最大值(ppm) 1629.09 ≥ 1000；乙烯(ppm) 4.40 ≥ 2.0）"
+   },
+   {
+    "id": "stage",
+    "label": "自燃发展阶段 加速氧化（乙烯(ppm) 4.397 ≥ 0.05）"
+   },
+   {
+    "id": "trend:BT-1201-G1/CO",
+    "label": "BT-1201-G1 CO 近 24 小时 252.431 → 1629.091，变化 1376.66，速率 56.61/h"
+   },
+   {
+    "id": "trend:BT-1201-G1/C2H4",
+    "label": "BT-1201-G1 C2H4 近 24 小时 0.743 → 4.397，变化 3.654，速率 0.156/h"
+   },
+   {
+    "id": "explosion",
+    "label": "爆炸危险性（总体）当前不在爆炸范围"
+   },
+   {
+    "id": "personnel",
+    "label": "受威胁 11 人（R-1201-FACE 9 人；R-1201-RET 2 人）"
+   },
+   {
+    "id": "note:0",
+    "label": "说明：BT-1201-G1 氮气浓度 87.4%，可能处于注氮影响范围，格雷哈姆系数偏低失真"
+   },
+   {
+    "id": "escalation",
+    "label": "建议升级为应急响应：预警等级 红色（危险），达到 红色（危险）"
+   }
+  ],
+  "next_step_options": [
+   {
+    "id": "evacuate_per_plan",
+    "label": "提醒调度员按预案立即撤人（不等待研判结果）"
+   },
+   {
+    "id": "escalate_emergency",
+    "label": "提请指挥人员决定是否升级为应急响应（escalate_emergency，需人工确认）"
+   },
+   {
+    "id": "publish_warning",
+    "label": "按研判等级发布预警（publish_warning，需人工确认）"
+   },
+   {
+    "id": "increase_monitoring",
+    "label": "加密束管取样和人工检测，跟踪标志气体变化"
+   },
+   {
+    "id": "study_inerting",
+    "label": "研究注氮等惰化、防灭火措施"
+   },
+   {
+    "id": "study_sealing",
+    "label": "研究封闭火区方案"
+   }
+  ],
+  "limits": {
+   "max_focus": 4,
+   "max_next_steps": 3,
+   "max_note_chars": 80,
+   "max_summary_chars": 120
+  }
+ }
+}

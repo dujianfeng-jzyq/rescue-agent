@@ -126,3 +126,9 @@
   - 沙箱实现：Docker 默认配置下 `bwrap` 报 “No permissions to create new namespace”，DSH 按链路退到 Landlock，每次运行 stderr 提示 `landlock-run: partial enforcement (older Landlock ABI)`（内核 6.8）；只放开 seccomp、AppArmor 时 bwrap 卡在 “Can't mount proc”（Docker 屏蔽的 /proc 路径），再加 `systempaths=unconfined` 才能用 bwrap。两种实现下上面的探测结果相同。部分强制具体没覆盖什么（推测是较新 ABI 的网络、信号等限制）没有查清。
   - 结论：演示部署保持 Docker 默认安全配置，接受 Landlock；文件写入的限制靠沙箱，加上容器只读挂载兜底（design-v2 7.1）；不为了 bwrap 放开容器的 seccomp、AppArmor 和 /proc 屏蔽。
   - 其他：精简镜像没有 `xdg-user-dir`，DSH 建不了默认工作区（网页端报 Unable to create default workspace），用 `workspace-controller` 的 `documentsDirectory` 显式指定（`experiments/v2-21/container.patch.yml`）。
+- 固定流程的阶段子 Agent 与交付（2026-11-03，第二版 P1 研判说明，deepseek-flash，`scripts/dev.sh --v2`）：
+  - 阶段子 Agent：`ctx.subagents.startActivation({ provider: 'spawn', delivery: 'caller', childId: <预留的 UUID>, request: { parent, outputSchema, prompt } })`，不指定 `agentPreset` 时与调用方同一组合（看得到总指挥的全部工具），审批策略 `never (delegation)`。插件用全局 `tools.guard` 按预留的 childId 只放行 `structured_output`；子 Agent 一次调用就提交结果，约 1.7 万 token。没有能在网页端隐藏的预设字段，所以不为阶段单独建预设。
+  - `exec.concludeTurn()`：本轮在工具结束后立即结束，但 rc.4 网页端只显示折叠的“Completed in …”和模型在工具前写的一句话，看不到工具结果里的报告，`present` 的交付卡片也不显示。**不用 concludeTurn**，仍由主预设把报告原样放进回答。
+  - `present`：插件经 `ctx.tools.execute({ name: 'present', parent: exec.token, … })` 嵌套调用即可，交付卡片（报告 .md、风险图 .svg）显示在本轮最后一条回答下面。工具结果里要写明“已交付，不要再调用 present”，否则模型会再调一次、再写一段回答（评测只看最后一条时会漏掉报告，grade.py 已改为看最后一轮的全部文字）。
+  - `tool-workflow/run-start`、`agent-start`、`agent-end`、`run-end` 事件照 #19 的写法写进调用方会话。
+

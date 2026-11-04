@@ -24,3 +24,7 @@ scripts:
     file: scripts/personnel.py
     description: 受威胁人员、有害气体到达时间和避灾路线（等级达到阈值或要求时计算）
     timeout_s: 20
+  explanation_options:
+    file: scripts/explanation_options.py
+    description: 阶段“研判说明”的选择清单（关注点、下一步）
+    timeout_s: 10
