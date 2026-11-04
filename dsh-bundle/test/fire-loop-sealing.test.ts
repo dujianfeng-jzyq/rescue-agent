@@ -58,6 +58,25 @@ describe('合规审核：选择核对', () => {
     assert.ok(r.problems.some((p) => p.includes('maybe')))
     assert.ok(r.problems.some((p) => p.includes('没有逐项给出结论')))
   })
+  it('条号的并列写法不算数值', () => {
+    const items = all.map((x) => (x.id === 'basis' ? { ...x, note: '步骤引用的第84、85、86条与条文一致' } : x))
+    assert.ok(checkReview({ items, summary: '' }, SC, '方案').ok)
+  })
+  it('schema 只用 DSH 结构化输出支持的关键字', () => {
+    const allowed = new Set(['type', 'oneOf', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const', 'description', 'title'])
+    const walk = (n: any): void => {
+      if (!n || typeof n !== 'object') return
+      for (const [k, v] of Object.entries(n)) {
+        if (k === 'properties') Object.values(v as object).forEach(walk)
+        else {
+          assert.ok(allowed.has(k), `不支持的关键字 ${k}`)
+          if (k === 'items') walk(v)
+        }
+      }
+    }
+    walk(writeSchema(SK))
+    walk(reviewSchema(SC))
+  })
   it('schema 的条号只来自给定范围', () => {
     const s: any = reviewSchema(SC)
     assert.deepEqual(s.properties.items.items.properties.articles.items.enum, SC.articles.map((a) => a.article))

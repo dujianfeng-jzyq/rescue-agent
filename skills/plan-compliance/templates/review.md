@@ -1,4 +1,4 @@
-{{! 合规审核意见（结论由代码按红线预检和审核项给出）。数据：panel、as_of_text、record_ids、review（review.py 的输出）、articles（审核对照的条文原文）。 }}
+{{! 合规审核意见（结论由代码按红线预检和审核项给出）。数据：panel、as_of_text、record_ids、review（review.py 的输出）、articles（审核对照的条文原文，固定流程去掉了方案依据里已列出的条文）。 }}
 【合规审核】{{review.result.plan_id}}（第 {{review.result.round}} 轮）
 
 结论：{{review.result.verdict_name}}
@@ -27,7 +27,7 @@
 {{/review.result.human_items}}
 
 {{/review.result.has_human_items}}
-对照条文（原文）：
+对照条文（原文；方案依据的条文见方案文本）：
 
 {{#articles}}
 - {{document}} {{article}}：{{#content}}{{.}}{{/content}}{{^content}}（条文索引里没有这一条）{{/content}}

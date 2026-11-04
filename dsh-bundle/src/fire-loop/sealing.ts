@@ -88,6 +88,8 @@ export interface SealingOutcome {
     warnings: string[]
   }
   report_markdown: string
+  /** 给主预设的下一步说明（不是报告的一部分，不用贴进回答） */
+  next_step: string
   record_ids: Record<string, string>
   result: Record<string, unknown>
   human_input_request: HumanInputRequest | null
@@ -234,7 +236,10 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
   let reviewReport: RescueRecord | null = null
   if (reviewRec) {
     const rid = reviewRec.record_id
-    reviewReport = await step('review_report', () => ev.renderReport({ skill: PC, template: 'review', inputs: { review: rid }, extra: { articles }, origin }))
+    // 方案依据的条文原文已在方案文本里，审核意见只列其余对照条文的原文（报告短一些，主预设照抄更可靠）
+    const basis = new Set(((content(planRec!).plan.basis ?? []) as { document: string; article: string }[]).map((b) => `${b.document}${b.article}`))
+    const others = articles.filter((a) => !basis.has(`${a.document}${a.article}`))
+    reviewReport = await step('review_report', () => ev.renderReport({ skill: PC, template: 'review', inputs: { review: rid }, extra: { articles: others }, origin }))
   }
   // 红线不通过、又有缺失的人工确认项：先问人
   const missingHuman = sk.missing_inputs.filter((m) => m.kind === 'human')
@@ -284,7 +289,8 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
       next_actions: passed ? [{ label: '下发封闭方案（issue_sealing_plan，需人工确认）', tool: 'issue_sealing_plan', arguments: { record_id: reviewRec!.record_id } }] : [],
       warnings,
     },
-    report_markdown: `${facts.join('\n\n')}\n\n${tail}`,
+    report_markdown: facts.join('\n\n'),
+    next_step: tail,
     record_ids: ids,
     result: {
       panel: opts.panel,

@@ -65,7 +65,8 @@ export function writeSchema(sk: Skeleton): Record<string, unknown> {
     additionalProperties: false,
     properties: {
       optional_steps: { type: 'array', items: { type: 'string', enum: sk.optional_steps.map((s) => s.key) } },
-      seal_roadways: { type: 'array', minItems: 1, items: { type: 'string', enum: sk.seal_roadway_options.map((o) => o.roadway_id) } },
+      // DSH 的结构化输出只支持 JSON Schema 的一个子集（没有 minItems），“至少一条”由 checkSelection 检查
+      seal_roadways: { type: 'array', items: { type: 'string', enum: sk.seal_roadway_options.map((o) => o.roadway_id) } },
       step_notes: {
         type: 'array',
         items: {

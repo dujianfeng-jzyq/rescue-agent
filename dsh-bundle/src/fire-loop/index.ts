@@ -217,7 +217,7 @@ export function apply(ctx: Context, config: Config) {
         '编制采空区火区封闭方案（固定流程，指挥部决定封闭时一律调它，不要自己拼步骤）：按固定步骤采集证据，由代码生成现场条件' +
         '（甲烷、氧浓度、爆炸危险性、封闭时间、人工确认项）和必备步骤，“方案编写”阶段选可选步骤和密闭巷道，代码计算密闭材料、注浆量、注氮流量并与库存比较，' +
         '经 actions 红线预检和“合规审核”阶段（只引用条文索引给出的条文），不通过时自动修改重审，轮数有上限。' +
-        '回答时把 report_markdown（方案文本 + 审核意见）原样单独成段放进回答，不要改写、不要另写分析。' +
+        '回答时把 report_markdown（方案文本 + 审核意见）原样单独成段放进回答，不要改写、不要另写分析；next_step 是给你的下一步说明，不用贴。' +
         'result.verdict 为 pass 时，下发用 issue_sealing_plan，参数只给 record_id = result.issue_record_id（不要提交方案内容）；' +
         '不通过时照实转告，不要绕过。返回 human_input_request 时用 ask_user 逐项询问（写明确认人），带着 human_inputs 重新调用。' +
         '人工确认项（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）只能由人提供，不要替人填写。方案结构和参数为开发占位值。',
@@ -245,7 +245,7 @@ export function apply(ctx: Context, config: Config) {
         render: (_args: unknown, v: any) => [
           {
             type: 'text' as const,
-            text: JSON.stringify({ summary: v.card.summary, warnings: v.card.warnings, report_markdown: v.report_markdown, record_ids: v.record_ids, result: v.result, human_input_request: v.human_input_request, delivered: v.delivered }),
+            text: JSON.stringify({ summary: v.card.summary, warnings: v.card.warnings, report_markdown: v.report_markdown, next_step: v.next_step, record_ids: v.record_ids, result: v.result, human_input_request: v.human_input_request, delivered: v.delivered }),
           },
         ],
       },
