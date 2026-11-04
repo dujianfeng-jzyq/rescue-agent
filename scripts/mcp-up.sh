@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# 启动全部 MCP 服务和值守进程（后台运行），日志在 var/log/，PID 在 var/run/。
+# 启动 MCP 服务（后台运行），日志在 var/log/，PID 在 var/run/。
 #
-#   scripts/mcp-up.sh            启动全部
-#   scripts/mcp-up.sh kb actions 只启动指定服务
+#   scripts/mcp-up.sh            启动第二版的服务：mine_data（模拟矿井）、actions（指令发布）
+#   scripts/mcp-up.sh fire_model 单独启动第一版的服务（P4 起停用：ventnet、fire_model、dispatch、kb、workflow、monitor
+#                                的功能已迁入技能和 DSH 插件，代码暂留作一致性测试的对照，docs/design-v2.md 第 8 节）
 #
 # 默认用 `uv run python` 启动；可设置 RESCUE_PYTHON 覆盖（例如已激活的虚拟环境里的 python）。
 set -euo pipefail
@@ -28,7 +29,7 @@ declare -A MODULES=(
   [workflow]=rescue_workflow
   [monitor]=rescue_workflow.monitor   # 值守进程（不是 MCP 服务，没有端口）
 )
-ORDER=(mine_data ventnet fire_model dispatch kb actions workflow monitor)
+ORDER=(mine_data actions)   # 第二版只运行这两个（design-v2 7.2）；其余为第一版，按名字单独启动
 TARGETS=("${@:-${ORDER[@]}}")
 
 # 接入真实矿井时，用 RESCUE_MINE_DATA_MODULE 指向该矿的适配器模块

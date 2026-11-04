@@ -95,19 +95,20 @@
 
 接入真实矿井：写一个实现相同 MCP 工具的适配器包（输入错误抛 `ToolError` 并写明原因；`get_personnel` 用 `PersonnelSnapshot.of(名单)` 构造），先通过 `python -m rescue_contract.conformance <URL>`，再替换 mine_data 的地址。
 
-## 8. 过渡期（P0–P4）
+## 8. 第一版组件的去向（P4 完成，2026-11-04）
 
-第二版逐阶段替换第一版，评测在每个阶段结束时跑：
-
-| 第一版组件 | 第二版去向 | 停用时间 |
+| 第一版组件 | 第二版去向 | 状态 |
 | --- | --- | --- |
-| `fire_model`、`ventnet`、`dispatch` 的算法和参数 | 技能脚本和 `references/` | P4 后 |
-| `workflow` 服务、研判快照（`var/snapshots/`） | 证据插件、固定流程插件、记录（`RESCUE_RECORD_DIR`） | P4 后 |
-| 值守进程 `rescue_workflow.monitor` | `check_mine(watch)` 后台任务 | P4 后 |
-| `kb` MCP | 知识库插件；`check_plan_redlines` 移到 actions 的 `precheck_plan` | P2 后 |
-| `rescue-plan`、`rescue-compliance` 预设 | `draft_sealing_plan` 的阶段 | P3 后 |
+| `fire_model`、`ventnet`、`dispatch` 的算法和参数 | 技能脚本和 `references/` | 已停用（P4）：`make up` 不再启动 |
+| `workflow` 服务、研判快照（`var/snapshots/`） | 证据插件、固定流程插件、记录（`RESCUE_RECORD_DIR`） | 已停用（P4）；复盘时间线 `review_timeline` 尚未迁移 |
+| 值守进程 `rescue_workflow.monitor` | `check_mine(watch)` 后台任务 | 已停用（P4） |
+| `kb` MCP | 知识库插件；`check_plan_redlines` 移到 actions 的 `precheck_plan` | 已停用（P4） |
+| `rescue-plan`、`rescue-compliance` 预设、第一版技能草稿 | `draft_sealing_plan` 的阶段、第二版技能 | 已移除（P4） |
+| 确定性基线评测 `eval/baseline.py` | 改为运行 fire-assessment 的技能脚本 | P4 |
 
-在此之前，`make up` / `make dev` 仍按第一版启动，第一版的说明见 `docs/workflow-design.md` 和 ADR 0006。
+`make up` / `make dev` 只启动 mine_data 和 actions，DSH 用 bundle 里的第二版主预设（`dsh-bundle/presets/commander.patch.yml`）。
+第一版服务的 Python 包暂留在 `mcp/` 下，作为一致性测试（`mcp/workflow/tests/test_skill_parity.py`、`test_effect_parity.py` 等）的对照，
+需要时可以用 `scripts/mcp-up.sh fire_model` 等单独启动；删除放到以后的清理。第一版的说明见 `docs/workflow-design.md` 和 ADR 0006。
 
 ## 9. 大模型
 
@@ -120,7 +121,7 @@
 | `var/records/` | 证据插件（DSH 进程） | 证据、结果、报告记录（只新增不修改），指令发布时按编号核对 |
 | `var/actions-ledger.jsonl` | actions | 已发布指令台账 |
 | `var/audit/tool-actions.jsonl` | rescue-audit | 所有指令类工具调用结果（含被拦截、被拒绝） |
-| `var/snapshots/*.json` | workflow（第一版，P4 后停用） | 研判快照 |
+| `var/snapshots/*.json` | workflow（第一版，P4 起停用） | 研判快照（只读历史） |
 | `var/log/*.log`、`var/run/*.pid` | mcp-up.sh | 服务日志与进程 |
 | `var/eval/` | 评测、验证 | 评测用的台账、记录、审计和验证日志 |
 | `var/demo/` | Docker 演示环境 | 演示数据卷，不混进开发的 `var/` |

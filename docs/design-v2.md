@@ -277,7 +277,7 @@ class Record(_Model):
 | --- | --- |
 | `run_fire_assessment(panel)` | 采集证据 → 运行 alarms、warning、stage、trend、explosion_triangle（逐个束管测点）、escalation；等级 ≥ orange 时运行 personnel → 渲染研判报告（含风险图）→ 阶段“研判说明”：只从给定清单里选关注点和建议的下一步 → 交付 |
 | `draft_sealing_plan(panel, human_inputs?, leak_m3_min?, target_o2_pct?)`（P3 实现见下方说明） | 采集证据 → 运行 skeleton、materials → 阶段“方案编写”（`sealing-plan` 技能）：选择可选步骤、巷道，填写步骤说明 → 调 actions 的红线预检 → 阶段“合规审核”（`plan-compliance` 技能，条文由代码按红线规则表和方案步骤查好后提供）：逐项给出人工复核结论和引用条文编号 → 不通过时把意见交回“方案编写”，最多 2 轮（占位）→ 生成方案记录和方案文本 → 交付，返回方案（含 `record_id`）给主预设提交 |
-| `review_effect(panel, since?)` | 采集证据（since 缺省时从指令台账取最近一次下发时间）→ 运行 effect → 渲染复评报告 → 交付 |
+| `review_effect(panel, since?)` | 采集证据（since 缺省时从指令台账取最近一次下发时间：经 DSH 工具管道调 actions 的只读工具 `query_last_issued`，P4）→ 运行 effect → 渲染复评报告 → 交付。采集窗口随 since 变化：采集清单的测点组用 `before_since_h`（从 since 之前若干小时取到现在） |
 
 `draft_sealing_plan` 的实现（P3，`dsh-bundle/src/fire-loop/sealing.ts`、`plan-stages.ts`）：采集（sealing-plan 的 plan 清单，测点组与完整研判相同）→ explosion_triangle、warning、personnel（总是计算）→ skeleton → 每轮：阶段“方案编写”（选可选步骤、密闭巷道、写补充说明和概述；失败时用缺省选择并注明）→ compose → actions 的 `precheck_plan`（`redlines_only=true`）→ scope → 条文索引取原文 → 方案文本 → 阶段“合规审核”（逐项结论、只能引用给定条号）→ review；不通过时把红线问题和不通过项的意见交回“方案编写”，最多 2 轮。审核记录里带着方案本身，下发时只提交它的编号。红线预检不通过且有缺失的人工确认项时返回 `HumanInputRequest`。
 
@@ -439,7 +439,7 @@ class Record(_Model):
 | 新的实时报警 | 出现基线里没有的报警（按“规则编号 + 测点”区分） |
 | 预警等级升高 | 等级高于基线（任何一级） |
 | 自燃阶段推进 | 阶段序号大于基线 |
-| 数据中断 | 必需测点连续 3 个检测周期（30 矿井分钟）没有新数据，或取数连续失败 3 次 |
+| 数据中断 | 必需参数的最新读数早于 `data_gap_h`（按测点组，占位：束管 3 小时、上隅角和回风巷 0.75 小时，约 3 个采样周期），或取数连续失败 3 次。（初稿是“连续 3 个检测周期没有新数据”，P4 实现时发现束管 1 小时、安全监控 15 分钟采一次，都长于 10 分钟的检测间隔，按周期会误报，改为按时长） |
 | 必需测点失效 | 基线时正常的必需测点被判为故障或卡值 |
 
 不算异常（只写进检测记录）：等级或阶段下降、等级不变时读数的波动、非必需测点故障。

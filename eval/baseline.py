@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""确定性基线评测：不经过大模型，直接用 fire-model 的计算逐小时扫描各标准场景。
+"""确定性基线评测：不经过大模型，用 fire-assessment 技能的脚本逐小时扫描各标准场景。
+
+第二版（P4 起）：按技能的采集清单（check）用 Python 采集小工具取证据，运行 warning.py、alarms.py（与证据插件同一套运行规则），
+不再调用第一版 fire_model。
 
 目的：
 1. 给“模型层”（预警分级、数据质量、复燃报警）一个可回归的基线——改阈值、改模拟参数、改算法后跑一遍就知道变好还是变坏；
@@ -19,35 +22,47 @@ import sys
 from pathlib import Path
 
 import yaml
-from rescue_contract.client import MineData
-from rescue_fire_model import alarms, warning
+from rescue_contract.collect import collect, mcp_caller, parse_collect_spec
+from rescue_contract.skills import load_skill, run_script
 from rescue_mine_data_sim.scenarios import load_all
 from rescue_mine_data_sim.server import SimHolder, build_server
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECT = yaml.safe_load((ROOT / "eval" / "expectations.yaml").read_text(encoding="utf-8"))
 LEVELS = ["none", "blue", "yellow", "orange", "red"]
+FA = load_skill(ROOT / "skills" / "fire-assessment")
+SPEC = parse_collect_spec((FA.dir / "references" / "collect.yaml").read_text(encoding="utf-8"))
+
+
+def _run(script: str, data: dict) -> dict:
+    r = run_script(FA.scripts[script], data)
+    if not r.ok:
+        raise RuntimeError(f"fire-assessment/{script}：{r.status} {r.detail}")
+    return r.output["result"]
 
 
 async def scan(scenario_id: str, step_h: float, horizon_h: float, apply: list[dict] | None = None, check_reignition: bool = False) -> dict:
+    from rescue_contract.client import connect
+
     holder = SimHolder(scenario_id, manual_clock=True)
     pending = sorted(apply or [], key=lambda a: a["at_h"])
-    md = MineData(build_server(holder))
     timeline, first_at, reignition_at = [], {}, None
     t = 0.0
-    while t <= horizon_h + 1e-9:
-        if t:
-            holder.engine.clock.advance(step_h)
-        while pending and pending[0]["at_h"] <= t:
-            act = pending.pop(0)
-            holder.engine.apply(act["type"], act.get("params"), source="eval")
-        a = await warning.assess(md)
-        lvl = a.level.value
-        first_at.setdefault(lvl, t)
-        if check_reignition and reignition_at is None and await alarms.check_reignition(md):
-            reignition_at = t
-        timeline.append({"h": t, "level": lvl, "truth_c": holder.engine.hotspot()["temperature_c"]})
-        t += step_h
+    async with connect(build_server(holder)) as client:
+        call = mcp_caller(client)
+        while t <= horizon_h + 1e-9:
+            if t:
+                holder.engine.clock.advance(step_h)
+            while pending and pending[0]["at_h"] <= t:
+                act = pending.pop(0)
+                holder.engine.apply(act["type"], act.get("params"), source="eval")
+            ev = await collect(call, SPEC, "check", "1201")
+            lvl = _run("warning", {"evidence": ev})["level"]
+            first_at.setdefault(lvl, t)
+            if check_reignition and reignition_at is None and any(a["article"] == "第164条" for a in _run("alarms", {"evidence": ev})["alarms"]):
+                reignition_at = t
+            timeline.append({"h": t, "level": lvl, "truth_c": holder.engine.hotspot()["temperature_c"]})
+            t += step_h
     return {"scenario": scenario_id, "first_at_h": first_at, "max_level": max((p["level"] for p in timeline), key=LEVELS.index),
             "reignition_alarm_at_h": reignition_at, "timeline": timeline}
 

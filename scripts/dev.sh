@@ -3,7 +3,7 @@
 #
 #   scripts/dev.sh                       默认场景（.env 里的 RESCUE_SIM_SCENARIO）
 #   scripts/dev.sh --local-llm           改用本地化部署的大模型（profiles/local-llm.patch.yml）
-#   scripts/dev.sh --v2                  第二版主预设（profiles/v2.patch.yml，P4 之前是可选叠加）
+#   scripts/dev.sh --v2                  （P4 起第二版就是默认，参数保留为空操作，兼容旧命令）
 #   RESCUE_SIM_SCENARIO=s4-escalation scripts/dev.sh
 #
 # 退出 DSH 后 MCP 服务继续运行，用 scripts/mcp-down.sh 停止。
@@ -25,7 +25,7 @@ while [ $# -gt 0 ]; do
       : "${RESCUE_LLM_BASE_URL:?未设置 RESCUE_LLM_BASE_URL}" "${RESCUE_LLM_MODEL:?未设置 RESCUE_LLM_MODEL}"
       EXTRA+=(--patch profiles/local-llm.patch.yml); shift ;;
     --v2)
-      EXTRA+=(--patch profiles/v2.patch.yml); shift ;;
+      shift ;;   # P4 起第二版主预设在 bundle 里（dsh-bundle/presets/commander.patch.yml）
     *) break ;;
   esac
 done

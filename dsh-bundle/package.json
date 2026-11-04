@@ -22,9 +22,7 @@
     "bundle": {
       "patch": [
         "./cordis.patch.yml",
-        "./presets/commander.patch.yml",
-        "./presets/plan.patch.yml",
-        "./presets/compliance.patch.yml"
+        "./presets/commander.patch.yml"
       ]
     }
   },

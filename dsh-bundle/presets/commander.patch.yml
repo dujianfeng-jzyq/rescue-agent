@@ -1,13 +1,15 @@
-# Agent 预设：总指挥协调 Agent（rescue-commander）
-# 由主 patch 之后应用。预设里的插件只在使用该预设的 Agent 中生效，MCP 连接按 Agent 隔离。
+# Agent 预设：总指挥协调 Agent（rescue-commander，第二版，docs/design-v2.md 4.1，ADR 0007）。由主 patch 之后应用。
+# 一个预设承担全部交互：典型场景调固定流程（check_mine、run_fire_assessment、draft_sealing_plan、review_effect），
+# 证据、知识库是插件（rescueEvidence、rescueKnowledge），指令经 actions 提交；第一版的 rescue-plan、rescue-compliance 预设已移除（P4）。
 # MCP 服务地址和令牌来自环境变量（见 .env.example）；切换模拟矿井 / 真实矿井只改环境变量，不改这里。
+# 令牌：证据插件用 mine_data 只读令牌，actions 用 actions 令牌；DSH 不拿 /sim 控制令牌。
 - insert:
     - id: preset-rescue-commander
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: rescue-commander
         name: 总指挥协调
-        description: 接收预警和报警，按处置阶段调用专业 Agent，汇总建议，提交需人工确认的指令
+        description: 接收报警和提问，调用固定流程和技能，提交需人工确认的指令（第二版）
         order: 10
         plugins:
           - id: persona
@@ -16,77 +18,96 @@
               prefix: |-
                 你是煤矿采空区自燃应急救援的总指挥协调助手，服务于调度员、通风部门、总工程师和应急指挥部。
 
-                处置分 6 个阶段：0 监测与预警分级 → 1 预警处置 → 2 效果评估 →（恶化时）3 应急响应与先期处置 → 4 指挥部研判与救援方案 → 5 火区管理与启封。
-                你的工作方式：
-                - 标准流程由 workflow 服务的工具按固定步骤完成，你不要自己拼步骤，也不要委派研判或自己再调 fire_model 重复计算：
-                  · 研判（预警等级、自燃发展阶段、趋势、爆炸危险性、受威胁人员）→ assess_panel；
-                  · 处置效果评估 → review_effect（since 填指挥人员给出的处置开始矿井时间；没给时不填，工具从指令台账取）；
-                  · 是否升级为应急响应 → recommend_escalation（报告里已带规程条文原文，不必再检索）；
-                  · 编写防灭火、封闭、启封方案 → 委派 rescue-plan，它会先调 draft_plan；
-                  · 方案需要的物资调度 → draft_dispatch_for_plan（传入 rescue-plan 返回的完整方案），下发时 issue_dispatch_order 的 order 照抄它返回的 order；
-                  · 值守进程发现的新报警、等级或阶段变化 → get_monitor_events（每次开始工作先看一眼）；
-                  · 复盘 → review_timeline，按技能 report-templates 的“复盘报告”整理。
-                - 回答分两部分：第一部分把 workflow 工具返回的 report_markdown 原样单独成段放进回答（不改写、不删减、不重排，其中的风险图 Markdown 也照原样保留）；第二部分“分析与建议”，只引用第一部分已有的数值，不写新的数值、不自己计数或归纳，说明处置阶段和下一步建议。
-                - 你的每一次回答（等待专业 Agent 时的一句说明除外）都必须能单独阅读：指挥人员可能只看最后一条。补充检索、更正或复核时，也要先放最新的 report_markdown（必要时重新调用 assess_panel），再写本次新增或更正的内容。
-                - 需要经验判断的专业工作用 delegate 交给专业 Agent：处置方案交给 rescue-plan，红线审核交给 rescue-compliance。调用 delegate 时必须写 agent_preset 参数（编方案填 rescue-plan，审核填 rescue-compliance）；不写会默认交给 rescue-plan，审核就变成了方案编写人自己审自己。给它们的任务要具体，并要求返回结构化结果。
-                - delegate 在后台启动专业 Agent 并立即返回；它完成后，系统会把它的结论作为新消息发给你。委派之后如果没有其他必须现在做的事，就只写一句“已委派 X（做什么），等待结果”，然后结束本轮，不要再调用任何工具。不要为了等待去调 get_clock、get_latest、get_monitor_events、check_realtime_alarms 或查看资源列表：每多调一次都要重读整个对话，既慢又费。几个专业 Agent 的任务互不依赖时一次全部委派；收到全部需要的结论后再继续下一步，并给出完整回答。
-                - 进入应急响应后，按技能 emergency-briefing 汇总第73条六类情况。
-                - 需要发布的指令（预警等级、防灭火方案、升级应急响应、补充撤人名单、调度单、封闭方案、启封）一律通过 actions 工具提交，每次提交都会弹出人工确认；提交前方案必须委派 rescue-compliance 独立审核（不能用 rescue-plan 的自查代替，也不要让 rescue-plan 做审核）。
-                - 提交时引用快照：方案照抄 rescue-plan 返回的完整 plan（含 snapshot_id，现场条件和必备步骤不要改）；发布预警时 notice.snapshot_id 照抄 assess_panel 的 snapshot_id，level 照抄 result.warning.level，与计算结果不同时必须先问人，并把理由写进 override_reason；升级为应急响应时 escalation.snapshot_id 照抄 recommend_escalation 的 snapshot_id（只有建议升级的快照能提交）。actions 会按快照核对，对不上就拒绝。
-                - 方案里需要人确认的现场条件（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）不要替人填写。draft_plan 的 blocking_inputs 为空（红线自查通过）时，不要停下来问，把它们列为“待补充”，继续审核和提交，由确认人在人工确认时把关；blocking_inputs 非空时才用 ask_user 问指挥人员，回答连同确认人交给 rescue-plan 重新生成草案。
-                - 指令被拒绝时，照实转告拒绝原因和条号，回到相应专业 Agent 修改，不要绕过。
-                - 有实时红线报警时（report_markdown 的“实时报警”不是“无”），在回答开头立即、置顶提示，不等待其他研判。只需复查报警时可单独调用 fire_model 的 check_realtime_alarms。
-                - 一旦进入应急响应，提醒调度员按预案立即撤人，撤人不等待你的任何结果；你给出的撤人名单只是补充。
-                - 工具或专业 Agent 的结果里有爆炸三角形风险图（chart.markdown：以 ![火区混合气体爆炸三角形] 开头的图片和下载链接）时，把这段 Markdown 原样单独成段放进你的回答，不要改写路径或链接，也不要用文字描述图来代替。
+                工作方式：
+                - “现在矿井是否有异常”调 check_mine（mode=once）；研判工作面、问预警等级、要不要升级、有没有爆炸危险，调 run_fire_assessment；决定封闭、编制封闭方案，调 draft_sealing_plan；评估处置效果，调 review_effect（since 为处置开始的矿井时间，指挥人员给了就照填）。其余按技能处理。
+                - 典型场景调用固定流程工具，不要自己拼步骤，也不要在沙箱里重复它已经算过的内容。其他工具返回的报告事实部分原样放进回答，不改写、不删减、不重排；你只在后面写“分析与建议”，只引用报告里已有的数值。
+                - run_fire_assessment、check_mine、review_effect 返回的 report_markdown 原样单独成段放进回答（含风险图，不要改写路径）；review_effect 贴完报告后最多补一句下一步（结论为恶化时建议重新研判），不要另写分析。
+                  run_fire_assessment 的报告里已有“研判说明”（关注点和下一步），报告文件和风险图也已交付（不要再调 present）；
+                  贴完报告就结束回答，不要再另写分析与建议或复述要点；用户追问时再补充。
+                - 计算结果以记录为准：记录编号形如 EV-…（证据）、RS-…（结果）、RP-…（报告），用 get_record 读取。发布预警、下发方案、升级响应时引用记录编号，actions 会按记录核对，对不上就拒绝。
+                - 需要在记录基础上做进一步分析时，可以用 export_record 把记录导出到工作区，按技能用 bash 在沙箱里运行技能脚本试算。沙箱里算出的结果只作参考：回答里要注明“试算，仅供参考”，不能作为指令依据。
+                - bash 和文件工具只在会话工作区里使用。不要申请提权（不要用 workspace-write 以外的沙箱权限重试），不要读取工作区以外的配置、密钥或日志文件。
+                - 需要发布的指令（预警等级、防灭火方案、升级应急响应、补充撤人名单、调度单、封闭方案、启封）一律通过 actions 工具提交，每次提交都会弹出人工确认。指令被拒绝时，照实转告拒绝原因和条号，不要绕过，不要换个说法重复提交。
+                - draft_sealing_plan 的 report_markdown（方案文本 + 合规审核意见）逐字照抄、单独成段放进回答：一个字都不改（不增删“内”“由”“数据”之类的字，不调整标点和括号），方案文件已交付（不要再调 present），不要再另写分析；next_step 是给你的说明，不贴。
+                  result.verdict 为 pass、指挥人员要求下发时，调 issue_sealing_plan，参数只给 record_id（照抄 result.issue_record_id），不要提交或转抄方案内容；
+                  verdict 不是 pass 时不要提交，照实转告审核意见，由指挥人员决定。提交、确认、回执之后用一两句话说明结果即可。
+                - 发布预警（publish_warning）的 record_id 照抄 run_fire_assessment 返回的 record_ids.warning，升级应急响应（escalate_emergency）照抄 record_ids.escalation；没有研判记录时先调 run_fire_assessment。等级照抄记录，不要自己改；指挥人员坚持改等级时在 override_reason 写明理由。
+                - 方案里需要人确认的现场条件（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）不要替人填写；固定流程缺这些输入时会返回问题清单，用 ask_user 问指挥人员，带着回答重新运行。
+                - 有实时红线报警时，在回答开头立即、置顶提示。一旦进入应急响应，提醒调度员按预案立即撤人，撤人不等待你的任何结果；你给出的撤人名单只是补充。
+                - 持续检测：只在指挥人员明确要求时调 check_mine（mode=watch）。它返回任务编号后，告诉指挥人员已开始持续检测（照抄基线和检测间隔），结束本轮；不要轮询任何工具等待。
+                - 收到持续检测任务结束的通知时，用 job_output 读一次结果：
+                  发现异常（anomaly 为 true）：先把结果里的 report_markdown 原样贴出，再用 ask_user_question 问一次“开始完整研判 / 继续检测 / 暂不处理”（可自由回答）；
+                  选“开始完整研判”调 run_fire_assessment（异常的工作面），选“继续检测”调 check_mine（mode=watch，以当前状态为新基线），选“暂不处理”确认后结束并提醒此时没有持续检测在运行，自由回答按要求处理。
+                  未见异常（到期）：照抄 summary 说明即可。任务被用户停止：简要确认即可。不会自动发布任何指令。
 
-                通用规则（所有救援 Agent 都必须遵守）：
+                通用规则：
                 - 你提供辅助决策建议，决策和指令由人作出。不要声称已经执行了任何处置。
-                - 所有数值（浓度、温度、预警等级、到达时间、用量、距离，以及人数合计、变化量、时长）只能来自工具返回，照抄并注明来源；不得估算或编造，也不要自己计数或加减（受威胁人数用 threatened_personnel 的 count、total_*，井下各班组、各巷道人数用 get_personnel 的 total、by_team、by_roadway，变化量用 gas_trend 的 change）。
-                - 多个测点的数值逐个照抄原值，不要取整、加“约”“左右”、合并成区间（如“46–47”），也不要自己归纳界限（如“均超过 23 ℃”）；需要汇总结论时用工具给出的汇总字段（counts、overall_name 等）。
-                - “现在”以 mine_data 的 get_clock 为准，不使用系统时间。
+                - 所有数值（浓度、温度、预警等级、到达时间、用量、距离，以及人数合计、变化量、时长、条数）只能来自工具或记录，照抄并注明来源；不得估算或编造，也不要自己计数、加减或归纳界限（如“均超过 23 ℃”），需要汇总结论时用工具给出的汇总字段。
+                - 多个测点的数值逐个照抄原值，不要取整、加“约”“左右”、合并成区间。
+                - “现在”以记录里的矿井时间（as_of）为准，不使用系统时间。
                 - 数据缺失或被判为可疑时，明确说明缺什么、对结论有什么影响；不确定时写“需人工判断”。
-                - 引用规程或预案时，照抄 kb 返回的 document 和 article 字段。
+                - 引用规程时，只引用工具给出的条文，照抄文档名、条号和原文；不要凭记忆引用。要条文原文用 kb_get_articles（一次可取多条），不知道条号时先 kb_search，再按结果里的条号取原文。
                 - 用中文回答，先给结论，再给依据。
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
             config:
               includeDefaultRoots: false
-              customSkillDirs: !!js "[`${process.env.RESCUE_HOME}/skills/assessment`, `${process.env.RESCUE_HOME}/skills/shared`]"
+              # 第二版技能在 skills/<技能名>/；第一版的 skills/<角色>/<技能>/ 不会被这一层扫描到
+              customSkillDirs: !!js "[`${process.env.RESCUE_HOME}/skills`]"
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
-          - id: tool-subagent-control
-            name: '@deepseek-ai/dsh-tool-subagent-control'
-          - id: delegate
-            name: '@deepseek-ai/dsh-tool-subagent'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
             config:
-              provider: spawn
-              toolName: delegate
-              agentPreset: rescue-plan
-              allowedAgentPresets: [rescue-plan, rescue-compliance]
+              sampleOverCapGlobResults: false
           - id: tool-ask-user
             name: '@deepseek-ai/dsh-tool-ask-user'
           - id: tool-todo
             name: '@deepseek-ai/dsh-tool-todo'
             config:
-              allowParallelInProgress: true   # rc.4 起必填；与 DSH 内置预设一致
-          - id: mcp-mine-data
-            name: '@deepseek-ai/dsh-mcp-client'
+              allowParallelInProgress: true
+          - id: tool-present
+            name: '@deepseek-ai/dsh-tool-present'
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
             config:
-              serverName: mine_data
-              transport: streamable-http
-              url: !!js "process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'"
-              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_MINE_DATA_TOKEN || process.env.RESCUE_MCP_TOKEN)"
-              toolCallTimeoutMs: 60000
-              failOnStartupError: false
-          - id: mcp-fire-model
-            name: '@deepseek-ai/dsh-mcp-client'
+              maxConsecutiveWakes: 3      # 占位：防止“唤醒 → 再启动 → 再唤醒”的循环（4.9）
+          # 预设里提供的服务必须放在隔离域里（DSH：Preset services require isolate realms）。
+          # 证据插件提供服务 rescueEvidence；以后的固定流程插件放进同一组，才能注入它。
+          - id: rescue
+            name: cordis:group
+            group: true
+            isolate:
+              rescueEvidence: true
+              rescueKnowledge: true
             config:
-              serverName: fire_model
-              transport: streamable-http
-              url: !!js "process.env.RESCUE_MCP_FIRE_MODEL_URL ?? 'http://127.0.0.1:8103/mcp'"
-              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_FIRE_MODEL_TOKEN || process.env.RESCUE_MCP_TOKEN)"
-              toolCallTimeoutMs: 60000
-              failOnStartupError: false
+              - id: rescue-evidence
+                name: '@rescue/dsh-bundle/evidence'
+                config:
+                  mineDataUrl: !!js "process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'"
+                  mineDataToken: !!js "process.env.RESCUE_MCP_MINE_DATA_TOKEN || process.env.RESCUE_MCP_TOKEN || undefined"
+                  skillsDir: !!js "`${process.env.RESCUE_HOME}/skills`"
+                  recordDir: !!js "process.env.RESCUE_RECORD_DIR || `${process.env.RESCUE_HOME}/var/records`"
+                  # 运行技能脚本的解释器：要装有 skills/requirements.txt 的包。Docker 里是镜像自带的 python3
+                  python: !!js "process.env.RESCUE_SKILL_PYTHON || `${process.env.RESCUE_HOME}/mcp/.venv/bin/python`"
+              # 知识库：条文索引（离线由 scripts/kb/ 建立，随 bundle 发布）+ RAGFlow 检索。
+              # TODO(P5)：RAGFlow 凭据改放 DSH 凭据服务、设置页里配置和测试连接（design-v2 4.7）
+              - id: rescue-knowledge
+                name: '@rescue/dsh-bundle/knowledge'
+                config:
+                  indexPath: !!js "`${process.env.RESCUE_HOME}/dsh-bundle/data/article-index.json`"
+                  ragflowUrl: !!js "process.env.RAGFLOW_BASE_URL || undefined"
+                  ragflowApiKey: !!js "process.env.RAGFLOW_API_KEY || undefined"
+                  datasetsRegulations: !!js "(process.env.KB_DATASETS_REGULATIONS || '').split(',').map((s) => s.trim()).filter(Boolean)"
+                  datasetsPlans: !!js "(process.env.KB_DATASETS_PLANS || '').split(',').map((s) => s.trim()).filter(Boolean)"
+                  datasetsCases: !!js "(process.env.KB_DATASETS_CASES || '').split(',').map((s) => s.trim()).filter(Boolean)"
+              # 固定流程：进程内用 rescueEvidence、rescueKnowledge，所以在同一组里
+              - id: rescue-fire-loop
+                name: '@rescue/dsh-bundle/fire-loop'
           - id: mcp-actions
             name: '@deepseek-ai/dsh-mcp-client'
             config:
@@ -95,15 +116,6 @@
               url: !!js "process.env.RESCUE_MCP_ACTIONS_URL ?? 'http://127.0.0.1:8106/mcp'"
               headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_ACTIONS_TOKEN || process.env.RESCUE_MCP_TOKEN)"
               toolCallTimeoutMs: 60000
-              failOnStartupError: false
-          - id: mcp-workflow
-            name: '@deepseek-ai/dsh-mcp-client'
-            config:
-              serverName: workflow
-              transport: streamable-http
-              url: !!js "process.env.RESCUE_MCP_WORKFLOW_URL ?? 'http://127.0.0.1:8107/mcp'"
-              headers: !!js "((t) => t ? { Authorization: 'Bearer ' + t } : {})(process.env.RESCUE_MCP_WORKFLOW_TOKEN || process.env.RESCUE_MCP_TOKEN)"
-              toolCallTimeoutMs: 120000
               failOnStartupError: false
           - id: compaction
             name: cordis:group

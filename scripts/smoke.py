@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""冒烟测试：逐个连接已启动的 MCP 服务，列出工具并调用关键工具；检查红线预检接口。
+"""冒烟测试：逐个连接已启动的 MCP 服务（第二版：mine_data、actions），列出工具并调用关键工具；检查红线预检接口。
 
 不需要 DSH 和大模型。用法（先 scripts/mcp-up.sh）：
     uv run --project mcp python scripts/smoke.py
@@ -20,23 +20,13 @@ from rescue_contract.serving import auth_headers
 
 SERVERS = {
     "mine_data": os.environ.get("RESCUE_MCP_MINE_DATA_URL", "http://127.0.0.1:8101/mcp"),
-    "ventnet": os.environ.get("RESCUE_MCP_VENTNET_URL", "http://127.0.0.1:8102/mcp"),
-    "fire_model": os.environ.get("RESCUE_MCP_FIRE_MODEL_URL", "http://127.0.0.1:8103/mcp"),
-    "dispatch": os.environ.get("RESCUE_MCP_DISPATCH_URL", "http://127.0.0.1:8104/mcp"),
-    "kb": os.environ.get("RESCUE_MCP_KB_URL", "http://127.0.0.1:8105/mcp"),
     "actions": os.environ.get("RESCUE_MCP_ACTIONS_URL", "http://127.0.0.1:8106/mcp"),
-    "workflow": os.environ.get("RESCUE_MCP_WORKFLOW_URL", "http://127.0.0.1:8107/mcp"),
 }
 REDLINE_URL = os.environ.get("RESCUE_REDLINE_CHECK_URL", "http://127.0.0.1:8106/redlines/check")
 
 CALLS = {
     "mine_data": [("get_clock", {}), ("get_latest", {"sensor_ids": ["SM-1201-UC"]})],
-    "ventnet": [("threatened_personnel", {"source_roadway_id": "R-1201-FACE"})],
-    "fire_model": [("assess_warning_level", {}), ("check_realtime_alarms", {}), ("assess_explosion_risk", {"sensor_id": "BT-1201-G1"})],
-    "dispatch": [("estimate_inert_gas", {"leak_m3_min": 40, "current_o2_pct": 9, "target_o2_pct": 6})],
-    "kb": [("search_regulations", {"query": "封闭火区 惰性气体"})],
-    "actions": [],  # 指令类工具不在冒烟测试里调用
-    "workflow": [("assess_panel", {})],
+    "actions": [("query_last_issued", {"panel": "1201"})],  # 只读；指令类工具不在冒烟测试里调用
 }
 
 failed = 0

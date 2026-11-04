@@ -6,7 +6,7 @@
 - 每个 `!!js` 表达式在 Node 中语法正确，并能用示例环境变量求值；
 - 预设：id 唯一、带 persona、技能目录存在且包含 skills/shared（第二版：技能根目录 skills/）、MCP serverName 合法且在预设内唯一、
   只有总指挥协调预设挂载 actions 服务、MCP 地址来自 RESCUE_MCP_* 环境变量；
-  profiles/ 下按 id 覆盖预设的叠加（如第二版 profiles/v2.patch.yml）按同样规则检查；
+  profiles/ 下按 id 覆盖预设的叠加按同样规则检查；
 - 审批策略写死为 ask，权限预设全部是 ask（人工确认不能被关掉）；
 - package.json 的 dsh.bundle.patch 列出了全部 patch 文件；
 - 本机装了 dsh 时，额外用 DSH 自带的插件包校验预设里每个插件的 config
@@ -210,7 +210,7 @@ def main() -> int:
         if p.get("approval") != "ask":
             errors.append(f"cordis.patch.yml: 权限预设 {name} 的 approval 必须是 ask")
 
-    expected = {"rescue-commander", "rescue-plan", "rescue-compliance"}  # 研判、调度改由 workflow 完成（ADR 0006）
+    expected = {"rescue-commander"}  # 第二版只有一个预设（ADR 0007）；方案、合规由固定流程的阶段完成
     if preset_ids != expected:
         errors.append(f"预设集合不符：{sorted(preset_ids)}")
 

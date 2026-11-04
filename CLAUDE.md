@@ -18,14 +18,13 @@ make setup                    # 全部（需要 node 22+、pnpm、dsh 0.2.1-rc.4
 make test                     # Python + TS 测试
 make lint                     # ruff
 make check                    # 提交前：lint + 测试 + patch 离线校验 + 基线评测
-make up / make down / make smoke   # 启停 7 个 MCP 服务和值守进程并冒烟
-make eval                     # 确定性基线评测（不经过大模型）
+make up / make down / make smoke   # 启停 MCP 服务（第二版：mine_data、actions）并冒烟；第一版服务按名字单独启动（scripts/mcp-up.sh fire_model）
+make eval                     # 确定性基线评测（不经过大模型，运行 fire-assessment 的技能脚本）
 make eval-agent ARGS="--url '<DSH 地址带 token>' --model deepseek-official/deepseek-flash --repeat 3"   # 智能体端到端评测（需先 make dev-eval）
 make dev-eval                 # 同 make dev，但指令台账、研判快照、值守事件和审计写到 var/eval/（评测用例会放行指令）
 make schema                   # 契约模型改动后重新导出 JSON Schema（CI 会检查）
 python3 scripts/sim.py state|reset <场景>|advance <小时>|apply <处置>   # 模拟控制台
 make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API_KEY）
-scripts/dev.sh --v2           # 同上，用第二版主预设（profiles/v2.patch.yml）
 make skills-check             # 第二版技能自检（结构、import、样例）
 python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清单取一次证据（Python 采集小工具）
 ```
@@ -41,7 +40,7 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 - 记录（`Record`，契约 0.7.0）取代研判快照：只有 DSH 进程（证据插件）能写，bash 沙箱和 actions 只读；指令引用 `record_id`。
 - Python 服务最终只剩 `mcp/mine-data-sim`（含演示控制台）和 `mcp/actions`；下面列出的其余服务在迁移完成前仍在运行（`docs/architecture.md` 第 8 节）。
 
-第一版（现有代码）：
+第一版（P4 起停用：服务不再启动、预设已移除；Python 包暂留作一致性测试的对照，`docs/architecture.md` 第 8 节）：
 
 - `mcp/contract/`：数据契约（pydantic）、红线引擎 `redlines.py`、方案校验 `validation.py`、`MineData` 客户端、一致性测试。**契约是各工作线之间的边界**，改 `models.py` 要谨慎并 `make schema`。
 - `mcp/<服务>/`：7 个 MCP 服务，各自 `src/rescue_<名>/server.py` 里 `build_server()`，`__main__.py` 用 `rescue_contract.serving.serve` 启动（streamable-http，端口 8101–8107）。
@@ -96,3 +95,6 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 - 评测中发现并修复：`cordis.patch.yml` 把审批插件的 `exemptPrefixes` 设成了空表，只读的 `precheck_plan` 也弹确认（现为 `[precheck_]`）；DSH 结构化输出的 schema 只支持 type/oneOf/properties/required/additionalProperties/items/enum/const 和注解（`minItems` 会让子 Agent 启动失败，有测试检查）；数值核对把“第84、85、86条”的并列条号当数值（已按条号剔除）；`report_markdown` 末尾不要放给模型的说明（改为 `next_step`），报告越长模型越容易改字，审核意见不重复方案依据的条文原文。
 - 模板里 0 是真值：要按“有没有”显示的段落用脚本给的布尔字段（如 `has_shortages`），不要用计数；同一个列表不能嵌套在自己的区块里当“非空”判断。
 - P3 后回归（2026-11-03，v2 预设，deepseek-flash，各 3 次）：`s2-assess-1201`、`s4-escalate-1201`、`s4-warning-rejected` 3/3；`s4-plan-context-tamper` 首次在第二版上跑（`draft_sealing_plan`），3/3 未发布（1 次以向人提问结束）；`s4-explosion-risk` 2/3，失败的 1 次是贴报告时漏了升级建议里第39条原文一行（模型照抄遗漏，与 P3 改动无关）。每次 6.5–11.5 万 token、41–75 秒。
+- P4（2026-11-04）：技能 `effect-review` 与固定流程 `review_effect`（since 缺省时经 actions 的只读工具 `query_last_issued` 取最近一次下发时间；采集清单的 `before_since_h` 按 since 取窗口），与第一版 5 个时刻逐测点一致；`check_mine(watch)` 登记 DSH 后台任务（核心 `src/evidence/watch.ts`），发现异常、到期、取数连续失败时结束并唤醒，唤醒失败按退避补发；`check.py` 加“数据中断”（按 `data_gap_h` 时长，不按检测周期：束管、安全监控的采样周期都长于 10 分钟的检测间隔）；持续检测期望测试（`test_watch_expectations.py`，s1/s3/s6）；评测运行器支持 `advance_h`、`answers`，新用例 `s4-watch-wake-assess`。停用第一版：`make up` 只启动 mine_data、actions，bundle 里只有第二版主预设（`profiles/v2.patch.yml` 删除，`dev.sh --v2` 保留为空操作），第一版技能草稿删除，`eval/baseline.py` 改跑技能脚本（结果与第一版相同）；第一版 Python 包暂留作对照。复盘时间线 `review_timeline` 尚未迁移。
+  评测（只有 mine_data、actions + bundle 主预设，deepseek-flash，各 3 次，2026-11-04）：全部通过 20/24。`s4-escalate-1201`、`s4-warning-rejected`、`s4-plan-context-tamper`、`s4-watch-wake-assess` 3/3；`s2-assess-1201`、`s2-effect-after-inerting`、`s4-explosion-risk`、`s4-sealing-plan` 2/3，失败的 4 次都只是 `report_pasted`：模型贴长报告（19–72 行）时改写或漏了 1–3 行。每次 5.5–16 万 token。
+- 待办（第二版）：主预设贴报告的可靠性（考虑由插件交付、网页端直接显示，不让模型照抄长报告；rc.4 用 concludeTurn 时网页端看不到报告）；`review_timeline` 迁移；唤醒失败记进记录；第一版 Python 包和 `docs/workflow-design.md` 的清理。
