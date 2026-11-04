@@ -17,6 +17,7 @@ from typing import Any
 
 import uvicorn
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -123,6 +124,20 @@ def ensure_text_content(server: MCPServer) -> MCPServer:
     return server
 
 
+ALLOWED_HOSTS_ENV = "RESCUE_MCP_ALLOWED_HOSTS"
+
+
+def transport_security() -> TransportSecuritySettings:
+    """MCP 的 DNS 重绑定防护：缺省只认本机的 Host（SDK 的默认）；容器里按服务名访问时用 RESCUE_MCP_ALLOWED_HOSTS
+    加上允许的 Host（逗号分隔，如 mine-sim:*），防护保持开启。"""
+    extra = [h.strip() for h in os.environ.get(ALLOWED_HOSTS_ENV, "").split(",") if h.strip()]
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*", *extra],
+        allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*", *(f"http://{h}" for h in extra)],
+    )
+
+
 def build_app(server: MCPServer, public_prefixes: tuple[str, ...] = (), key: str | None = None) -> ASGIApp:
     """key 是服务名（缺省取 server.name），决定认哪个令牌；mine_data 的 /sim/ 另认控制令牌。"""
     key = key or server.name
@@ -132,7 +147,7 @@ def build_app(server: MCPServer, public_prefixes: tuple[str, ...] = (), key: str
     async def healthz(_request):
         return JSONResponse({"ok": True, "server": server.name})
 
-    app: ASGIApp = server.streamable_http_app(stateless_http=True, json_response=True)
+    app: ASGIApp = server.streamable_http_app(stateless_http=True, json_response=True, transport_security=transport_security())
     token = service_token(key)
     path_tokens = {}
     if key == "mine_data" and (control := sim_control_token()):

@@ -118,3 +118,19 @@ def test_only_control_token_set(env):
 def test_sim_prefix_only_for_mine_data(env):
     env.setenv("RESCUE_SIM_CONTROL_TOKEN", "control")
     assert _status(_app("actions"), "/sim/state", None) == 200
+
+
+def test_allowed_hosts_for_container_names(monkeypatch):
+    """容器之间按服务名访问：缺省只认本机的 Host（DNS 重绑定防护，421）；RESCUE_MCP_ALLOWED_HOSTS 加白名单后放行。"""
+    from mcp.server.mcpserver import MCPServer
+    from rescue_contract.serving import build_app
+    from starlette.testclient import TestClient
+
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    headers = {"Host": "mine-sim:8101", "Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    monkeypatch.delenv("RESCUE_MCP_ALLOWED_HOSTS", raising=False)
+    with TestClient(build_app(MCPServer("t1"), key="t1")) as c:
+        assert c.post("/mcp", json=body, headers=headers).status_code == 421
+    monkeypatch.setenv("RESCUE_MCP_ALLOWED_HOSTS", "mine-sim:*")
+    with TestClient(build_app(MCPServer("t2"), key="t2")) as c:
+        assert c.post("/mcp", json=body, headers=headers).status_code == 200

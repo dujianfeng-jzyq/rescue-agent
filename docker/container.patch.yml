@@ -1,0 +1,4 @@
+# 容器里没有 xdg-user-dir，DSH 找不到“文档”目录，建不了默认工作区（验证清单 #21）。会话工作区放在数据卷里。
+- id: workspace-controller
+  config:
+    documentsDirectory: /home/node/Documents

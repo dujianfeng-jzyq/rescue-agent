@@ -1,0 +1,11 @@
+.git
+.dsh-home
+var
+**/node_modules
+dsh-bundle/lib
+mcp/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+experiments
+spike

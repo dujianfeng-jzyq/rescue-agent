@@ -87,6 +87,8 @@
                   mineDataToken: !!js "process.env.RESCUE_MCP_MINE_DATA_TOKEN || process.env.RESCUE_MCP_TOKEN || undefined"
                   skillsDir: !!js "`${process.env.RESCUE_HOME}/skills`"
                   recordDir: !!js "process.env.RESCUE_RECORD_DIR || `${process.env.RESCUE_HOME}/var/records`"
+                  # 技能脚本的运行目录（输入、输出文件）；缺省为记录目录旁的 runs/。容器里记录目录的上级不可写，单独给一个卷
+                  runDir: !!js "process.env.RESCUE_RUN_DIR || undefined"
                   # 运行技能脚本的解释器：要装有 skills/requirements.txt 的包。Docker 里是镜像自带的 python3
                   python: !!js "process.env.RESCUE_SKILL_PYTHON || `${process.env.RESCUE_HOME}/mcp/.venv/bin/python`"
               # 知识库：条文索引（离线由 scripts/kb/ 建立，随 bundle 发布）+ RAGFlow 检索。

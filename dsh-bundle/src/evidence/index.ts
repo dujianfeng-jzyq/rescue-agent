@@ -29,6 +29,8 @@ export interface Config {
   mineDataTimeoutMs: number
   skillsDir: string
   recordDir: string
+  /** 技能脚本的运行目录（输入、输出、图）；缺省为记录目录旁的 runs/ */
+  runDir?: string
   python: string
   /** 持续检测读矿井时钟的真实间隔（毫秒） */
   watchPollMs: number
@@ -61,6 +63,7 @@ export default class RescueEvidence extends Service {
     mineDataTimeoutMs: Schema.number().default(30_000),
     skillsDir: Schema.string().required(),
     recordDir: Schema.string().required(),
+    runDir: Schema.string(),
     python: Schema.string().default('python3'),
     watchPollMs: Schema.number().default(2000),
     watchMaxRealHours: Schema.number().default(24),
@@ -76,6 +79,7 @@ export default class RescueEvidence extends Service {
     this.evidence = new Evidence({
       skillsDir: config.skillsDir,
       recordDir: config.recordDir,
+      ...(config.runDir ? { runDir: config.runDir } : {}),
       python: config.python,
       mineData: (tool, args) => this.mineData.call(tool, args),
     })

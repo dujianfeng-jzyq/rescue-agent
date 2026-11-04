@@ -587,6 +587,8 @@ class Record(_Model):
 - 演示数据写到单独的数据卷（`var/demo`），不混进开发的 `var/`（约定 9）。
 - 本机开发方式（`make dev`）保留。
 
+实现（P5，2026-11-04）：`docker/python.Dockerfile`（mine-sim、actions 共用，按 uv.lock 安装）、`docker/dsh.Dockerfile`（DSH 0.2.1-rc.4 + bundle + 技能脚本的 Python，构建时跑技能自检）、`docker/compose.yml`、`scripts/demo.sh`（`make demo-up` / `demo-down` / `demo-reset` / `demo-logs`）。数据卷都在 `var/demo/`（records、runs、ledger、audit、dsh-home、documents），令牌第一次启动时随机生成在 `var/demo/tokens.env`。容器间按服务名访问 MCP 要 `RESCUE_MCP_ALLOWED_HOSTS`（DNS 重绑定防护的白名单）；证据插件的脚本运行目录单独一个卷（`RESCUE_RUN_DIR`）。
+
 验证清单 #21（2026-11-03）：容器里沙箱能工作，权限与本机一致。Docker 默认安全配置下 DSH 用 Landlock（部分强制）代替 bwrap；保持默认配置，不为 bwrap 放开容器的 seccomp、AppArmor 和 /proc 屏蔽。DSH 镜像要显式配置 `workspace-controller.documentsDirectory`（精简镜像没有 `xdg-user-dir`）。
 
 ## 8. 迁移

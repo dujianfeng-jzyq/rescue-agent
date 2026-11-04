@@ -1,5 +1,5 @@
 # 常用命令入口。具体说明见 README.md。
-.PHONY: setup setup-py dev dev-eval up down smoke test test-py test-ts lint check skills-check eval eval-agent schema sim-state clean
+.PHONY: setup setup-py dev dev-eval up down smoke test test-py test-ts lint check skills-check eval eval-agent schema sim-state clean demo-up demo-down demo-reset demo-logs
 
 UV := uv run --project mcp
 
@@ -16,6 +16,14 @@ up:               ## 只启动 MCP 服务（含模拟矿井）
 	scripts/mcp-up.sh
 down:
 	scripts/mcp-down.sh
+demo-up:          ## 演示环境（Docker）：构建、启动、等健康检查，打印网页端和控制台地址
+	scripts/demo.sh up
+demo-down:
+	scripts/demo.sh down
+demo-reset:       ## 清空 var/demo 的演示数据并重新启动（模拟矿井回到常态）
+	scripts/demo.sh reset
+demo-logs:
+	scripts/demo.sh logs
 smoke:            ## 对已启动的服务做冒烟测试
 	$(UV) python scripts/smoke.py
 
