@@ -47,6 +47,24 @@ def run(skill: str, script: str, data: dict) -> dict:
     return r.output
 
 
+def stale_evidence(base: dict, group: str, sensor_id: str, hours: float) -> dict:
+    """某测点最近 hours 小时没有新数据（去掉这段读数，最新值取剩下的最后一个）。"""
+    from datetime import datetime, timedelta
+
+    ev = copy.deepcopy(base)
+    cut = datetime.fromisoformat(ev["as_of"]) - timedelta(hours=hours)
+    for g in ev["groups"].values():
+        if sensor_id not in g["measurands"]:
+            continue
+        g["readings"] = [r for r in g["readings"] if r["sensor_id"] != sensor_id or datetime.fromisoformat(r["ts"]) <= cut]
+        last = {}
+        for r in g["readings"]:
+            if r["sensor_id"] == sensor_id:
+                last[r["measurand"]] = r
+        g["latest"] = sorted([r for r in g["latest"] if r["sensor_id"] != sensor_id] + list(last.values()), key=lambda r: (r["sensor_id"], r["measurand"], r["ts"]))
+    return ev
+
+
 def methane_evidence(base: dict) -> dict:
     """在正常场景的证据上把上隅角甲烷改成超限且上升（标准场景里没有第75条报警的时刻）。"""
     ev = copy.deepcopy(base)
@@ -82,6 +100,7 @@ def build_inputs() -> dict[tuple[str, str, str], dict]:
         (FA, "check", "s1-normal-24h-no-anomaly"): {"evidence": s1_24},
         (FA, "check", "s6-sensor-faults-36h-failed"): {"evidence": s6_36},
         (FA, "check", "s4-escalation-60h-vs-45h"): {"evidence": s4_60, "baseline": run(FA, "check", {"evidence": s4_45})},
+        (FA, "check", "s1-normal-24h-data-gap"): {"evidence": stale_evidence(s1_24, "tubes", "BT-1201-G2", 4)},
         (XT, "explosion_triangle", "s6-sensor-faults-36h-panel"): {"evidence": s6_36},
         (XT, "explosion_triangle", "s1-normal-24h-g1-zone-ii"): {"evidence": s1_24, "options": {"sensor_id": "BT-1201-G1"}},
         (XT, "explosion_triangle", "manual-sample"): {

@@ -15,6 +15,9 @@
 {{#check.result.failed_required}}
 - 必需测点失效：{{.}}
 {{/check.result.failed_required}}
+{{#check.result.stale_required}}
+- 数据中断（超过规定时长没有新数据）：{{.}}
+{{/check.result.stale_required}}
 {{#check.result.missing_groups}}
 - 必需测点组没有匹配的测点：{{.}}
 {{/check.result.missing_groups}}

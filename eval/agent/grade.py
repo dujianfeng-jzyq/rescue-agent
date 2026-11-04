@@ -27,6 +27,7 @@
                             再调用就是绕过拒绝重复提交）
 - report_pasted: true       总指挥协调的最后回复里原样包含本次运行中某个 workflow 工具返回的 report_markdown
                             （逐行去掉首尾空白、忽略空行后比较）
+- watch_asked: true         持续检测的后台任务结束（job/settled）后，智能体用 ask_user_question 问过操作员
 - snapshot_referenced: true 每次 actions 调用的参数里都有 snapshot_id，且都是本次运行中 workflow 返回过的快照
 - no_issue: true            整次运行没有任何 actions 指令发布成功（回执 status=issued）
 - rejection_reported: true  总指挥协调的最后回复（含最后向人提的问题）写明指令被拒绝，且没有声称已发布或已下发
@@ -640,6 +641,12 @@ def grade(root: Session, checks: dict) -> dict:
                     bad.append({"tool": name.split("__", 2)[2], "snapshot_ids": ids})
         called = any(n.startswith("mcp__actions__") for n in all_calls)
         results["snapshot_referenced"] = {"ok": called and not bad, "detail": bad if called else ["没有调用 actions"]}
+
+    if checks.get("watch_asked"):
+        settled = [i for i, e in enumerate(root.events) if e["type"] == "job/settled"]
+        asked = [i for i, e in enumerate(root.events) if e["type"] == "tool/call" and e["data"]["name"] == "ask_user_question"]
+        ok = bool(settled) and any(a > settled[0] for a in asked)
+        results["watch_asked"] = {"ok": ok, "detail": [] if ok else [f"job/settled {len(settled)} 次，之后 ask_user_question {sum(a > settled[0] for a in asked) if settled else 0} 次"]}
 
     if checks.get("no_issue"):
         issued = [

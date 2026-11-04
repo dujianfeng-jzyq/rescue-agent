@@ -4,12 +4,15 @@
 2. 实时报警（同 alarms.py）；
 3. 预警等级（同 warning.py）；
 4. 自燃阶段（同 stage.py）；
-5. 与基线比较，判定是否异常（watch.yaml 的 anomaly）。
+5. 数据中断：必需参数的最新读数早于 watch.yaml 的 data_gap_h（按测点组，约为几个采样周期）；
+6. 与基线比较，判定是否异常（watch.yaml 的 anomaly）。
 
-输入：{"evidence": <证据内容>, "baseline": <上一次 check.py 的输出，可省略>}。
-没有基线时与“正常状态”比较：等级无、未见自燃征兆、无报警、无失效测点。
+输入：{"evidence": <证据内容>, "baseline": <持续检测开始时的 check.py 输出，可省略>}。
+没有基线时与“正常状态”比较：等级无、未见自燃征兆、无报警、无失效测点、无数据中断。
 输出 result：等级、阶段、报警、失效测点、anomaly 与 reasons、state（下一次检测的基线）。
 """
+
+from datetime import datetime
 
 from _alarms import check_all
 from _evidence import series
@@ -18,7 +21,7 @@ from _skill import evidence, load_reference, main
 from _warning import LEVELS, NAMES, STAGE_NAMES, STAGES, assess, classify_stage
 
 VERSION = "check/1.0.0"
-NOMINAL = {"level": "none", "stage": "no_sign", "alarm_keys": [], "failed": [], "missing_groups": [], "nominal": True}
+NOMINAL = {"level": "none", "stage": "no_sign", "alarm_keys": [], "failed": [], "missing_groups": [], "stale": [], "nominal": True}
 
 
 def failed_required(ev, required, window_h):
@@ -37,6 +40,25 @@ def failed_required(ev, required, window_h):
     return sorted(out)
 
 
+def stale_required(ev, required, max_age_h):
+    """必需参数的最新读数早于 data_gap_h（按测点组）的，记为数据中断：“测点/参数（已 N 小时没有新数据）”的键。"""
+    now = datetime.fromisoformat(ev["as_of"])
+    out = []
+    for group, measurands in required.items():
+        g = ev["groups"].get(group)
+        if g is None or group not in max_age_h:
+            continue
+        latest = {}
+        for r in g["latest"]:
+            if r["measurand"] in measurands:
+                key = f"{r['sensor_id']}/{r['measurand']}"
+                latest[key] = max(latest.get(key, r["ts"]), r["ts"])
+        for key, ts in latest.items():
+            if (now - datetime.fromisoformat(ts)).total_seconds() > max_age_h[group] * 3600:
+                out.append(key)
+    return sorted(out)
+
+
 def compare(state, base, cfg):
     reasons = []
     if cfg.get("new_alarm"):
@@ -49,6 +71,8 @@ def compare(state, base, cfg):
     if cfg.get("required_failed"):
         reasons += [f"必需测点失效：{x}" for x in state["failed"] if x not in base["failed"]]
         reasons += [f"必需测点组没有匹配的测点：{x}" for x in state["missing_groups"] if x not in base["missing_groups"]]
+    if cfg.get("data_gap"):
+        reasons += [f"数据中断：{x} 超过规定时长没有新数据" for x in state.get("stale", []) if x not in base.get("stale", [])]
     return reasons
 
 
@@ -68,6 +92,7 @@ def run(data, _args):
         "alarm_keys": sorted({f"{a['rule_id']}@{a['sensor_id']}" for a in alarms}),
         "failed": failed_required(ev, watch["required"], th["window_h"]),
         "missing_groups": sorted(m["group"] for m in ev.get("missing", [])),
+        "stale": stale_required(ev, watch["required"], watch["data_gap_h"]),
         "nominal": False,
     }
     baseline = data.get("baseline")
@@ -93,6 +118,7 @@ def run(data, _args):
         "alarm_count": len(alarms),
         "failed_required": state["failed"],
         "missing_groups": state["missing_groups"],
+        "stale_required": state["stale"],
         "data_quality": w["data_quality"],
         "notes": w["notes"],
         "anomaly": bool(reasons),
@@ -101,7 +127,7 @@ def run(data, _args):
         "baseline_state": base,
         "state": state,
     }
-    params = {"anomaly": watch["anomaly"], "required": watch["required"], "status": watch["status"], "thresholds_status": th["status"]}
+    params = {"anomaly": watch["anomaly"], "required": watch["required"], "data_gap_h": watch["data_gap_h"], "status": watch["status"], "thresholds_status": th["status"]}
     if watch["status"] == "placeholder":
         warnings.append("检测判据为开发初稿（占位值），待专家评审")
     return result, params, warnings

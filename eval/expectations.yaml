@@ -9,11 +9,15 @@
 #   reignition_alarm     true 必须触发复燃报警；false 不得触发（不写则不检查——复燃报警只对封闭火区有意义）
 #   reignition_not_before_h  在此之前触发复燃报警算误报
 #   apply                在指定时刻施加处置，模拟人工操作：[{at_h, type, params}]
+#   watch                持续检测（第二版 check_mine watch，不经模型）：从第 0 小时开始、每个检测周期推进一次，
+#                        end_reason 结束原因（anomaly / expired / data-unavailable）、end_by_h 最晚结束时刻、
+#                        reasons_any 结束原因里至少出现其中一个词（mcp/contract/tests/test_watch_expectations.py）
 
 s1-normal:
   horizon_h: 72
   max_level: none
   reignition_alarm: false
+  watch: {end_reason: expired, end_by_h: 72}      # 72 矿井小时到期、未见异常
 
 s2-slow-oxidation:
   horizon_h: 120
@@ -22,6 +26,7 @@ s2-slow-oxidation:
 s3-accelerating:
   horizon_h: 72
   reach_by_h: {blue: 33, yellow: 39, red: 63}
+  watch: {end_reason: anomaly, end_by_h: 33, reasons_any: [自燃阶段, 预警等级]}   # 第一次等级或阶段变化就结束
 
 s4-escalation:
   horizon_h: 72
@@ -37,3 +42,4 @@ s5-sealed-fire-area:        # 封闭期间不报警；第 240 小时过早启封
 s6-sensor-faults:
   horizon_h: 72
   max_level: none          # 传感器故障不应抬高预警等级
+  watch: {end_reason: anomaly, end_by_h: 36, reasons_any: [必需测点失效, 数据中断]}  # 测点故障算异常，但不是等级升高

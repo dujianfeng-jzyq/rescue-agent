@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -162,6 +163,32 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float, app
     return grade.load_tree(root_id), "timeout"
 
 
+def answer_question(page: Page, option: str) -> bool:
+    """在网页的提问卡片里选 option 并提交（选择器按 DSH 0.2.1-rc.4 网页端，验证清单 #20）。"""
+    try:
+        exact = page.get_by_text(option, exact=True)
+        # 模型常在选项后加“（推荐）”：找不到完全相同的文字时按前缀匹配
+        (exact if exact.count() else page.get_by_text(re.compile("^" + re.escape(option)))).last.click(timeout=10_000)
+        for label in ("Submit", "提交", "Send", "Answer"):
+            btn = page.get_by_role("button", name=label)
+            if btn.count():
+                btn.last.click(timeout=10_000)
+                return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"   回答提问失败：{exc}")
+    return False
+
+
+def wait_new_turn(root_id: str, turns: int, timeout_s: float) -> bool:
+    """等根会话开始新的一轮（后台任务结束后 tool-jobs 唤醒）。"""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if sum(e["type"] == "turn/start" for e in grade.load_tree(root_id).events) > turns:
+            return True
+        time.sleep(2)
+    return False
+
+
 def _unanswered(s: grade.Session) -> list[tuple[str, str]]:
     done = {e["data"]["message"].get("toolCallId") for e in s.events if e["type"] == "tool/result"}
     return [(e["data"]["name"], e["data"]["callId"]) for e in s.events if e["type"] == "tool/call" and e["data"]["callId"] not in done]
@@ -180,17 +207,33 @@ def run_one(page: Page, case: dict, model: str | None, timeout_s: float, quiet_s
     send(page, prompt)
     root_id = find_root(prompt, t0 - 5000, 120)
     root, status = wait_settled(root_id, page, timeout_s, quiet_s, case.get("approvals"))
+    # 持续检测类用例：第一轮结束后推进模拟时钟，等后台任务结束、唤醒智能体；智能体提问时按 answers 依次回答
+    answers = list(case.get("answers", []))
+    if status == "settled" and case.get("advance_h"):
+        turns = sum(e["type"] == "turn/start" for e in root.events)
+        sim("/advance", {"hours": float(case["advance_h"])})
+        if not wait_new_turn(root_id, turns, 180):
+            status = "no_wake"
+        else:
+            root, status = wait_settled(root_id, page, timeout_s, quiet_s, case.get("approvals"))
+    while status == "asked_user" and answers:
+        option = answers.pop(0)
+        if not answer_question(page, option):
+            status = "answer_failed"
+            break
+        time.sleep(5)
+        root, status = wait_settled(root_id, page, timeout_s, quiet_s, case.get("approvals"))
     r = grade.grade(root, case["checks"])
     r.update(case=case["id"], requested_model=model, mine_now=mine_now, seconds=round(time.time() - t0 / 1000))
     if r["llm_errors"]:
         status = "llm_error"
     r["status"] = status
-    if status in ("timeout", "llm_error"):
+    if status in ("timeout", "llm_error", "no_wake", "answer_failed"):
         r["passed"] = False
     return r
 
 
-VALID = ("settled", "asked_user")  # 模型调用失败或超时的运行不计入通过率
+VALID = ("settled", "asked_user", "no_wake")  # 模型调用失败、超时、评测运行器答题失败的运行不计入通过率；没被唤醒算系统失败
 
 
 def summarize(results: list[dict]) -> None:

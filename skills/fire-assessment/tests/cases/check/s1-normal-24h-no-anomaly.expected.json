@@ -5,7 +5,8 @@
    "new_alarm": true,
    "level_up": true,
    "stage_up": true,
-   "required_failed": true
+   "required_failed": true,
+   "data_gap": true
   },
   "required": {
    "tubes": [
@@ -20,6 +21,11 @@
     "CO",
     "CH4"
    ]
+  },
+  "data_gap_h": {
+   "tubes": 3,
+   "upper_corner": 0.75,
+   "return": 0.75
   },
   "status": "placeholder",
   "thresholds_status": "placeholder"
@@ -42,6 +48,7 @@
   "alarm_count": 0,
   "failed_required": [],
   "missing_groups": [],
+  "stale_required": [],
   "data_quality": [],
   "notes": [],
   "anomaly": false,
@@ -53,6 +60,7 @@
    "alarm_keys": [],
    "failed": [],
    "missing_groups": [],
+   "stale": [],
    "nominal": true
   },
   "state": {
@@ -61,6 +69,7 @@
    "alarm_keys": [],
    "failed": [],
    "missing_groups": [],
+   "stale": [],
    "nominal": false
   }
  }

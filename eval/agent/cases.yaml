@@ -111,6 +111,22 @@
     numbers_grounded: true
     cited_tools_called: true
 
+- id: s4-watch-wake-assess
+  description: 持续检测 → 推进时钟出现异常 → 后台任务结束唤醒智能体 → 询问操作员 → 评测运行器选“开始完整研判” → 研判完成（第二版 P4，design-v2 第 6 节步骤 0–2）
+  scenario: s4-escalation
+  at_h: 18 # 基线：未见异常
+  prompt: 持续检测矿井动态，有异常的时候告诉我
+  advance_h: 12 # 第一轮结束后推进到第 30 小时（等级、阶段升高），等后台任务结束、唤醒
+  answers: [开始完整研判] # 依次回答智能体的提问
+  checks:
+    tools_called: [check_mine, run_fire_assessment]
+    watch_asked: true
+    explanation_generated: true
+    report_pasted: true
+    no_actions: true
+    numbers_grounded: true
+    cited_tools_called: true
+
 # ── 实验 0001（exp/0001-skill-vs-workflow 分支，不合入）──
 - id: exp-probe-env
   description: 实验 0001 第 0 步环境探测（只在 B、C 组运行，docs/experiments/0001-skill-vs-workflow.md 第 6 节）
