@@ -2,7 +2,7 @@
 """生成第二版火灾闭环技能（fire-assessment、explosion-triangle、emergency-escalation、sealing-plan、plan-compliance、effect-review）的自检样例。
 
 输入取自模拟矿井的标准场景（手动时钟，Python 采集小工具按 fire-assessment 的采集清单取证据），
-期望输出是当前脚本的运行结果（金标准；关键字段与第一版服务的一致性由 mcp/workflow/tests/test_skill_parity.py 保证）。
+期望输出是当前脚本的运行结果（金标准；关键字段与第一版服务的一致性在 P1 用当时的对照测试验证过（已随第一版包删除））。
 
     uv run --project mcp python scripts/make_skill_cases.py            # 重新生成全部样例的输入和期望
     uv run --project mcp python scripts/make_skill_cases.py --expected # 只按现有输入重写期望（改了参数或算法后）

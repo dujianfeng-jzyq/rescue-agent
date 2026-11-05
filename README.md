@@ -6,7 +6,7 @@
 
 > 方案文档：[docs/implementation-plan.md](docs/implementation-plan.md)。
 >
-> 状态：工程骨架。数据契约、红线引擎、模拟矿井、6 个 MCP 服务、DSH bundle、技能草稿和基线评测都能运行并有测试；
+> 状态：第二版（技能 + DSH 插件 + 固定流程，`docs/design-v2.md`）。数据契约、红线引擎、模拟矿井、2 个 MCP 服务（mine-data、actions）、DSH bundle（证据/固定流程/知识库/审批/审计插件）、6 个技能和基线评测都能运行并有测试；
 > 预警阈值、场景参数、技能内容都是**开发占位**，必须经专家审定后才能用于任何正式场合。
 
 ## 架构一览
@@ -19,7 +19,7 @@
    │ 技能：skills/<角色>/…（SOP、报告格式、红线说明）               │
    └──────────────┬───────────────────────────────────────────┘
                   │ MCP（streamable-http）
-  mine_data:8101  ventnet:8102  fire_model:8103  dispatch:8104  kb:8105  actions:8106
+  mine_data:8101  actions:8106
   (模拟矿井/真实矿井适配器)            │                         │ RAGFlow   │ 指令台账
                                     └── rescue_contract（数据契约 + 红线引擎）──┘
 ```
@@ -32,13 +32,9 @@
 | --- | --- | --- |
 | `mcp/contract/` | 数据契约（pydantic）、红线引擎、方案校验、一致性测试、服务启动公共代码 | 架构 |
 | `mcp/mine-data-sim/` | 模拟矿井：采空区自燃过程模型、传感器故障、处置响应、加速时钟、控制接口 | 模拟矿井 |
-| `mcp/ventnet/` | 通风网络：下游影响、受威胁人员、避灾路线 | 算法 |
-| `mcp/fire-model/` | 预警分级、数据质量、爆炸危险性、复燃/甲烷报警 | 算法 + 防灭火专家 |
-| `mcp/dispatch/` | 物资与队伍、注惰量估算、调度单草案 | 算法 |
-| `mcp/kb/` | 知识库封装层（RAGFlow + 本地红线条文兜底）、方案红线自查 | 知识库 |
+| `skills/` | 专家经验与算法的唯一来源：SKILL.md、纯函数脚本、模板、参数、自检样例（规范见 `skills/README.md`） | 专家 + 智能体 |
 | `mcp/actions/` | 指令出口：发布预警、下发方案/调度单/撤人通知、升级、启封审批；指令台账 | 后端 |
-| `dsh-bundle/` | DSH bundle：人工确认与红线预检插件、审计插件、5 个 Agent 预设 | 智能体 |
-| `skills/` | 各 Agent 的技能（SOP、报告格式、红线说明），草稿待专家审定 | 专家 + 智能体 |
+| `dsh-bundle/` | DSH bundle：人工确认与红线预检插件、审计插件、主预设 rescue-commander | 智能体 |
 | `scenarios/` | 6 个标准场景（演示脚本 = 评测集 = 回归集） | 模拟矿井 + 专家 |
 | `eval/` | 确定性基线评测；以后加智能体端到端评测 | 测试 |
 | `profiles/` | 可选配置：本地大模型、真实矿井环境变量模板 | 运维 |
@@ -52,7 +48,7 @@
 ```bash
 make setup          # 或 scripts/setup.sh；只做 MCP/模型开发：make setup-py
 vim .env            # 至少填 DEEPSEEK_API_KEY
-make dev            # 启动 6 个 MCP 服务（含模拟矿井）+ DSH 网页端
+make dev            # 启动 mine_data（模拟矿井）和 actions+ DSH 网页端
 ```
 
 不需要大模型也能跑的部分：
@@ -72,10 +68,10 @@ make check          # 提交前全套检查
 
 骨架把各部分用**契约**隔开，下面几条线可以同时开工、互不阻塞：
 
-1. **专家审定线**：`skills/**/SKILL.md`、`mcp/fire-model/.../thresholds.yaml`、`scenarios/*.yaml` 参数、`eval/expectations.yaml`、`mcp/kb/.../local_articles.yaml`。改完跑 `make check`。
+1. **专家审定线**：`skills/*/SKILL.md` 与 `skills/*/references/`（阈值、判据参数）、`scenarios/*.yaml` 参数、`eval/expectations.yaml`。改完跑 `make check`。
 2. **模拟矿井线**：校准过程模型（程序升温数据）、补通风网络解算（Hardy Cross）、补水灾/顶板场景的扩展点。对外只要保持 `rescue_contract` 契约和 `python -m rescue_contract.conformance` 通过。
-3. **算法线**：fire-model / ventnet / dispatch 内部实现，都有单元测试和基线评测兜底。
-4. **知识库线**：和 RAGFlow 部门对接数据集，配 `KB_DATASETS_*`；检索改写和兜底逻辑只改 `mcp/kb`。
+3. **算法线**：技能脚本（`skills/*/scripts/`），有自检样例（`make skills-check`）和基线评测兜底。
+4. **知识库线**：和 RAGFlow 部门对接数据集；检索与条文索引在 `dsh-bundle/src/knowledge`、`scripts/kb`。
 5. **智能体线**：预设提示词、委派策略、确认交互；先完成 [docs/validation-checklist.md](docs/validation-checklist.md) 里的真实 DSH 验证项。
 6. **真实矿井适配线**：照 `mcp/mine-data-sim/server.py` 的工具清单写适配器，用 `profiles/mine-template.env.example` 切换。
 
@@ -85,5 +81,5 @@ make check          # 提交前全套检查
 
 - 所有数值来自工具计算，Agent 不自行估算；报告注明来源。
 - 只有指挥 Agent 挂载 actions；其他 Agent 只读（`scripts/check_patches.py` 会检查）。
-- 新增红线规则：改 `rescue_contract/redlines.py` + 测试 + `skills/compliance/red-line-rules/SKILL.md`（有同步测试）。
+- 新增红线规则：改 `rescue_contract/redlines.py` + 测试 + `skills/plan-compliance/SKILL.md`（有同步测试）。
 - 指令台账 `var/actions-ledger.jsonl`、审计日志 `var/audit/tool-actions.jsonl` 是复盘依据，不手工修改。

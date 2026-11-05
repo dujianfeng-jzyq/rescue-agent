@@ -18,7 +18,7 @@ make setup                    # 全部（需要 node 22+、pnpm、dsh 0.2.1-rc.4
 make test                     # Python + TS 测试
 make lint                     # ruff
 make check                    # 提交前：lint + 测试 + patch 离线校验 + 基线评测
-make up / make down / make smoke   # 启停 MCP 服务（第二版：mine_data、actions）并冒烟；第一版服务按名字单独启动（scripts/mcp-up.sh fire_model）
+make up / make down / make smoke   # 启停 MCP 服务（mine_data、actions）并冒烟
 make eval                     # 确定性基线评测（不经过大模型，运行 fire-assessment 的技能脚本）
 make eval-agent ARGS="--url '<DSH 地址带 token>' --model deepseek-official/deepseek-flash --repeat 3"   # 智能体端到端评测（需先 make dev-eval）
 make dev-eval                 # 同 make dev，但指令台账、研判快照、值守事件和审计写到 var/eval/（评测用例会放行指令）
@@ -30,27 +30,22 @@ make skills-check             # 第二版技能自检（结构、import、样例
 python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清单取一次证据（Python 采集小工具）
 ```
 
-单个包的测试：`cd mcp && uv run pytest fire-model/tests -q`。
+单个包的测试：`cd mcp && uv run pytest contract/tests -q`（包：contract、mine-data-sim、actions）。
 
 ## 结构与边界（改代码前先看）
 
-第二版的目标结构（ADR 0007，按 `docs/design-v2.md` 第 9 节 P0–P6 逐步落地）：
+第二版的结构（ADR 0007，`docs/design-v2.md`）：
 
 - `skills/<技能名>/`：专家经验和算法的唯一来源。SKILL.md（流程）、`scripts/`（纯函数，`--input-file`/`--output-file`，不访问网络和凭据）、`templates/`、`references/`（参数，标注占位值）、`tests/cases/`（自检样例，CI 运行）。
-- `dsh-bundle/src/evidence/`（证据插件：采集、`runScript`、记录、`check_mine`）、`src/fire-loop/`（固定流程）、`src/knowledge/`（知识库插件、条文索引）、`src/approval`、`src/audit`。插件只做编排，不写领域判据。
-- 记录（`Record`，契约 0.7.0）取代研判快照：只有 DSH 进程（证据插件）能写，bash 沙箱和 actions 只读；指令引用 `record_id`。
-- Python 服务最终只剩 `mcp/mine-data-sim`（含演示控制台）和 `mcp/actions`；下面列出的其余服务在迁移完成前仍在运行（`docs/architecture.md` 第 8 节）。
-
-第一版（P4 起停用：服务不再启动、预设已移除；Python 包暂留作一致性测试的对照，`docs/architecture.md` 第 8 节）：
-
-- `mcp/contract/`：数据契约（pydantic）、红线引擎 `redlines.py`、方案校验 `validation.py`、`MineData` 客户端、一致性测试。**契约是各工作线之间的边界**，改 `models.py` 要谨慎并 `make schema`。
-- `mcp/<服务>/`：7 个 MCP 服务，各自 `src/rescue_<名>/server.py` 里 `build_server()`，`__main__.py` 用 `rescue_contract.serving.serve` 启动（streamable-http，端口 8101–8107）。
-- `mcp/workflow/`：确定性流程（研判快照、效果评估、升级建议、方案草案、调度草案、复盘时间线）和值守进程 `rescue_workflow.monitor`。步骤固定、产出数值或结论、会成为红线输入的流程写在这里，不交给模型编排（ADR 0006，`docs/workflow-design.md`）。结果写成研判快照（`var/snapshots/`），报告事实部分由 `reports.py` 模板生成。
-- `dsh-bundle/`：DSH bundle。`src/approval`（红线预检 + 人工确认）、`src/audit`、`presets/*.patch.yml`（3 个 Agent：总指挥协调、处置方案、合规审核）、`cordis.patch.yml`。对 DSH 类型的引用只放在 `src/adapter/dsh.ts`。
-- `skills/<角色>/<技能>/SKILL.md`：给 Agent 的流程知识。草稿，待专家审定。
+- `dsh-bundle/src/evidence/`（证据插件：采集、`runScript`、记录、`check_mine`）、`src/fire-loop/`（固定流程）、`src/knowledge/`（知识库插件、条文索引）、`src/approval`（红线预检 + 人工确认）、`src/audit`；`presets/commander.patch.yml`（唯一主预设）、`cordis.patch.yml`。插件只做编排，不写领域判据。对 DSH 类型的引用只放在 `src/adapter/dsh.ts`。
+- 记录（`Record`，契约 0.9.0）：只有 DSH 进程（证据插件）能写，bash 沙箱和 actions 只读；指令引用 `record_id`。
+- `mcp/contract/`：数据契约（pydantic）、红线引擎 `redlines.py`、方案校验 `validation.py`、`MineData` 客户端、一致性测试、技能自检（`rescue_contract.skills`）、模板与规范化 JSON。**契约是各工作线之间的边界**，改 `models.py` 要谨慎并 `make schema`。
+- `mcp/mine-data-sim`（模拟矿井，含演示控制台）、`mcp/actions`（指令出口与台账）：各自 `src/rescue_<名>/server.py` 里 `build_server()`，用 `rescue_contract.serving.serve` 启动（streamable-http，端口 8101、8106）。
 - `scenarios/*.yaml`：标准场景 = 演示脚本 = 评测集 = 回归集。
-- `eval/baseline.py` + `expectations.yaml`：模型层回归基线。
+- `eval/baseline.py` + `expectations.yaml`：确定性回归基线（运行技能脚本）。
 - `eval/agent/`：智能体端到端评测。`cases.yaml` 用例（`approvals` 指定人工确认时放行哪些指令，其余拒绝），`run.py` 经 DSH 网页端（Playwright）提问并点确认，`grade.py` 读 `.dsh-home/sessions` 会话日志判定（可 `grade.py <会话 id>` 离线判定、`run.py --regrade` 按新规则重判）。
+- 第一版的 Python 服务（ventnet、fire-model、dispatch、kb、workflow）已于 2026-11-04 从工作树删除，见 `docs/architecture.md` 第 8 节；契约里的研判快照和 `grade.py` 的第一版兼容留待第三版清理。
+
 
 ## 必须遵守的约定
 
@@ -64,7 +59,7 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 8. DSH 版本锁定在 0.2.1-rc.4。DSH 的 `DSH_*` 环境变量必须 export，写在 `.env` 里不生效。
 9. 不要改 `var/` 下的台账和审计日志；它们是复盘依据。
 
-## 当前状态（2026-11-01）
+## 第一版历史记录（2026-11-01，代码已删除，仅供查阅；现状看下面“第二版进度”）
 
 - 已完成：契约（0.4.0，含火区台账、束管 H2；`get_personnel` 返回人数汇总）与红线引擎、模拟矿井（6 场景）、6 个服务、DSH bundle、技能草稿、基线评测、CI。
 - 真实 DSH 0.2.1-rc.4 验证清单 #1–#17 全部通过（`docs/validation-checklist.md`），`pnpm-lock.yaml` 已提交。其中 #15 的自动压缩未触发，靠手动 `/compact`；网页端权限选择器只保留审批为 ask 的预设。#18（DSH 自带工作流）评估后不采用：子 Agent 不能指定预设、拿不到 kb，调 actions 会被自动拒绝。

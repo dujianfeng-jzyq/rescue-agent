@@ -1,4 +1,4 @@
-# uv 工作区：数据契约 + 7 个 MCP 服务器。
+# uv 工作区：数据契约 + MCP 服务器（mine-data、actions）。
 #   uv sync                       安装全部
 #   uv run pytest                 运行全部测试
 #   uv run python -m rescue_contract.conformance <URL>   对 mine-data 服务做一致性检查
@@ -9,12 +9,8 @@ requires-python = ">=3.12"
 dependencies = [
     "rescue-contract",
     "rescue-mine-data-sim",
-    "rescue-ventnet",
-    "rescue-fire-model",
-    "rescue-dispatch",
-    "rescue-kb",
     "rescue-actions",
-    "rescue-workflow",
+    "networkx>=3.3",   # 技能脚本的依赖（skills/requirements.txt）
 ]
 
 [dependency-groups]
@@ -24,20 +20,15 @@ dev = ["pytest>=8", "ruff>=0.11"]
 package = false
 
 [tool.uv.workspace]
-members = ["contract", "mine-data-sim", "ventnet", "fire-model", "dispatch", "kb", "actions", "workflow"]
+members = ["contract", "mine-data-sim", "actions"]
 
 [tool.uv.sources]
 rescue-contract = { workspace = true }
 rescue-mine-data-sim = { workspace = true }
-rescue-ventnet = { workspace = true }
-rescue-fire-model = { workspace = true }
-rescue-dispatch = { workspace = true }
-rescue-kb = { workspace = true }
 rescue-actions = { workspace = true }
-rescue-workflow = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["contract/tests", "mine-data-sim/tests", "ventnet/tests", "fire-model/tests", "dispatch/tests", "kb/tests", "actions/tests", "workflow/tests", "tests"]
+testpaths = ["contract/tests", "mine-data-sim/tests", "actions/tests", "tests"]
 addopts = "--import-mode=importlib"
 
 [tool.ruff]

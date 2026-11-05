@@ -95,20 +95,21 @@
 
 接入真实矿井：写一个实现相同 MCP 工具的适配器包（输入错误抛 `ToolError` 并写明原因；`get_personnel` 用 `PersonnelSnapshot.of(名单)` 构造），先通过 `python -m rescue_contract.conformance <URL>`，再替换 mine_data 的地址。
 
-## 8. 第一版组件的去向（P4 完成，2026-11-04）
+## 8. 第一版组件的去向（清理完成，2026-11-04）
 
-| 第一版组件 | 第二版去向 | 状态 |
-| --- | --- | --- |
-| `fire_model`、`ventnet`、`dispatch` 的算法和参数 | 技能脚本和 `references/` | 已停用（P4）：`make up` 不再启动 |
-| `workflow` 服务、研判快照（`var/snapshots/`） | 证据插件、固定流程插件、记录（`RESCUE_RECORD_DIR`） | 已停用（P4）；复盘时间线 `review_timeline` 尚未迁移 |
-| 值守进程 `rescue_workflow.monitor` | `check_mine(watch)` 后台任务 | 已停用（P4） |
-| `kb` MCP | 知识库插件；`check_plan_redlines` 移到 actions 的 `precheck_plan` | 已停用（P4） |
-| `rescue-plan`、`rescue-compliance` 预设、第一版技能草稿 | `draft_sealing_plan` 的阶段、第二版技能 | 已移除（P4） |
-| 确定性基线评测 `eval/baseline.py` | 改为运行 fire-assessment 的技能脚本 | P4 |
+第一版的 Python 服务包（`ventnet`、`fire-model`、`dispatch`、`kb`、`workflow`）及其一致性测试已从工作树删除（P4 停用后只作对照；对照结果记在
+CLAUDE.md 的 P1–P4 记录里）。需要查看旧实现，用提交历史（清理提交的上一个提交）。
 
-`make up` / `make dev` 只启动 mine_data 和 actions，DSH 用 bundle 里的第二版主预设（`dsh-bundle/presets/commander.patch.yml`）。
-第一版服务的 Python 包暂留在 `mcp/` 下，作为一致性测试（`mcp/workflow/tests/test_skill_parity.py`、`test_effect_parity.py` 等）的对照，
-需要时可以用 `scripts/mcp-up.sh fire_model` 等单独启动；删除放到以后的清理。第一版的说明见 `docs/workflow-design.md` 和 ADR 0006。
+| 第一版组件 | 第二版去向 |
+| --- | --- |
+| `fire_model`、`ventnet`、`dispatch` 的算法和参数 | 技能脚本和 `references/` |
+| `workflow` 服务、研判快照 | 证据插件、固定流程插件、记录（`RESCUE_RECORD_DIR`） |
+| 值守进程 | `check_mine(watch)` 后台任务 |
+| `kb` MCP | 知识库插件；`check_plan_redlines` 移到 actions 的 `precheck_plan` |
+| 其余预设、第一版技能草稿 | `draft_sealing_plan` 的阶段、第二版技能 |
+
+仍保留的第一版痕迹：契约里的研判快照（`snapshots.py`、`snapshot_id` 字段）、智能体评测 `grade.py` 对第一版工具名的兼容，留到第三版设计时一并清理。
+`docs/workflow-design.md` 与 ADR 0006 只是历史记录。
 
 ## 9. 大模型
 
