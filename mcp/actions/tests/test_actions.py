@@ -310,3 +310,30 @@ def test_read_only_tools_do_not_touch_the_mine_or_the_ledger(world, sample_plan)
     world.call("query_last_issued", {"panel": "1201"})
     world.call("precheck_plan", {"tool": "issue_sealing_plan", "plan": sample_plan})
     assert world.rows() == [] and world.holder.engine.action_log == [] and world.holder.notices == [] and world.holder.dispatches == []
+
+
+# ── 事件时间线（第三版 P4）──
+
+
+def test_actions_are_noted_on_the_open_incident(tmp_path, monkeypatch, request):
+    from rescue_contract.incidents import IncidentStore
+
+    monkeypatch.setenv("RESCUE_INCIDENT_DIR", str(tmp_path / "inc"))
+    store = IncidentStore()
+    other = store.open("2026-11-05T08:00:00", category="fire", panel="1202", summary="别的工作面")
+    iid = store.open("2026-11-05T08:00:00", category="fire", panel="1201", summary="x")
+    world = request.getfixturevalue("world")  # 环境变量设好之后才创建 guard
+    rid = world.result_record("fire-assessment", "warning", {"level": "red"})
+    r = world.call("publish_warning", warning_args(rid, level="yellow"))  # 与记录不一致：被拒
+    assert r.is_error
+    r = world.call("publish_warning", warning_args(rid))
+    assert not r.is_error
+    notes = [e for e in store.entries(iid) if e["kind"] == "note"]
+    assert [(n["by"], n["data"]["type"], n["data"]["status"]) for n in notes] == [("guard", "action", "rejected"), ("guard", "action", "issued")]
+    assert notes[1]["data"]["action_id"] == r.structured_content["action_id"] and notes[1]["data"]["record_ids"] == [rid]
+    assert [row["incident_id"] for row in world.rows()] == [iid, iid]
+    assert [e for e in store.entries(other) if e["kind"] == "note"] == []
+    # 没有未关闭事件时：台账 incident_id 为空，指令照常
+    store.append(iid, "2026-11-05T09:00:00", "status", "agent", {"status": "closed"})
+    assert not world.call("publish_warning", warning_args(rid)).is_error
+    assert world.rows()[-1]["incident_id"] is None

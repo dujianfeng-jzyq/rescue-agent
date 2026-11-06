@@ -95,7 +95,7 @@ describe('事件工具', () => {
   async function tools() {
     const store = new IncidentStore(await mkdtemp(join(tmpdir(), 'inc-')))
     const reg: Record<string, any> = {}
-    registerTools({ tools: { register: (t: any) => (reg[t.name] = t) } }, store, async () => '2026-11-05T10:00:00')
+    registerTools({ tools: { register: (t: any) => (reg[t.name] = t) } }, store, async () => '2026-11-05T10:00:00', async () => ({ default_after_h: 2, max_after_h: 48 }))
     const call = async (name: string, args: Record<string, unknown>) => reg[name].execute(args)
     return { store, call, reg }
   }
@@ -109,6 +109,10 @@ describe('事件工具', () => {
     const f: any = await call('add_followup', { incident_id: id, after_h: 2.5, expect: '注惰后 CO 回落' })
     assert.equal(f.due_at, '2026-11-05T12:30:00')
     await assert.rejects(call('add_followup', { incident_id: id, after_h: -1, expect: 'x' }), /after_h/)
+    await assert.rejects(call('add_followup', { incident_id: id, after_h: 49, expect: 'x' }), /不超过 48/)
+    const d: any = await call('add_followup', { incident_id: id, expect: '默认间隔' })
+    assert.equal(d.due_at, '2026-11-05T12:00:00')
+    await call('complete_followup', { incident_id: id, followup_id: d.followup_id, result: 'x' })
     await assert.rejects(call('close_incident', { incident_id: id, reason: 'x' }), /未完成的跟踪计划/)
     await call('complete_followup', { incident_id: id, followup_id: f.followup_id, result: 'CO 已回落' })
     await assert.rejects(call('complete_followup', { incident_id: id, followup_id: 'FU-none', result: 'x' }), /没有跟踪计划/)

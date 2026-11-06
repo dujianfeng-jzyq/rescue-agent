@@ -1,0 +1,7 @@
+# 闭环跟踪的编排参数（第三版 P4，docs/design-v3.md 6.4）。演示用占位值，待专家审定。
+# add_followup 不给 after_h 时取 default_after_h；给了也不能超过 max_after_h。复评的判据在 effect-review 技能里。
+status: placeholder
+reviewed_by: null
+
+default_after_h: 2     # 处置下发后多少矿井小时复评
+max_after_h: 48

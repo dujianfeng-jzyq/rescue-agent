@@ -35,6 +35,8 @@ version: 0.1.0
 
 ## skill.yaml
 
+流程型技能（只规定顺序和职责、没有脚本，如 `fire-incident-management`）在 skill.yaml 顶层写 `kind: flow` 和 `scripts: {}`；其余技能必须登记脚本。
+
 ```yaml
 scripts:
   explosion_triangle:                 # 脚本名：证据插件和样例目录按它引用

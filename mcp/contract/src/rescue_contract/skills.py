@@ -322,7 +322,8 @@ def check(root: Path | None = None, *, python: str | None = None) -> CheckReport
         report.skills.append(skill.name)
         report.problems += check_imports(skill, allowed)
         report.problems += check_references(skill)
-        if not skill.scripts:
+        flow = (yaml.safe_load((skill.dir / "skill.yaml").read_text(encoding="utf-8")) or {}).get("kind") == "flow"
+        if not skill.scripts and not flow:  # 流程型技能（kind: flow）只有 SKILL.md 和参数，没有脚本
             report.problems.append(f"{skill.name}：skill.yaml 没有登记脚本")
         cases_dir = skill.dir / "tests" / "cases"
         for name, spec in skill.scripts.items():

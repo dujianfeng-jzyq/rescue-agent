@@ -6,6 +6,11 @@
  * 跟踪计划的到点时间由代码按矿井时钟算（add_followup 只收“多少矿井小时后”），到点由监听器写 followup_due 并唤醒值班会话。
  */
 
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+import { parse as parseYaml } from 'yaml'
+
 import type { Context } from '../adapter/dsh.ts'
 import { defineTool, Schema } from '../adapter/dsh.ts'
 import { McpClient } from '../evidence/mcp-client.ts'
@@ -19,6 +24,8 @@ export interface Config {
   mineDataUrl: string
   mineDataToken?: string
   mineDataTimeoutMs: number
+  /** 技能目录：add_followup 的缺省间隔取自 fire-incident-management/references/followup.yaml */
+  skillsDir: string
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -26,6 +33,7 @@ export const Config: Schema<Config> = Schema.object({
   mineDataUrl: Schema.string().default('http://127.0.0.1:8101/mcp'),
   mineDataToken: Schema.string(),
   mineDataTimeoutMs: Schema.number().default(30_000),
+  skillsDir: Schema.string().required(),
 })
 
 const jsonOutput = {
@@ -46,11 +54,22 @@ export function mineMsPlusHours(now: string, hours: number): string {
 export function apply(ctx: Context, config: Config): void {
   const store = new IncidentStore(config.incidentDir)
   const mine = new McpClient({ server: 'mine_data', url: config.mineDataUrl, token: config.mineDataToken, timeoutMs: config.mineDataTimeoutMs })
-  registerTools(ctx as any, store, async () => String((await mine.call('get_clock', {})).now).slice(0, 19))
+  registerTools(ctx as any, store, async () => String((await mine.call('get_clock', {})).now).slice(0, 19), () => followupParams(config.skillsDir))
+}
+
+export interface FollowupParams {
+  default_after_h: number
+  max_after_h: number
+}
+
+export async function followupParams(skillsDir: string): Promise<FollowupParams> {
+  const y = parseYaml(await readFile(join(skillsDir, 'fire-incident-management', 'references', 'followup.yaml'), 'utf8'))
+  for (const k of ['default_after_h', 'max_after_h'] as const) if (typeof y?.[k] !== 'number' || y[k] <= 0) throw new Error(`fire-incident-management/references/followup.yaml 缺少 ${k}`)
+  return { default_after_h: y.default_after_h, max_after_h: y.max_after_h }
 }
 
 /** 注册工具（clock 返回矿井时间；单独成函数方便不起 DSH 测试） */
-export function registerTools(c: { tools: { register: (t: unknown) => void } }, store: IncidentStore, clock: () => Promise<string>): void {
+export function registerTools(c: { tools: { register: (t: unknown) => void } }, store: IncidentStore, clock: () => Promise<string>, followups: () => Promise<FollowupParams>): void {
   const view = async (id: string, withTimeline: boolean) => {
     const v: IncidentView = await store.get(id)
     if (!withTimeline) return v
@@ -120,22 +139,23 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
     defineTool({
       name: 'add_followup',
       description:
-        '登记跟踪计划：处置下发后，过 after_h 个矿井小时到点，监听器会唤醒你复评（review_effect）。到点时间由系统按矿井时钟算，你不要自己算。' +
-        'expect 写一句话预期（如“注惰后上隅角 CO 应回落”）。',
+        '登记跟踪计划：处置下发后，过一段矿井时间到点，监听器会唤醒你复评（review_effect）。到点时间由系统按矿井时钟算，你不要自己算。' +
+        'after_h 不给就用技能规定的默认间隔（返回里照抄）；指挥人员明确要求某个间隔时才填。expect 写一句话预期（如“注惰后上隅角 CO 应回落”）。',
       parameters: {
         incident_id: { type: 'string', required: true, description: '事件编号' },
-        after_h: { type: 'number', required: true, description: '多少矿井小时后复评（大于 0）' },
+        after_h: { type: 'number', description: '多少矿井小时后复评（大于 0）；缺省取技能规定的默认间隔' },
         expect: { type: 'string', required: true, description: '一句话预期' },
       },
       output: jsonOutput,
-      execute: async (args: { incident_id: string; after_h: number; expect: string }) => {
-        const hours = Number(args.after_h)
-        if (!Number.isFinite(hours) || hours <= 0 || hours > 24 * 14) throw new Error('after_h 应大于 0 且不超过 336 个矿井小时')
+      execute: async (args: { incident_id: string; after_h?: number; expect: string }) => {
+        const p = await followups()
+        const hours = args.after_h === undefined ? p.default_after_h : Number(args.after_h)
+        if (!Number.isFinite(hours) || hours <= 0 || hours > p.max_after_h) throw new Error(`after_h 应大于 0 且不超过 ${p.max_after_h} 个矿井小时`)
         const now = await clock()
         const dueAt = mineMsPlusHours(now, hours)
         const followupId = `FU-${now.slice(0, 19).replace(/[-:]/g, '')}-${Math.random().toString(36).slice(2, 6)}`
         await store.append(String(args.incident_id), now, 'followup_added', 'agent', { followup_id: followupId, due_at: dueAt, expect: String(args.expect) })
-        return toJson({ followup_id: followupId, due_at: dueAt, now })
+        return toJson({ followup_id: followupId, due_at: dueAt, now, after_h: hours })
       },
     }),
   )

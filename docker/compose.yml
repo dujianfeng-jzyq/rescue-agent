@@ -42,8 +42,10 @@ services:
       RESCUE_MCP_MINE_DATA_URL: http://mine-sim:8101/mcp
       RESCUE_RECORD_DIR: /data/records            # 只读：发布前按记录核对
       RESCUE_ACTIONS_LEDGER: /data/ledger/actions-ledger.jsonl
+      RESCUE_INCIDENT_DIR: /data/incidents        # 对外动作的结果记进事件时间线
     volumes:
       - ../var/demo/records:/data/records:ro
+      - ../var/demo/incidents:/data/incidents
       - ../var/demo/ledger:/data/ledger
     depends_on:
       mine-sim: {condition: service_healthy}

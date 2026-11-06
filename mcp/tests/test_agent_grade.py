@@ -472,3 +472,27 @@ def test_angle_bracket_link_counts_as_pasted():
     rep = "爆炸危险性：当前不在爆炸范围\n\n![风险图](/ws/records/s/RS-1.chart.svg)"
     out = "以下为报告：\n\n爆炸危险性：当前不在爆炸范围\n\n![风险图](</ws/records/s/RS-1.chart.svg>)"
     assert grade._norm_lines(rep) in grade._norm_lines(out)
+
+
+def _flat(tmp_path, calls, final="已处理"):
+    ev = [{"type": "turn/start"}, _user("【值守事件 INC-x】……")]
+    for i, name in enumerate(calls):
+        ev += _assistant("", [(f"c{i}", name, {})])
+        ev.append(_result(f"c{i}", "{}"))
+    ev += [*_assistant(final), {"type": "turn/end"}]
+    _write(tmp_path, ROOT_ID, ev, "rescue-commander")
+    return grade.load_tree(ROOT_ID, tmp_path)
+
+
+def test_decision_checks(tmp_path):
+    root = _flat(tmp_path, ["get_incident", "run_fire_assessment", "add_followup"], final="监听降级，数据不可信")
+    checks = {"no_questions": True, "incident_read": True, "followup_added": True, "tools_not_called": ["issue_sealing_plan"], "final_mentions": ["降级"]}
+    r = grade.grade(root, {**checks})
+    assert all(r["checks"][k]["ok"] for k in checks), r["checks"]
+
+
+def test_decision_checks_fail(tmp_path):
+    root = _flat(tmp_path / "a", ["run_fire_assessment", "ask_user_question", "mcp__actions__issue_sealing_plan"])
+    r = grade.grade(root, {"no_questions": True, "incident_read": True, "followup_added": True, "tools_not_called": ["issue_sealing_plan"], "final_mentions": ["降级"]})
+    assert not any(r["checks"][k]["ok"] for k in ("no_questions", "incident_read", "followup_added", "tools_not_called", "final_mentions"))
+    assert grade.grade(root, {"no_questions": 1})["checks"]["no_questions"]["ok"]

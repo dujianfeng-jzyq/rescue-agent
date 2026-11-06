@@ -26,6 +26,8 @@ import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
 import { draftSealingPlan, type HumanInput, type Redline, SEALING_FLOW } from './sealing.ts'
+import { IncidentStore } from '../incident/store.ts'
+import { noteOnIncident } from '../incident/timeline.ts'
 import { EFFECT_FLOW, EffectInputError, type LastIssued, reviewEffect } from './effect.ts'
 
 export const name = 'rescue-fire-loop'
@@ -46,6 +48,8 @@ export interface Config {
   precheckTool: string
   /** 台账查询的工具名（actions 的 query_last_issued；review_effect 缺处置开始时间时用） */
   lastIssuedTool: string
+  /** 事件库目录；给了就把研判、复评、封闭方案的结果自动记进该工作面未关闭事件的时间线（第三版 P4） */
+  incidentDir?: string
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -56,6 +60,7 @@ export const Config: Schema<Config> = Schema.object({
   sealingMaxRounds: Schema.natural().min(1).default(2),
   precheckTool: Schema.string().default('mcp__actions__precheck_plan'),
   lastIssuedTool: Schema.string().default('mcp__actions__query_last_issued'),
+  incidentDir: Schema.string(),
 })
 
 const STRUCTURED_OUTPUT = 'structured_output'
@@ -66,6 +71,15 @@ export function apply(ctx: Context, config: Config) {
   const evidence = (c.rescueEvidence as RescueEvidence).evidence
   const knowledge = (c.rescueKnowledge as RescueKnowledge).knowledge
   const stageChildren = new Set<string>()
+  const incidents = config.incidentDir ? new IncidentStore(config.incidentDir) : undefined
+  const logToIncident = async (panel: string, type: string, out: any) => {
+    try {
+      const id = await noteOnIncident(incidents, panel, { type, text: String(out.card?.summary ?? ''), record_ids: out.card?.record_ids ?? [] }, async () => String((await (c.rescueEvidence as RescueEvidence).mineData.call('get_clock', {})).now).slice(0, 19))
+      if (id) out.incident_id = id
+    } catch (err) {
+      ctx.logger.warn(`${FLOW}: 记入事件时间线失败：${(err as Error).message}`)
+    }
+  }
 
   // 阶段子 Agent 只能提交结构化结果
   c.tools.guard((e: any) => {
@@ -178,6 +192,7 @@ export function apply(ctx: Context, config: Config) {
             parent: exec.token,
             signal: exec.signal,
           })
+          await logToIncident(String(args.panel), 'assessment', out)
           out.delivered = presented.isError
             ? { ok: false, error: presented.error?.message ?? '交付失败' }
             : { ok: true, files: files.map((f) => f.path), note: '报告文件和风险图已交付给用户，不要再调用 present' }
@@ -289,6 +304,7 @@ export function apply(ctx: Context, config: Config) {
             parent: exec.token,
             signal: exec.signal,
           })
+          await logToIncident(String(args.panel), 'sealing_plan', out)
           out.delivered = presented.isError
             ? { ok: false, error: presented.error?.message ?? '交付失败' }
             : { ok: true, files: [reportPath], note: '方案文件已交付给用户，不要再调用 present' }
@@ -356,6 +372,7 @@ export function apply(ctx: Context, config: Config) {
             signal: exec.signal,
             lastIssued: async (panel) => ((await callJson(exec, config.lastIssuedTool, { panel }, 'last-issued')) ?? { found: false }) as LastIssued,
           })
+          await logToIncident(String(args.panel), 'effect_review', out)
           out.delivered = await deliver(exec, `${out.card.record_ids[0]}.md`, out.report_markdown, `${args.panel} 工作面处置效果复评报告`)
           return toJson(out)
         } catch (err) {

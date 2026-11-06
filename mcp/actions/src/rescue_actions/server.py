@@ -16,7 +16,7 @@
 封闭方案只提交 draft_sealing_plan 的审核记录编号，方案从记录里取（不经模型转抄，也不在模型上下文里来回携带）。
 
 指令台账（JSONL）每条带：来源记录编号（record_ids）、Origin（谁触发的，取自记录）、rescue-mine 的回执（mine_receipts）和事件编号
-（incident_id，第三版 P3 起填写）。真实矿井异步生效时，回执用 rescue-mine 的 get_action_status 查询。
+（incident_id，第三版 P4 起填写：该工作面未关闭的火情事件）。真实矿井异步生效时，回执用 rescue-mine 的 get_action_status 查询。
 相同指令（内容相同）重复提交时，幂等键相同，矿井只执行一次。
 
 TODO(工程): 记录确认人身份（批准人按角色限定，P3/P4）。
@@ -38,6 +38,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel, Field
 from rescue_contract.client import MineData
+from rescue_contract.incidents import IncidentStore
 from rescue_contract.ledger import for_panel
 from rescue_contract.ledger import records as ledger_records
 from rescue_contract.models import (
@@ -122,13 +123,43 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
                 continue
         return None
 
+    incidents = IncidentStore()  # 对外动作的结果记进该工作面未关闭事件的时间线（第三版 P4）；读不到、写不了都不影响指令
+
+    def incident_of(record_ids: list[str]) -> str | None:
+        for rid in record_ids:
+            try:
+                found = incidents.find_open("fire", record_store.get(rid).panel)
+            except Exception:  # noqa: BLE001
+                continue
+            if found:
+                return found["incident_id"]
+        return None
+
+    def journal(entry: dict[str, Any]) -> None:
+        """写台账，并把结果（通过、拒绝、失败）记进事件时间线。台账是依据，时间线是给人看的。"""
+        ledger.append(entry)
+        iid = entry.get("incident_id")
+        if not iid:
+            return
+        at = str(entry.get("issued_at") or entry.get("at") or "")[:19]
+        try:
+            if not at:
+                latest = incidents.entries(iid)[-1]["at"]
+                at = latest
+            incidents.append(
+                iid, at, "note", "guard",
+                {"type": "action", "tool": entry["tool"], "status": entry["status"], "action_id": entry.get("action_id"), "record_ids": entry["record_ids"], "problems": entry.get("problems", [])},
+            )  # fmt: skip
+        except Exception as exc:  # noqa: BLE001
+            log.warning("事件时间线写入失败（指令不受影响）：%s", exc)
+
     def log_entry(tool: str, status: str, payload: BaseModel, record_ids: list[str], **extra: Any) -> dict[str, Any]:
         return {
             "tool": tool,
             "status": status,
             "record_ids": record_ids,
             "origin": origin_of(record_ids),
-            "incident_id": None,  # 第三版 P3：指令挂在事件上
+            "incident_id": incident_of(record_ids),  # 该工作面未关闭的火情事件（没有则为空）
             **extra,
             "payload": payload.model_dump(mode="json"),
         }
@@ -137,13 +168,13 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
         """需要核对时效的指令：取不到矿井时间就拒绝（fail closed），不能跳过时效检查。"""
         now = await mine_now()
         if now is None:
-            ledger.append(log_entry(tool, "rejected", payload, record_ids, at=None, problems=[NO_CLOCK]))
+            journal(log_entry(tool, "rejected", payload, record_ids, at=None, problems=[NO_CLOCK]))
             raise ToolError(NO_CLOCK)
         return now
 
     async def reject_if(tool: str, payload: BaseModel, problems: list[str], record_ids: list[str]) -> None:
         if problems:
-            ledger.append(log_entry(tool, "rejected", payload, record_ids, at=await mine_now(), problems=problems))
+            journal(log_entry(tool, "rejected", payload, record_ids, at=await mine_now(), problems=problems))
             raise ToolError("指令未发布。\n" + "\n".join(problems))
 
     async def deliver(tool: str, payload: BaseModel, record_ids: list[str], calls: list[Any], note: str | None = None) -> ActionReceipt:
@@ -156,7 +187,7 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
                 done.append(await call())
         except Exception as exc:  # noqa: BLE001  矿井接口的任何失败都按未完成处理
             at = await mine_now()
-            ledger.append(
+            journal(
                 log_entry(
                     tool, "failed", payload, record_ids, action_id=action_id, at=at,
                     mine_receipts=[r.model_dump(mode="json") for r in done], problems=[f"矿井执行失败：{exc}"],
@@ -172,7 +203,7 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
         receipt = ActionReceipt(
             action_id=action_id, tool=tool, issued_at=now, status="issued", note=note, mine_receipts=done, mine_not_executed=not_done
         )
-        ledger.append(log_entry(tool, "issued", payload, record_ids, **receipt.model_dump(mode="json", exclude={"tool", "status"})))
+        journal(log_entry(tool, "issued", payload, record_ids, **receipt.model_dump(mode="json", exclude={"tool", "status"})))
         log.info("action %s %s", tool, receipt.action_id)
         return receipt
 

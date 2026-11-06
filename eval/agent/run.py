@@ -75,6 +75,29 @@ def setup_sim(case: dict) -> tuple[str, dict[str, str]]:
 MODEL_BUTTON = 'button[aria-label^="Select model"]'
 
 
+def setup_incident(case: dict, mine_now: str, fmt: dict[str, str]) -> None:
+    """用例要求时在事件库（RESCUE_INCIDENT_DIR，make dev-eval 指向 var/eval/incidents）里建一个事件和一条告警，模拟监听器已经发现异常；
+    提问模板里的 {incident_id}、{alert_id}、{mine_now} 由这里填。事件库里该工作面已有的未关闭事件先关掉，免得上一次的残留混进来。"""
+    spec = case.get("incident")
+    if not spec:
+        return
+    from rescue_contract.incidents import IncidentStore
+
+    store = IncidentStore()
+    panel = spec.get("panel", "1201")
+    for v in store.list():
+        if v["panel"] == panel:
+            store.append(v["incident_id"], mine_now, "status", "eval", {"status": "closed", "reason": "评测开始前清理"})
+    iid = store.open(mine_now, category=spec.get("category", "fire"), panel=panel, summary=spec["summary"], by="sentinel")
+    if spec.get("followup"):
+        store.append(iid, mine_now, "followup_added", "agent", {"followup_id": "FU-eval", "due_at": mine_now[:19], "expect": spec["followup"]})
+        store.append(iid, mine_now, "followup_due", "sentinel", {"followup_id": "FU-eval"})
+    alert = store.append(iid, mine_now, "alert", "sentinel", {"cause": spec["cause"], "summary": spec["summary"]})
+    # 消息由评测运行器代投（提问就是投递的消息）：立刻标为已投递，免得唤醒插件再往值班会话投一份
+    store.append(iid, mine_now, "delivered", "eval", {"alert_id": alert["event_id"], "session_id": "eval"})
+    fmt.update(incident_id=iid, alert_id=alert["event_id"], mine_now=mine_now[:19])
+
+
 def new_session(page: Page) -> None:
     page.get_by_role("button", name="New Session").first.click()
     page.locator("[data-composer-input]").wait_for()
@@ -144,7 +167,7 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float, app
         waiting = [a for a in root.approvals() if a["outcome"] is None]
         if waiting:
             name = "Allow once" if approvals.get(waiting[0]["tool"]) == "allow" else "Reject"
-            btn = page.get_by_role("button", name=name)
+            btn = page.get_by_role("button", name=name, exact=True)  # 不精确匹配会点到“Error: the user rejected tool …”那一行（第二次确认时）
             if btn.count():
                 btn.first.click()
                 time.sleep(3)  # 等 approval/decided 写入日志，避免重复点击
@@ -160,6 +183,12 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float, app
         if children_done and any(n == "ask_user_question" for n, _ in _unanswered(root)) and time.time() - last_change >= quiet_s:
             return root, "asked_user"
         time.sleep(3)
+    try:  # 超时：留下页面截图和按钮，便于查是不是卡在确认弹窗上
+        shot = ROOT / "var" / "eval" / f"timeout-{root_id[-8:]}.png"
+        page.screenshot(path=str(shot))
+        print(f"  超时，页面截图 {shot}；按钮 {[b.inner_text() for b in page.get_by_role('button').all()][:30]}", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
     return grade.load_tree(root_id), "timeout"
 
 
@@ -199,7 +228,8 @@ def _unanswered(s: grade.Session) -> list[tuple[str, str]]:
 
 def run_one(page: Page, case: dict, model: str | None, timeout_s: float, quiet_s: float) -> dict:
     mine_now, fmt = setup_sim(case)
-    prompt = case["prompt"].format(**fmt)
+    setup_incident(case, mine_now, fmt)
+    prompt = " ".join(case["prompt"].format(**fmt).split("\n"))  # 输入框里换行会提前发送：压成一行
     new_session(page)
     if model:
         select_model(page, model)
