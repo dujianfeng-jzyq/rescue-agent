@@ -98,3 +98,7 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 - 待办（第二版）：`review_timeline` 迁移；唤醒失败记进记录；第一版 Python 包和 `docs/workflow-design.md` 的清理。
 - P5（2026-11-04）：模拟矿井演示模式（`RESCUE_SIM_MODE=demo`：常态连续运行、`/sim/demo/inject` 事故注入（过程参数从注入时刻换、剧本平移、物理状态连续）、`/sim/overrides` 读数设置（只作用于设置之后、历史不变）、只读看记录目录的异常检测记录自动暂停）与演示控制台 `/console`（单页，页面公开、接口带控制令牌）；`scripts/sim.py` 加 normal、inject、continue、override。Docker 部署 `docker/`（Python 服务镜像、DSH 镜像（构建时跑技能自检）、compose：只映射 13080、13090，令牌按服务分开、DSH 不拿控制令牌，技能目录只读挂载）、`scripts/demo.sh`（`make demo-up/down/reset/logs`）。`make demo-up` 从零启动三个容器健康，网页端一次性检测、控制台在容器里可用。
 - 容器部署要点：MCP SDK 的 DNS 重绑定防护缺省只认本机 Host，容器间按服务名访问会 421，用 `RESCUE_MCP_ALLOWED_HOSTS` 加白名单（`rescue_contract.serving.transport_security`）；证据插件的脚本运行目录缺省在记录目录旁，容器里单独给 `RESCUE_RUN_DIR`；DSH 不接受通配地址，入口脚本绑定容器地址并用 `--public-url`、`--trusted-host` 指向宿主机端口；新的 DSH_HOME 会弹预览声明、没有缺省模型，入口脚本第一次建配置档时写用户层 patch。容器里取数失败时模型会申请提权自己建目录（违反 persona），演示中出现提权确认一律拒绝。
+
+## 第三版进度（`v3` 分支）
+
+- P0（2026-11-05）：V1、V2 通过（验证清单 #24，验证代码在 `spike/v3-wake` 分支，不合入）：插件扫描事件目录，用 `ctx.sessionController.create/resolveAgent` + `agent.followup` 在没有任何网页端连接时唤醒值班会话，冷会话、热会话、从零新建三条路径都成立，退路不启用。注意：消息来源 `kind` 不能是 `plugin`（用 `rescue-sentinel`）；投递是至少一次，事件要带编号让智能体去重；值班会话要用 `workspaceId` 放进默认工作区并命名（未验证）。下一步 P1（rescue-mine 接口）。

@@ -132,3 +132,11 @@
   - `present`：插件经 `ctx.tools.execute({ name: 'present', parent: exec.token, … })` 嵌套调用即可，交付卡片（报告 .md、风险图 .svg）显示在本轮最后一条回答下面。工具结果里要写明“已交付，不要再调用 present”，否则模型会再调一次、再写一段回答（评测只看最后一条时会漏掉报告，grade.py 已改为看最后一轮的全部文字）。
   - `tool-workflow/run-start`、`agent-start`、`agent-end`、`run-end` 事件照 #19 的写法写进调用方会话。
 
+- #24 无人会话唤醒（第三版 V1、V2，2026-11-05，deepseek-flash，验证分支 `spike/v3-wake`，不合入）：
+  - 做法：验证插件 `dsh-bundle/src/spike-wake` 每 2 秒扫描事件目录（模拟 sentinel 写的事件库）里的 `*.json`：取值班会话（编号记在 `duty-session.json`，没有或恢复失败就 `ctx.sessionController.create({ cwd, agentPreset })` 新建）→ `ctx.sessionController.resolveAgent(sessionId)` → `agent.followup(createUserMessage({ content, source: { kind: 'rescue-sentinel' } }))` → `ctx.sessions.flush(agent.session)` 确认落盘 → 事件文件改名 `.delivered`。做法参照 `dsh-schedule` 到点恢复冷会话并投递提醒的实现。DSH 用 `--no-open` 启动，**全程没有浏览器连接**；预设是现有的 `rescue-commander`，事件文本要求调 `check_mine(once)`。
+  - V1 通过：事件写入后 2 秒内投递，智能体自己跑完一轮（`skill`、`check_mine`、`turn/end completed`）。三条路径都成立：① DSH 重启后恢复**冷会话**再投递；② **热会话**（已在内存里）再投递，第 2 轮正常；③ 没有值班会话时**从零新建**再投递。投递的消息在会话日志里是 `user/message`，来源 `rescue-sentinel`。
+  - V2 通过：插件自己读目录里的事件文件，不经模型；插件在 DSH 进程里，能直接读事件库。第三版 incident 插件照此实现，不需要另外的通知通道。
+  - 网页端：操作员事后打开网页端，值班会话出现在侧栏的 “Ungrouped”（`cwd` 不属于任何工作区），标题是 “Untitled”（没有生成标题）。正式实现要用 `workspaceId` 把值班会话放进默认工作区、并给会话命名（本次没有验证 `workspaceId`、标题怎么设）。
+  - 踩到的坑：① 消息来源 `kind` 不能是 `plugin`（v4 会话格式拒绝，报 `format v4 message requires a producer-owned source kind`），其他非空字符串都行；② 落盘失败时没有改名，每个轮询周期都会重投并报同样的错，正式实现要限制重试并退避，反复失败记“投递失败”事件；③ `createUserMessage` 在 `@deepseek-ai/dsh-llm`，bundle 没有这个依赖（验证插件从 dsh-tools 的位置解析），正式实现要把它收进 `src/adapter/dsh.ts`；④ 投递是“至少一次”：flush 之后、改名之前崩溃会重复投递（`dsh-schedule` 文档写明了同类限制），事件要带 `incident_id`/事件编号，智能体按编号去重。
+  - 没有验证：无人会话里遇到需人批准的 C 级动作（`ask_user_question` 的阻塞与“Waiting for answer”标记在 #20 验证过，审批弹窗同属“等待人”，但未单独复测）；值班会话长时间空闲（超过 20 分钟）；操作员正在同一会话输入时又来事件（交错）；`workspaceId` 与标题。
+  - 结论：**唤醒可行，设计 7.3 的退路不启用**（sentinel 的“发现异常—通知操作员”仍独立于模型；唤醒失败时仍按 #23 的两道补救，最后由控制台显示“未确认的异常”）。
