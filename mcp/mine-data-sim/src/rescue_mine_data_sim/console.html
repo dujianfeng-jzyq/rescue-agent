@@ -194,6 +194,7 @@ function renderIncidents(st) {
     <b>${esc(i.incident_id)}</b> ${esc(i.panel || '全矿')} ${i.category === 'monitor' ? '监听降级' : '火情'}，<b>${esc(i.status_name)}</b>
     <span class="muted">（${esc(i.opened_at.replace('T', ' '))} 起，${i.entry_count} 条）</span>
     ${i.unconfirmed.length ? `<div class="bad">未确认的告警 ${i.unconfirmed.length} 条（值班会话还没处理）：<ul>${i.unconfirmed.map((a) => `<li>${esc(a.at.replace('T', ' '))} ${esc(a.summary)}</li>`).join('')}</ul></div>` : ''}
+    ${(i.pending_approvals || []).map((a) => `<div class="${a.escalated ? 'bad' : 'warn'}">等待人工确认：${esc(a.tool)}（确认人 ${esc(a.confirmer || '未指定')}，${esc(a.timeout_min || '—')} 分钟内）${a.escalated ? `；<b>已超时，已提醒${esc(a.escalate_to || '上一级')}</b>` : ''}</div>`).join('')}
     ${i.followups.filter((f) => f.state !== 'done').map((f) => `<div class="warn">跟踪计划 ${esc(f.followup_id)}：${esc(f.due_at.replace('T', ' '))} 复评${f.state === 'due' ? '（已到点）' : ''}，预期 ${esc(f.expect || '')}</div>`).join('')}
     <details><summary class="muted">时间线（最近 ${i.timeline.length} 条）</summary><ul>${i.timeline.map((t) => `<li>${esc(t.at.replace('T', ' '))} ${esc(t.kind)} <span class="muted">${esc(t.by)}</span> ${esc(t.text)}</li>`).join('')}</ul></details></div>`
   $('incidents').innerHTML = (open.map(card).join('') || '<div class="ok">监测中，一切正常</div>') + (closed.length ? `<div class="muted">已关闭 ${closed.length} 个</div>` : '')

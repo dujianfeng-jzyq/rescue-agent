@@ -102,9 +102,11 @@
    "actions_failed": 0,
    "followups_added": 1,
    "followups_done": 0,
-   "delivery_failures": 0
+   "delivery_failures": 0,
+   "approvals_asked": 0,
+   "approvals_escalated": 0
   },
-  "counts_text": "告警 1 条；研判 1 次；效果复评 0 次；封闭方案 0 次；对外动作 已下发 1、被拒绝 1、执行失败 0；跟踪计划 登记 1、完成 0",
+  "counts_text": "告警 1 条；研判 1 次；效果复评 0 次；封闭方案 0 次；对外动作 已下发 1、被拒绝 1、执行失败 0；跟踪计划 登记 1、完成 0；人工确认 等待 0 次、其中超时升级 0 次",
   "durations": {
    "alert_to_assessment_min": 5,
    "alert_to_action_min": 10,
@@ -120,6 +122,9 @@
   "unhandled_alert_count": 0,
   "open_followup_count": 1,
   "has_unfinished": true,
+  "receipt_rows": [],
+  "has_receipts": false,
+  "receipts_text": "矿井回执 0 条：已完成 0、执行中 0、失败或被矿井拒绝 0、查不到 0",
   "has_actions": true
  }
 }

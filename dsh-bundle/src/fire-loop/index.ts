@@ -28,6 +28,7 @@ import { STAGE, type StageRunner } from './explanation.ts'
 import { draftSealingPlan, type HumanInput, type Redline, SEALING_FLOW } from './sealing.ts'
 import { IncidentStore } from '../incident/store.ts'
 import { noteOnIncident } from '../incident/timeline.ts'
+import { UNSEAL_FLOW, assessUnsealing } from './unsealing.ts'
 import { TIMELINE_FLOW, TimelineInputError, reviewTimeline } from './timeline.ts'
 import { EFFECT_FLOW, EffectInputError, type LastIssued, reviewEffect } from './effect.ts'
 
@@ -416,12 +417,53 @@ export function apply(ctx: Context, config: Config) {
             ...(args.incident_id ? { incidentId: String(args.incident_id) } : {}),
             origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
             signal: exec.signal,
+            receipt: (mineReceiptId) => (c.rescueEvidence as RescueEvidence).mineData.call('get_action_status', { action_id: mineReceiptId }, exec.signal),
           })
           out.delivered = await deliver(exec, `${out.card.record_ids[0]}.md`, out.report_markdown, `${out.result.incident_id} 事件复盘报告`)
           return toJson(out)
         } catch (err) {
           stopReason = 'failed'
           if (err instanceof TimelineInputError) return toJson({ error: err.message })
+          throw err
+        } finally {
+          append(parent.session, 'tool-workflow/run-end', { runId, stopReason })
+        }
+      },
+    }),
+  )
+
+  c.tools.register(
+    defineTool({
+      name: UNSEAL_FLOW,
+      description:
+        '启封评估（固定流程，问火区能不能启封、要求启封时一律先调它）：逐项判断封闭时长、氧浓度、CO 及上升趋势、乙烯、采空区温度是否满足启封条件（全部由代码计算），' +
+        '具备条件时按固定步骤生成启封方案（先检查、断电、撤人，再启封），存为记录。完整报告已作为文件交付；回答时把 brief_markdown（要点）原样单独成段放进回答，不要改写、不要另写分析。' +
+        'result.ready 为 true 且指挥人员要求启封时，调 approve_unsealing，record_id 照抄 result.issue_record_id，不要提交方案内容；ready 不是 true 时不要提交，照抄不满足的项。判据为开发占位值。',
+      parameters: { panel: { type: 'string', required: true, description: '工作面编号，如 1201' } },
+      output: {
+        schema: { type: 'json' as const },
+        render: (_args: unknown, v: any) => [
+          { type: 'text' as const, text: JSON.stringify({ summary: v.card.summary, warnings: v.card.warnings, brief_markdown: v.brief_markdown, record_ids: v.record_ids, result: v.result, delivered: v.delivered }) },
+        ],
+      },
+      execute: async (raw: unknown, exec: any) => {
+        const args = raw as { panel: string }
+        const parent = exec.agent
+        if (!parent) throw new Error(`${UNSEAL_FLOW} 需要调用方会话`)
+        const runId = `${UNSEAL_FLOW}-${randomUUID()}`
+        append(parent.session, 'tool-workflow/run-start', { runId, name: `${args.panel} 启封评估` })
+        let stopReason = 'completed'
+        try {
+          const out: any = await assessUnsealing(evidence, {
+            panel: String(args.panel),
+            origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
+            signal: exec.signal,
+          })
+          await logToIncident(String(args.panel), 'unsealing', out)
+          out.delivered = await deliver(exec, `${out.card.record_ids[0]}.md`, out.report_markdown, `${args.panel} 工作面启封评估报告`)
+          return toJson(out)
+        } catch (err) {
+          stopReason = 'failed'
           throw err
         } finally {
           append(parent.session, 'tool-workflow/run-end', { runId, stopReason })

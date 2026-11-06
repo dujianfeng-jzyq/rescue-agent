@@ -1,0 +1,27 @@
+# 启封条件（第三版遗留项，docs/design-v3.md 9 第 7 步）。全部是开发占位值，不代表任何规程或本矿制度。
+# TODO(专家): 按本矿火灾专项应急预案和《矿山救援规程》启封条款审定；条件的取法（最不利测点）也待评审。
+status: placeholder
+reviewed_by: null
+
+window_h: 24               # 趋势窗口（小时）
+min_sealed_h: 300          # 封闭后至少这么久才讨论启封（小时）
+max_o2_pct: 2.0            # 密闭内氧浓度上限（%，取最不利测点，即最大值）
+max_co_ppm: 24             # 密闭内 CO 上限（ppm，取最大值）
+max_co_rise_ppm_h: 0.1     # CO 上升速率上限（ppm/h，取最大斜率；窗口内不得继续上升）
+max_c2h4_ppm: 0.0          # 乙烯（C2H4）：不得检出
+max_temp_c: 30             # 采空区测温上限（℃，取最大值）
+
+plan:
+  kind: unsealing
+  title: 采空区火区启封方案
+  plan_id_prefix: UP
+  return_roadway_kind: return    # 撤人、断电针对回风侧巷道
+  basis:
+    document: 矿山救援规程
+    articles: [第164条]
+  steps:                         # 固定步骤，顺序固定（红线 RL-164：启封前必须先检查、断电、撤人）
+    - {key: pre_check, type: monitor, description: 启封前检查密闭内温度、气体和支护情况（第164条）}
+    - {key: evacuate, type: evacuate, roadways: return, description: 撤出回风侧人员（第164条）}
+    - {key: power_cutoff, type: power_cutoff, roadways: return, description: 切断回风流中的电源（第164条）}
+    - {key: unseal, type: unseal, description: 启封（逐步打开密闭，现场指挥统一调度）}
+    - {key: post_monitor, type: monitor, description: 启封后连续观测温度和气体，出现复燃征兆立即重新封闭}

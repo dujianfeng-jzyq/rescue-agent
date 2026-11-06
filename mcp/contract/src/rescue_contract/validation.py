@@ -37,6 +37,7 @@ CONTEXT_MAX_AGE = timedelta(hours=2)  # 方案依据的现场条件不得早于 
 
 PLAN_TOOLS: dict[str, PlanKind] = {
     "issue_sealing_plan": PlanKind.SEALING,
+    "approve_unsealing": PlanKind.UNSEALING,
 }
 NAMES = {"none": "无", "blue": "蓝色", "yellow": "黄色", "orange": "橙色", "red": "红色"}
 
@@ -71,6 +72,8 @@ RECORD_SOURCES: dict[str, tuple[str, str]] = {
     "publish_warning": ("fire-assessment", "warning"),
     "escalate_emergency": ("emergency-escalation", "escalation"),
     "issue_sealing_plan": ("plan-compliance", "review"),
+    # 启封评估的结果记录本身就是方案记录（没有模型编写和审核阶段：方案由代码按固定步骤生成，红线在这里和 guard 强制校验）
+    "approve_unsealing": ("unsealing-plan", "unsealing_plan"),
 }
 # 审核记录的输入里，方案记录必须是这个技能、这个脚本的结果
 PLAN_RECORD_SOURCE = ("sealing-plan", "compose")
@@ -151,10 +154,42 @@ def check_escalation_record(esc: Escalation, records: RecordStore | None, now: d
     return [], checks
 
 
+def unseal_from_record(
+    tool: str, record_id: str, records: RecordStore | None, now: datetime | None
+) -> tuple[Plan | None, list[str], list[str], list[ApprovalCheck]]:
+    """启封审批：按启封评估记录（unsealing-plan/unsealing_plan）取方案并核对。结论必须是“具备启封条件”，方案类型、时效、红线
+    （RL-164：先检查、断电、撤人）与下发时的强制校验同一套。返回（方案, 问题, 给确认人看的说明, 核对项）；有问题时方案为 None。"""
+    rec, checks = _record(records, record_id, tool, "启封方案", now)
+    if rec is None:
+        return None, [c.detail or c.name for c in checks if not c.ok], [], checks
+
+    def fail(name: str, detail: str) -> tuple[None, list[str], list[str], list[ApprovalCheck]]:
+        checks.append(ApprovalCheck(name=name, ok=False, detail=detail))
+        return None, [c.detail or c.name for c in checks if not c.ok], [], checks
+
+    r = _result(rec)
+    if r.get("ready") is not True or not r.get("plan"):
+        return fail("启封条件", f"启封评估记录 {rec.record_id} 的结论是{r.get('ready_name') or '不具备启封条件'}（不满足：{r.get('unmet_labels') or '未知'}），不能提交启封审批")
+    checks.append(ApprovalCheck(name="启封条件", ok=True, detail=f"评估记录 {rec.record_id} 的结论为具备启封条件（{r.get('met_count')} 项判定全部满足）"))
+    try:
+        plan = Plan.model_validate({**r["plan"], "record_id": rec.record_id})
+    except ValueError as exc:
+        return fail("方案格式", f"记录里的方案不符合数据契约：{exc}")
+    if rec.panel and plan.panel != rec.panel:
+        return fail("工作面", f"方案的工作面 {plan.panel} 与记录的工作面 {rec.panel} 不符")
+    problems = validate_plan(tool, plan, now)
+    checks.append(ApprovalCheck(name="方案类型、时效与红线", ok=not problems, detail="；".join(problems) or "通过（与下发时的强制校验同一套规则）"))
+    if problems:
+        return None, problems, [], checks
+    return plan, [], ["启封是不可逆的现场动作：请确认现场已具备启封的组织条件（救护队、通风、断电、撤人）"], checks
+
+
 def plan_from_record(
     tool: str, record_id: str, records: RecordStore | None, now: datetime | None
 ) -> tuple[Plan | None, list[str], list[str], list[ApprovalCheck]]:
     """第二版：按审核记录取方案并核对。返回（方案, 问题, 给确认人看的说明, 核对项）；有问题时方案为 None。"""
+    if tool == "approve_unsealing":
+        return unseal_from_record(tool, record_id, records, now)
     if tool not in PLAN_TOOLS:
         msg = f"{tool} 不支持按记录下发（目前只有 issue_sealing_plan）"
         return None, [msg], [], [ApprovalCheck(name="引用记录", ok=False, detail=msg)]
@@ -226,7 +261,7 @@ def precheck(tool: str, arguments: dict[str, Any], now: datetime | None, records
         elif tool in PLAN_TOOLS:
             record_id = arguments.get("record_id")
             if not isinstance(record_id, str) or not record_id:
-                problems = ["缺少 record_id：封闭方案只提交审核记录编号（draft_sealing_plan 返回的 record_ids.review），方案由 guard 从记录取"]
+                problems = ["缺少 record_id：封闭方案只提交审核记录编号（draft_sealing_plan 返回的 record_ids.review），启封只提交启封评估记录编号（assess_unsealing 返回的 record_ids.unseal），方案由 guard 从记录取"]
             else:
                 plan, problems, notes, checks = plan_from_record(tool, record_id, records, now)
                 if plan is not None:

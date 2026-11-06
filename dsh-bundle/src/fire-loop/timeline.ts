@@ -22,6 +22,8 @@ export interface TimelineOptions {
   incidentId?: string
   origin: Origin
   signal?: AbortSignal
+  /** 向矿井查回执的后续状态（rescue-mine 的 get_action_status）；不给就不查，复盘里没有回执部分 */
+  receipt?: (mineReceiptId: string) => Promise<unknown>
 }
 
 export async function reviewTimeline(ev: Evidence, opts: TimelineOptions) {
@@ -57,6 +59,21 @@ export async function reviewTimeline(ev: Evidence, opts: TimelineOptions) {
     }
   }
   const lastAt = entries[entries.length - 1]!.at
+  // 对外动作的矿井回执：guard 记进时间线的 mine_receipt_ids，逐个向矿井查后续状态；查不到的记下原因，由脚本算“查不到”
+  const receipts: Record<string, unknown> = {}
+  if (opts.receipt) {
+    for (const e of entries) {
+      if (e.kind !== 'note' || e.data.type !== 'action') continue
+      for (const mid of (e.data.mine_receipt_ids as string[] | undefined) ?? []) {
+        if (mid in receipts) continue
+        try {
+          receipts[mid] = await opts.receipt(mid)
+        } catch (err) {
+          receipts[mid] = { error: (err as Error).message }
+        }
+      }
+    }
+  }
   const evidence = await step('evidence', () =>
     ev.putEvidence({
       skill: IR,
@@ -65,7 +82,7 @@ export async function reviewTimeline(ev: Evidence, opts: TimelineOptions) {
       asOf: lastAt,
       origin: opts.origin,
       origin_of: `incident-store:${id}`,
-      content: { incident_id: id, category: view.category, panel: view.panel, as_of: lastAt, entries },
+      content: { incident_id: id, category: view.category, panel: view.panel, as_of: lastAt, entries, receipts },
     }),
   )
   const timeline = await step('timeline', () =>
@@ -96,6 +113,7 @@ export async function reviewTimeline(ev: Evidence, opts: TimelineOptions) {
       durations_text: r.durations_text,
       unhandled_alert_count: r.unhandled_alert_count,
       open_followup_count: r.open_followup_count,
+      receipts_text: r.has_receipts ? r.receipts_text : null,
     },
     events,
   }

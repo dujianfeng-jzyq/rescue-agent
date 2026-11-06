@@ -49,7 +49,17 @@ export interface IncidentView {
   degraded: boolean
   pending_alerts: string[]
   followups: Followup[]
+  /** 等人工确认、还没有结果的对外动作（approval_pending 没有 approval_decided） */
+  pending_approvals: PendingApproval[]
   entry_count: number
+}
+
+export interface PendingApproval {
+  approval_key: string
+  tool: string
+  asked_wall: string
+  escalated: boolean
+  [k: string]: unknown
 }
 
 export class IncidentNotFound extends Error {}
@@ -69,6 +79,7 @@ export function fold(incidentId: string, entries: Entry[]): IncidentView {
   const alerts = new Map<string, Entry>()
   const handled = new Set<string>()
   const followups = new Map<string, Followup>()
+  const approvals = new Map<string, PendingApproval>()
   let degraded = false
   for (const e of entries) {
     const d = e.data ?? {}
@@ -94,6 +105,11 @@ export function fold(incidentId: string, entries: Entry[]): IncidentView {
       case 'followup_done':
         if (followups.has(d.followup_id)) followups.get(d.followup_id)!.state = 'done'
         break
+      case 'note':
+        if (d.type === 'approval_pending') approvals.set(d.approval_key, { ...d, asked_wall: e.wall, escalated: false } as PendingApproval)
+        else if (d.type === 'approval_decided') approvals.delete(d.approval_key)
+        else if (d.type === 'approval_escalated' && approvals.has(d.approval_key)) approvals.get(d.approval_key)!.escalated = true
+        break
       case 'degraded':
         degraded = true
         break
@@ -115,6 +131,7 @@ export function fold(incidentId: string, entries: Entry[]): IncidentView {
     degraded,
     pending_alerts: [...alerts.keys()].filter((id) => !handled.has(id)),
     followups: [...followups.values()],
+    pending_approvals: [...approvals.values()],
     entry_count: entries.length,
   }
 }

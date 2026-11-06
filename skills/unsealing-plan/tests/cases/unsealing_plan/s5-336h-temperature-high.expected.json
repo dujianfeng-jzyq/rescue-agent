@@ -1,0 +1,92 @@
+{
+ "algorithm_version": "unsealing_plan/1.0.0",
+ "params": {
+  "window_h": 24,
+  "min_sealed_h": 300,
+  "max_o2_pct": 2.0,
+  "max_co_ppm": 24,
+  "max_co_rise_ppm_h": 0.1,
+  "max_c2h4_ppm": 0.0,
+  "max_temp_c": 30
+ },
+ "warnings": [
+  "启封条件和方案步骤为开发初稿（占位值），待专家评审"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-16T08:00:00",
+  "ready": false,
+  "ready_name": "不具备启封条件",
+  "rows": [
+   {
+    "key": "sealed_h",
+    "label": "封闭时长",
+    "value": 335.5,
+    "limit": 300,
+    "ok": true,
+    "judged": true,
+    "sensor_id": null,
+    "text": "封闭时长：335.5 小时（封闭于 2026-11-02T08:30:00），限值 ≥ 300 小时，满足"
+   },
+   {
+    "key": "o2",
+    "label": "氧浓度",
+    "value": 0.831,
+    "limit": 2.0,
+    "ok": true,
+    "judged": true,
+    "sensor_id": "BT-1201-G1",
+    "text": "氧浓度：最大 0.831 %（BT-1201-G1），限值 ≤ 2.0 %，满足"
+   },
+   {
+    "key": "co",
+    "label": "CO 浓度",
+    "value": 15.397,
+    "limit": 24,
+    "ok": true,
+    "judged": true,
+    "sensor_id": "BT-1201-G1",
+    "text": "CO 浓度：最大 15.397 ppm（BT-1201-G1），限值 ≤ 24 ppm，满足"
+   },
+   {
+    "key": "co_rise",
+    "label": "CO 上升速率",
+    "value": 0.013,
+    "limit": 0.1,
+    "ok": true,
+    "judged": true,
+    "sensor_id": "BT-1201-G1",
+    "text": "CO 上升速率：最大 0.013 ppm/h（BT-1201-G1），限值 ≤ 0.1 ppm/h，满足"
+   },
+   {
+    "key": "c2h4",
+    "label": "乙烯",
+    "value": 0.0,
+    "limit": 0.0,
+    "ok": true,
+    "judged": true,
+    "sensor_id": "BT-1201-G1",
+    "text": "乙烯：最大 0.0 ppm（BT-1201-G1），限值 ≤ 0.0 ppm，满足"
+   },
+   {
+    "key": "temp",
+    "label": "采空区温度",
+    "value": 45.0,
+    "limit": 30,
+    "ok": false,
+    "judged": true,
+    "sensor_id": "TP-1201-G1",
+    "text": "采空区温度：最高 45.0 ℃（TP-1201-G1），限值 ≤ 30 ℃，不满足"
+   }
+  ],
+  "total_count": 6,
+  "met_count": 5,
+  "unmet_count": 1,
+  "unmet_labels": "采空区温度",
+  "sealed_at": "2026-11-02T08:30:00",
+  "plan": null,
+  "steps_view": [],
+  "step_count": 0,
+  "data_quality": []
+ }
+}

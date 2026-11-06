@@ -65,6 +65,11 @@ services:
     volumes:
       - ../skills:/app/skills:ro
       - ../var/demo/incidents:/data/incidents
+    healthcheck:   # 心跳文件（真实时间）新鲜且没有错误，才算监听器在正常监听
+      test: ["CMD", "python", "-c", "import json,time; h=json.load(open('/data/incidents/sentinel/heartbeat.json')); assert time.time()-h['wall']<60 and not h.get('error'), h"]
+      interval: 10s
+      retries: 12
+      start_period: 15s
     depends_on:
       mine-sim: {condition: service_healthy}
 

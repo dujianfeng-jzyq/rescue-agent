@@ -22,6 +22,7 @@ from rescue_mine_data_sim.server import build_server as build_mine
 SKILLS = Path(__file__).resolve().parents[3] / "skills"
 COMPOSE = json.loads((SKILLS / "sealing-plan/tests/cases/compose/s4-escalation-60h-full.expected.json").read_text(encoding="utf-8"))
 REVIEW = json.loads((SKILLS / "plan-compliance/tests/cases/review/pass.expected.json").read_text(encoding="utf-8"))
+UNSEAL_READY = json.loads((SKILLS / "unsealing-plan/tests/cases/unsealing_plan/s5-336h-ready.expected.json").read_text(encoding="utf-8"))
 ORIGIN = Origin(channel="web", trigger="chat")
 
 
@@ -80,6 +81,14 @@ def world(tmp_path) -> World:
     assert COMPOSE["result"]["as_of"] == "2026-11-04T20:00:00"  # 样例的矿井时间：s4-escalation 第 60 小时
     w = make_world(tmp_path)
     assert w.holder.engine.now().isoformat() == COMPOSE["result"]["as_of"]
+    return w
+
+
+@pytest.fixture
+def world_s5(tmp_path) -> World:
+    """s5 封闭火区第 336 小时（启封评估样例的时刻）。"""
+    w = make_world(tmp_path, "s5-sealed-fire-area", 336)
+    assert w.holder.engine.now().isoformat() == UNSEAL_READY["result"]["as_of"]
     return w
 
 

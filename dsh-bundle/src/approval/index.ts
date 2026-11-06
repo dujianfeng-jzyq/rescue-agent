@@ -14,6 +14,9 @@ import type { Context, PreToolDecision } from '../adapter/dsh.ts'
 import { Schema } from '../adapter/dsh.ts'
 import { readFileSync } from 'node:fs'
 
+import { IncidentStore } from '../incident/store.ts'
+import { type PendingInfo, recordDecided, recordPending } from './pending.ts'
+
 import { type ActionPolicy, type ApprovalConfig, classify, type FetchLike, precheck } from './policy.ts'
 
 export const name = 'rescue-approval'
@@ -41,10 +44,31 @@ export const Config: Schema<Config> = Schema.object({
   precheckUrl: Schema.string().default('http://127.0.0.1:8106/redlines/check'),
   precheckTimeoutMs: Schema.natural().default(5000),
   token: Schema.string(),
+  /** 事件库目录；给了就把人工确认的等待和结果记进事件时间线，监听器据此做批准超时升级 */
+  incidentDir: Schema.string(),
 })
 
 export function apply(ctx: Context, config: Config) {
   const fetchImpl = globalThis.fetch as unknown as FetchLike
+  const incidents = config.incidentDir ? new IncidentStore(config.incidentDir) : undefined
+  /** 弹了确认、还没有结果的调用：callId → 事件和动作信息 */
+  const asked = new Map<string, PendingInfo>()
+
+  // 确认的等待和结果记进事件时间线（失败只记警告，不影响确认）
+  ;(ctx as any).on('approval/request', async (req: any, next: () => Promise<string>) => {
+    const info = req.callId ? asked.get(String(req.callId)) : undefined
+    if (!info || !incidents) return next()
+    const key = String(req.callId)
+    await recordPending(incidents, key, info).catch((err: Error) => ctx.logger.warn(`rescue-approval: 记录待确认失败：${err.message}`))
+    let outcome = 'unavailable'
+    try {
+      outcome = await next()
+      return outcome as never
+    } finally {
+      asked.delete(key)
+      await recordDecided(incidents, key, info, outcome).catch((err: Error) => ctx.logger.warn(`rescue-approval: 记录确认结果失败：${err.message}`))
+    }
+  })
 
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
     const gate = classify(exec.name, config)
@@ -57,6 +81,7 @@ export function apply(ctx: Context, config: Config) {
     // 先让其他策略表态；有人拒绝或取消就照办，全部放行才请人确认
     const upstream = await next()
     if (upstream.kind !== 'allow') return upstream
+    if (verdict.incidentId) asked.set(String(exec.callId), { incidentId: verdict.incidentId, tool: gate.rawName, recordIds: verdict.recordIds ?? [], policy: config.policies.find((p) => p.tool === gate.rawName) })
     return { kind: 'ask', reason: verdict.reason, displayReason: verdict.displayReason }
   })
 }

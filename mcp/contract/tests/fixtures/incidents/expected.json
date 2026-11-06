@@ -19,6 +19,7 @@
       "EVT-20261105T090000-000006",
       "EVT-20261105T130000-000012"
     ],
+    "pending_approvals": [],
     "status": "monitoring",
     "status_name": "监测中",
     "summary": "1201 工作面异常",
@@ -27,7 +28,7 @@
   "INC-20261105T090000-bbbbbb": {
     "category": "monitor",
     "degraded": true,
-    "entry_count": 4,
+    "entry_count": 8,
     "followups": [],
     "incident_id": "INC-20261105T090000-bbbbbb",
     "opened_at": "2026-11-05T09:00:00",
@@ -35,9 +36,21 @@
     "pending_alerts": [
       "EVT-20261105T093000-000023"
     ],
+    "pending_approvals": [
+      {
+        "approval_key": "call-1",
+        "asked_wall": "2026-11-05T09:41:00+00:00",
+        "confirmer": "通风部门负责人",
+        "escalate_to": "值班长",
+        "escalated": true,
+        "timeout_min": 10,
+        "tool": "publish_warning",
+        "type": "approval_pending"
+      }
+    ],
     "status": "monitoring",
     "status_name": "监测中",
     "summary": "1201 工作面监听降级",
-    "updated_at": "2026-11-05T09:30:01"
+    "updated_at": "2026-11-05T09:55:00"
   }
 }

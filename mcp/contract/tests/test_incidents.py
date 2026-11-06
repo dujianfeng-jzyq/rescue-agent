@@ -19,7 +19,7 @@ def test_fold_matches_shared_fixture():
 def test_truncated_line_is_skipped(tmp_path):
     shutil.copytree(FIX, tmp_path / "x")
     store = IncidentStore(tmp_path / "x")
-    assert len(store.entries("INC-20261105T090000-bbbbbb")) == 4
+    assert len(store.entries("INC-20261105T090000-bbbbbb")) == 8
 
 
 def test_open_append_and_find(tmp_path):

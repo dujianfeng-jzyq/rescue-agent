@@ -1,0 +1,5 @@
+scripts:
+  unsealing_plan:
+    file: scripts/unsealing_plan.py
+    description: 启封条件判断（封闭时长、氧浓度、CO 及趋势、乙烯、温度逐项判定）；具备条件时按固定步骤生成启封方案
+    timeout_s: 20

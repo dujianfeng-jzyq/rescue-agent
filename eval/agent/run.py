@@ -166,8 +166,10 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float, app
             last_count, last_change = count, time.time()
         waiting = [a for a in root.approvals() if a["outcome"] is None]
         if waiting:
-            name = "Allow once" if approvals.get(waiting[0]["tool"]) == "allow" else "Reject"
-            btn = page.get_by_role("button", name=name, exact=True)  # 不精确匹配会点到“Error: the user rejected tool …”那一行（第二次确认时）
+            # 按钮名随网页端语言：英文 Allow once / Reject，中文 允许一次 / 拒绝（Docker 演示环境是中文）。精确匹配，
+            # 否则会点到“Error: the user rejected tool …”那一行（第二次确认时）
+            name = re.compile(r"^(Allow once|允许一次)$") if approvals.get(waiting[0]["tool"]) == "allow" else re.compile(r"^(Reject|拒绝)$")
+            btn = page.get_by_role("button", name=name)
             if btn.count():
                 btn.first.click()
                 time.sleep(3)  # 等 approval/decided 写入日志，避免重复点击

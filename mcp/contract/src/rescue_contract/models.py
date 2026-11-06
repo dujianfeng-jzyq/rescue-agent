@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, WithJsonSchema, model_validator
 
-CONTRACT_VERSION = "0.11.0"
+CONTRACT_VERSION = "0.12.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -537,6 +537,7 @@ class ApprovalSummary(_Model):
     checks: list[ApprovalCheck] = Field(default_factory=list)
     human_items: list[str] = Field(default_factory=list)  # 需要确认人把关的人工确认项
     override_reason: str | None = None
+    incident_id: str | None = None  # 该动作所属的未关闭火情事件（guard 按引用记录的工作面查；审批超时升级要挂在事件上）
 
 
 class FlowEvent(_Model):

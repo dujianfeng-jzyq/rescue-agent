@@ -28,6 +28,7 @@ SKILLS = ROOT / "skills"
 FA, XT, ESC = "fire-assessment", "explosion-triangle", "emergency-escalation"
 SP, PC, ER = "sealing-plan", "plan-compliance", "effect-review"
 IR = "incident-review"
+UP = "unsealing-plan"
 
 
 def evidence(scenario: str, hours: float, kind: str = "assessment", unseal_at: float | None = None, skill: str = FA) -> dict:
@@ -359,16 +360,64 @@ def incident_inputs() -> dict[tuple[str, str, str], dict]:
         _entry(15, "2026-11-05T14:00:00", "status", "sentinel", {"status": "stable", "reason": "监测指标恢复正常"}),
         _entry(16, "2026-11-05T15:00:00", "status", "agent", {"status": "closed", "reason": "稳定"}),
     ]
+    # 含人工确认的等待、超时升级、结果，以及矿井回执（一条已完成、一条执行中、一条查不到）
+    approvals = [
+        _entry(21, "2026-11-05T08:19:00", "note", "approval", {"type": "approval_pending", "approval_key": "c1", "tool": "publish_warning", "confirmer": "通风部门负责人", "timeout_min": 10, "escalate_to": "值班长", "record_ids": []}),
+        _entry(22, "2026-11-05T08:30:00", "note", "sentinel", {"type": "approval_escalated", "approval_key": "c1", "tool": "publish_warning", "escalate_to": "值班长", "waited_min": 11}),
+        _entry(23, "2026-11-05T08:35:00", "note", "approval", {"type": "approval_decided", "approval_key": "c1", "tool": "publish_warning", "outcome": "allowed-once"}),
+    ]
+    with_receipts = [
+        *base[:4],
+        *approvals,
+        _entry(24, "2026-11-05T08:36:00", "note", "guard", {"type": "action", "tool": "publish_warning", "status": "issued", "action_id": "A-2222222222", "record_ids": [], "problems": [], "mine_receipt_ids": ["M-1"]}),
+        _entry(25, "2026-11-05T08:40:00", "note", "guard", {"type": "action", "tool": "issue_sealing_plan", "status": "issued", "action_id": "A-3333333333", "record_ids": [], "problems": [], "mine_receipt_ids": ["M-2", "M-3"]}),
+    ]
+    receipts = {
+        "M-1": {"action_id": "M-1", "kind": "notice", "status": "completed", "received_at": "2026-11-05T08:36:00", "updated_at": "2026-11-05T08:36:00", "idempotency_key": "k1", "detail": None},
+        "M-2": {"action_id": "M-2", "kind": "treatment", "status": "executing", "received_at": "2026-11-05T08:40:00", "updated_at": "2026-11-05T08:41:00", "idempotency_key": "k2", "detail": "注惰执行中"},
+        "M-3": {"error": "未知回执编号：M-3"},
+    }
     return {
+        (IR, "timeline", "with-approvals-and-receipts"): ev(with_receipts, receipts=receipts),
         (IR, "timeline", "full-process-closed"): ev(full),
         (IR, "timeline", "in-progress-unfinished"): ev(base),
         (IR, "timeline", "alert-only"): ev(base[:2]),
     }
 
 
+def unseal_inputs() -> dict[tuple[str, str, str], dict]:
+    """启封评估：s5 封闭火区在第 336 小时（占位判据下具备条件）、第 240 小时（封闭时长不够）、缺束管数据（无法判定）。"""
+    ready = evidence("s5-sealed-fire-area", 336, "unseal", skill=UP)
+    early = evidence("s5-sealed-fire-area", 240, "unseal", skill=UP)
+    no_tubes = copy.deepcopy(ready)
+    no_tubes["groups"]["tubes"] = {**no_tubes["groups"]["tubes"], "latest": [], "readings": []}
+    hot = copy.deepcopy(ready)  # 温度超限：把采空区测温最新值改高
+    for g in ("goaf_temperature",):
+        for r in hot["groups"][g]["latest"] + hot["groups"][g]["readings"]:
+            if r["measurand"] == "TEMP" and r["ts"] >= hot["as_of"][:13]:
+                r["value"] = 45.0
+    return {
+        (UP, "unsealing_plan", "s5-336h-ready"): {"evidence": ready},
+        (UP, "unsealing_plan", "s5-240h-sealed-too-short"): {"evidence": early},
+        (UP, "unsealing_plan", "s5-336h-no-tube-data"): {"evidence": no_tubes},
+        (UP, "unsealing_plan", "s5-336h-temperature-high"): {"evidence": hot},
+    }
+
+
+def unseal_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
+    out = {}
+    for case in ("s5-336h-ready", "s5-240h-sealed-too-short"):
+        data = inputs[(UP, "unsealing_plan", case)]
+        rec = fake_record("unseal", run(UP, "unsealing_plan", data), 0)
+        rec["as_of"] = data["evidence"]["as_of"]
+        for tpl in ("report", "brief"):
+            out[(UP, tpl, case)] = report_data({"unseal": rec})
+    return out
+
+
 def incident_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
     out = {}
-    for case in ("full-process-closed", "in-progress-unfinished"):
+    for case in ("full-process-closed", "in-progress-unfinished", "with-approvals-and-receipts"):
         data = inputs[(IR, "timeline", case)]
         rec = fake_record("timeline", run(IR, "timeline", data), 0)
         rec["panel"], rec["as_of"] = "1201", data["evidence"]["as_of"]
@@ -382,7 +431,7 @@ def main() -> int:
     ap.add_argument("--expected", action="store_true", help="只按现有输入重写期望")
     args = ap.parse_args()
     if args.expected:
-        for skill in (FA, XT, ESC, SP, PC, ER, IR):
+        for skill in (FA, XT, ESC, SP, PC, ER, IR, UP):
             for inp in sorted((SKILLS / skill / "tests" / "cases").glob("*/*.input.json")):
                 write_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/{inp.parent.name}/{inp.name}")
@@ -390,8 +439,8 @@ def main() -> int:
                 write_template_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/templates/{inp.parent.name}/{inp.name}")
         return 0
-    inputs = {**build_inputs(), **sealing_inputs(), **effect_inputs(), **incident_inputs()}
-    for (skill, template, case), data in {**build_template_inputs(inputs), **sealing_template_inputs(inputs), **effect_template_inputs(inputs), **incident_template_inputs(inputs)}.items():
+    inputs = {**build_inputs(), **sealing_inputs(), **effect_inputs(), **incident_inputs(), **unseal_inputs()}
+    for (skill, template, case), data in {**build_template_inputs(inputs), **sealing_template_inputs(inputs), **effect_template_inputs(inputs), **incident_template_inputs(inputs), **unseal_template_inputs(inputs)}.items():
         write_template_case(skill, template, case, data)
         print(f"模板  {skill}/{template}/{case}")
     for (skill, script, case), data in inputs.items():

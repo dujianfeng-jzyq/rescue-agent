@@ -232,3 +232,32 @@ async def test_mine_alarm_ingested_once(tmp_path, monkeypatch):
     f.alarms.append({"alarm_id": "AL-2", "sensor_id": "SM-1201-UC", "message": "m", "acknowledged": False})
     got = await f.step(result("blue", "latent", alarms=["R@S"], reasons=["新的实时报警"], escalated=True))
     assert [a["data"]["cause"] for a in got] == ["anomaly"]
+
+
+@arun
+async def test_approval_timeout_escalates_once(tmp_path, monkeypatch):
+    from datetime import datetime
+
+    f = Fake(tmp_path, monkeypatch)
+    await f.step(result("blue", "latent", reasons=["x"], escalated=True))
+    (inc,) = f.store.list()
+    iid = inc["incident_id"]
+    base = datetime.fromisoformat(f.store.entries(iid)[-1]["wall"]).timestamp()
+    f.store.append(iid, f.mine_now(), "note", "approval", {"type": "approval_pending", "approval_key": "c1", "tool": "publish_warning", "confirmer": "通风部门负责人", "timeout_min": 10, "escalate_to": "值班长"})
+    f.store.append(iid, f.mine_now(), "note", "approval", {"type": "approval_pending", "approval_key": "c2", "tool": "escalate_emergency", "confirmer": "矿长", "timeout_min": 15, "escalate_to": "矿长"})
+    asked = datetime.fromisoformat(f.store.entries(iid)[-1]["wall"]).timestamp()
+    f.s.wall = lambda: asked + 5 * 60  # type: ignore[method-assign]
+    assert [a["data"]["cause"] for a in await f.step(result("blue", "latent"))] == []  # 才等 5 分钟
+    f.s.wall = lambda: asked + 11 * 60  # type: ignore[method-assign]
+    got = await f.step(result("blue", "latent"))
+    assert [a["data"]["cause"] for a in got] == ["approval_timeout"] and "publish_warning" in got[0]["data"]["summary"] and "值班长" in got[0]["data"]["summary"]
+    f.s.wall = lambda: asked + 12 * 60  # type: ignore[method-assign]
+    assert await f.step(result("blue", "latent")) == []  # 只升级一次
+    # 其中一个有了结果就不再算未决；另一个超过自己的时限（15 分钟）才升级
+    f.store.append(iid, f.mine_now(), "note", "approval", {"type": "approval_decided", "approval_key": "c1", "outcome": "rejected"})
+    f.s.wall = lambda: asked + 16 * 60  # type: ignore[method-assign]
+    got = await f.step(result("blue", "latent"))
+    assert [a["data"]["tool"] for a in got] == ["escalate_emergency"]
+    v = f.store.get(iid)
+    assert [(a["approval_key"], a["escalated"]) for a in v["pending_approvals"]] == [("c2", True)]
+    assert base > 0

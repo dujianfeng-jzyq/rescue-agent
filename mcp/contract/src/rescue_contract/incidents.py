@@ -19,7 +19,8 @@
 - acked       操作员/智能体确认已看到（data: alert_id）
 - status      状态变化（data: status ∈ monitoring/handling/stable/closed, reason）
 - followup_added / followup_done / followup_due   跟踪计划（data: followup_id, due_at, expect…）
-- note        其他时间线信息（研判、对外动作、人工输入等，data: text, record_ids…）
+- note        其他时间线信息（研判、对外动作、人工输入等，data: type, text, record_ids…）。type 为 approval_pending / approval_decided / approval_escalated 的
+              note 记录人工确认的等待、结果和超时升级（approval_key 配对）；未决的折叠成 pending_approvals
 """
 
 from __future__ import annotations
@@ -68,6 +69,7 @@ def fold(incident_id: str, entries: list[dict[str, Any]]) -> dict[str, Any]:
     handled: set[str] = set()
     followups: dict[str, dict[str, Any]] = {}
     degraded = False
+    approvals: dict[str, dict[str, Any]] = {}
     for e in entries:
         k, d = e["kind"], e.get("data") or {}
         if k == "alert":
@@ -86,6 +88,12 @@ def fold(incident_id: str, entries: list[dict[str, Any]]) -> dict[str, Any]:
             followups[d["followup_id"]]["state"] = "due"
         elif k == "followup_done" and d.get("followup_id") in followups:
             followups[d["followup_id"]]["state"] = "done"
+        elif k == "note" and d.get("type") == "approval_pending":
+            approvals[d["approval_key"]] = {**d, "asked_wall": e["wall"], "escalated": False}
+        elif k == "note" and d.get("type") == "approval_decided":
+            approvals.pop(d.get("approval_key"), None)
+        elif k == "note" and d.get("type") == "approval_escalated" and d.get("approval_key") in approvals:
+            approvals[d["approval_key"]]["escalated"] = True
         elif k == "degraded":
             degraded = True
         elif k == "recovered" and d.get("of") == "degraded":
@@ -103,6 +111,7 @@ def fold(incident_id: str, entries: list[dict[str, Any]]) -> dict[str, Any]:
         "degraded": degraded,
         "pending_alerts": [a["event_id"] for a in alerts.values() if a["event_id"] not in handled],
         "followups": list(followups.values()),
+        "pending_approvals": list(approvals.values()),
         "entry_count": len(entries),
     }
 

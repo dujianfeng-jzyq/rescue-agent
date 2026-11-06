@@ -89,11 +89,52 @@ DUTY_TITLE = "值班会话（监听器告警）"  # 唤醒插件创建值班会�
 
 def open_duty_session(page: Page) -> None:
     page.reload()  # 值班会话是插件在后台建的，已打开的页面侧栏里没有，刷新才看得到
-    title = page.get_by_text(DUTY_TITLE, exact=False)
-    if not title.count():  # 值班工作区的分组折叠着：先点开
+    page.wait_for_timeout(3000)
+    # 点会话那一行（role=treeitem）；点里面的文字 span 会被会话列表的覆盖层拦住（侧栏在会话更新时重绘）
+    row = page.get_by_role("treeitem").filter(has_text=DUTY_TITLE)
+    if not row.count():  # 值班工作区的分组折叠着：先点开
         page.get_by_text(DUTY_WORKSPACE, exact=True).first.click(timeout=15_000)
-    title.first.click(timeout=30_000)
-    page.locator("[data-composer-input]").wait_for()
+        page.wait_for_timeout(1000)
+    for _ in range(6):
+        try:
+            row.first.click(timeout=5_000)
+            break
+        except Exception:  # noqa: BLE001
+            page.wait_for_timeout(1500)
+    else:
+        raise RuntimeError("点不开值班会话")
+    # 智能体正等人工确认时输入框是隐藏的（弹窗替代了它），这里不等输入框；后面 send 之前会话已经跑完
+
+
+# 现场条件的回答（操作员替总指挥确认）：按问题里的关键词给答案；选择题点包含答案文字的选项，填空题填进输入框
+FIELD_ANSWERS = [("温度", "28"), ("能见度", "20"), ("火源", "已明确"), ("水源", "充足"), ("回风", "畅通"), ("谁确认", "总指挥")]
+
+
+def answer_questions(page: Page, max_questions: int = 8) -> int:
+    """智能体用提问卡片（逐题“下一题”）向人要现场条件时，按 FIELD_ANSWERS 作答；返回答了几题。网页端中文界面。"""
+    done = 0
+    for _ in range(max_questions):
+        box = page.get_by_placeholder("输入你的答案")
+        card = page.locator("text=/现场条件 \\d+\\/\\d+/")
+        if not card.count() and not box.count():
+            break
+        question = page.locator("text=/\\?$|？$/").last.inner_text() if page.locator("text=/\\?$|？$/").count() else ""
+        answer = next((a for k, a in FIELD_ANSWERS if k in question), None)
+        if answer is None:
+            break
+        option = page.get_by_text(answer, exact=False)
+        if box.count() and box.first.is_visible():
+            box.first.fill(answer)
+        elif option.count():
+            option.first.click()
+        for label in ("下一题", "提交", "Submit"):
+            btn = page.locator("button:not([disabled])").filter(has_text=label)  # 卡片上还有同名的图标按钮（aria-label，没有文字，答完才可用），要点带文字的那个
+            if btn.count():
+                btn.first.click()
+                break
+        done += 1
+        page.wait_for_timeout(1500)
+    return done
 
 
 def main(argv: list[str]) -> int:
@@ -134,9 +175,13 @@ def main(argv: list[str]) -> int:
         open_duty_session(page)
         root, status = runner.wait_settled(sid, page, a.timeout, a.quiet, APPROVALS)
         say(f"  值班会话 {status}")
+        if status == "asked_user":  # 智能体研判后主动起草了封闭方案，向人要现场条件（缺信息，允许提问）：操作员作答
+            say(f"  智能体提问现场条件，操作员作答 {answer_questions(page)} 题")
+            root, status = runner.wait_settled(sid, page, a.timeout, a.quiet, APPROVALS)
+            say(f"  值班会话 {status}")
 
         say("步骤 4 操作员决定封闭：编制封闭方案、合规审核、人工确认下发")
-        runner.send(page, "1201 采空区火势无法控制，指挥部决定封闭 1201 采空区火区。请编制封闭方案，经合规审核通过后提交人工确认下发。")
+        runner.send(page, "1201 采空区火势无法控制，指挥部决定封闭 1201 采空区火区。现场条件由总指挥确认：灾区温度 28 ℃，能见度 20 米，火源已明确，水源、人力和物力充足，回风道畅通。请编制封闭方案，经合规审核通过后提交人工确认下发。")
         root, status = runner.wait_settled(sid, page, a.timeout, a.quiet, APPROVALS)
         say(f"  值班会话 {status}")
         if not store.get(iid)["followups"]:

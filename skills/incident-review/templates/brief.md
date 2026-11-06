@@ -4,6 +4,9 @@
 - 状态：{{timeline.result.status_name}}；{{timeline.result.opened_at}} 至 {{timeline.result.last_at}}
 - {{timeline.result.counts_text}}
 - 发现异常到第一次研判：{{timeline.result.durations_text.alert_to_assessment_min}}；到第一次下发成功：{{timeline.result.durations_text.alert_to_issued_min}}
+{{#timeline.result.has_receipts}}
+- {{timeline.result.receipts_text}}
+{{/timeline.result.has_receipts}}
 {{#timeline.result.has_unfinished}}
 - 未完成事项：未确认的告警 {{timeline.result.unhandled_alert_count}} 条；未完成的跟踪计划 {{timeline.result.open_followup_count}} 个
 {{/timeline.result.has_unfinished}}

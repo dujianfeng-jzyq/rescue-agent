@@ -1,0 +1,18 @@
+# 采集清单：启封条件判断与启封方案的证据（skills/README.md“采集清单”）。只能用 mine_data 的工具（CLAUDE.md 约定 5）。
+# 窗口要不短于 readiness.yaml 的 window_h。TODO(专家): 测点和必需项待评审。
+status: placeholder
+reviewed_by: null
+
+kinds:
+  unseal:
+    sensors:
+      - name: tubes               # 密闭内（采空区）束管：O2、CO、C2H4
+        select: {role: goaf_gas_tube, panel: true}
+        window_h: 24
+        required: true
+      - name: goaf_temperature    # 采空区测温
+        select: {role: goaf_temperature, panel: true}
+        window_h: 24
+        required: true
+    fire_areas: true              # 封闭时间
+    network: true                 # 回风侧巷道（撤人、断电）

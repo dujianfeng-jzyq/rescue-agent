@@ -16,6 +16,7 @@ EXPECTED_TOOLS = {
     "notify_evacuation",
     "issue_dispatch_order",
     "issue_sealing_plan",
+    "approve_unsealing",
     "precheck_plan",
     "query_last_issued",
 }
@@ -33,7 +34,7 @@ def test_tool_set(world):
         async with Client(world.server) as c:
             return {t.name for t in (await c.list_tools()).tools}
 
-    assert asyncio.run(go()) == EXPECTED_TOOLS  # 防灭火方案、启封方案没有第二版流程，已删除
+    assert asyncio.run(go()) == EXPECTED_TOOLS  # 防灭火方案没有第二版流程，已删除；启封审批按记录重做（approve_unsealing）
 
 
 # ── 封闭方案：第二道、第三道防线 ──
@@ -337,3 +338,69 @@ def test_actions_are_noted_on_the_open_incident(tmp_path, monkeypatch, request):
     store.append(iid, "2026-11-05T09:00:00", "status", "agent", {"status": "closed"})
     assert not world.call("publish_warning", warning_args(rid)).is_error
     assert world.rows()[-1]["incident_id"] is None
+
+
+# ── 启封审批（approve_unsealing，按启封评估记录）──
+
+
+def _unseal_content(mutate=None, ready=True):
+    import json as _json
+    from pathlib import Path
+
+    sample = _json.loads((Path(__file__).resolve().parents[3] / "skills/unsealing-plan/tests/cases/unsealing_plan/s5-336h-ready.expected.json").read_text(encoding="utf-8"))
+    if mutate:
+        mutate(sample["result"]["plan"])
+    if not ready:
+        sample["result"].update(ready=False, ready_name="不具备启封条件", unmet_labels="封闭时长", plan=None)
+    return sample
+
+
+def test_approve_unsealing_runs_the_fixed_steps_on_the_mine(world_s5):
+    rid = world_s5.put("unsealing-plan", "unsealing_plan", _unseal_content())
+    r = world_s5.call("approve_unsealing", {"record_id": rid})
+    assert not r.is_error, r.content[0].text
+    receipt = r.structured_content
+    assert receipt["status"] == "issued" and len(receipt["mine_receipts"]) == 5
+    assert any(a.type == "unseal" for a in world_s5.holder.engine.action_log)
+    # 检查、断电、观测模拟矿井不执行，如实列出
+    assert len(receipt["mine_not_executed"]) == 3
+    assert world_s5.rows()[-1]["tool"] == "approve_unsealing" and world_s5.rows()[-1]["record_ids"] == [rid]
+
+
+def test_approve_unsealing_refuses_when_not_ready(world_s5):
+    rid = world_s5.put("unsealing-plan", "unsealing_plan", _unseal_content(ready=False))
+    r = world_s5.call("approve_unsealing", {"record_id": rid})
+    assert r.is_error and "不具备启封条件" in r.content[0].text
+    assert world_s5.rows()[-1]["status"] == "rejected" and not any(a.type == "unseal" for a in world_s5.holder.engine.action_log)
+
+
+def test_approve_unsealing_enforces_rl164(world_s5):
+    def drop_power_cutoff(plan):
+        plan["steps"] = [s for s in plan["steps"] if s["type"] != "power_cutoff"]
+
+    rid = world_s5.put("unsealing-plan", "unsealing_plan", _unseal_content(drop_power_cutoff))
+    r = world_s5.call("approve_unsealing", {"record_id": rid})
+    assert r.is_error and "第164条" in r.content[0].text and "切断回风流电源" in r.content[0].text
+    assert not any(a.type == "unseal" for a in world_s5.holder.engine.action_log)
+
+
+def test_approve_unsealing_needs_the_right_record(world_s5):
+    wrong = world_s5.result_record("fire-assessment", "warning", {"level": "red"})
+    r = world_s5.call("approve_unsealing", {"record_id": wrong})
+    assert r.is_error and "unsealing-plan/unsealing_plan" in r.content[0].text
+    assert world_s5.call("approve_unsealing", {}).is_error  # 不接受直接提交方案
+    assert world_s5.call("approve_unsealing", {"record_id": "RS-20261116T080000-nothere"}).is_error
+
+
+def test_precheck_summary_for_unsealing(world_s5):
+    from rescue_contract.validation import precheck
+
+    rid = world_s5.put("unsealing-plan", "unsealing_plan", _unseal_content())
+    out = precheck("approve_unsealing", {"record_id": rid}, world_s5.holder.engine.now(), world_s5.records)
+    assert out["ok"], out["problems"]
+    names = [c["name"] for c in out["summary"]["checks"]]
+    assert "启封条件" in names and "方案类型、时效与红线" in names
+    assert out["summary"]["action"].startswith("下发 1201 采空区火区启封方案") or "启封" in out["summary"]["action"]
+    assert out["notes"] and "不可逆" in out["notes"][0]  # 确认人要把关的事项
+    bad = precheck("approve_unsealing", {"record_id": rid}, world_s5.holder.engine.now().replace(year=2027), world_s5.records)
+    assert not bad["ok"] and any("过时" in p for p in bad["problems"])

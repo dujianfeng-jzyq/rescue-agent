@@ -24,6 +24,26 @@ async function setup() {
 }
 
 describe('review_timeline', () => {
+  it('对外动作的矿井回执：逐个向矿井查后续状态，查不到的记原因', async () => {
+    const { store, ev } = await setup()
+    const id = await store.open('2026-11-06T08:00:00', { category: 'fire', panel: '1201', summary: 'x' })
+    await store.append(id, '2026-11-06T08:10:00', 'note', 'guard', { type: 'action', tool: 'publish_warning', status: 'issued', action_id: 'A-1', record_ids: [], problems: [], mine_receipt_ids: ['M-1', 'M-2'] })
+    const asked: string[] = []
+    const receipt = async (mid: string) => {
+      asked.push(mid)
+      if (mid === 'M-2') throw new Error('矿井接口不通')
+      return { action_id: mid, kind: 'notice', status: 'completed', received_at: '2026-11-06T08:10:00', updated_at: '2026-11-06T08:10:00', idempotency_key: 'k', detail: null }
+    }
+    const out = await reviewTimeline(ev, { store, incidentId: id, origin: ORIGIN, receipt })
+    assert.deepEqual(asked, ['M-1', 'M-2'])
+    assert.equal(out.result.receipts_text, '矿井回执 2 条：已完成 1、执行中 0、失败或被矿井拒绝 0、查不到 1')
+    assert.match(out.report_markdown, /publish_warning A-1 → 矿井回执 M-1：通知已完成/)
+    assert.match(out.report_markdown, /矿井回执 M-2：查不到（矿井接口不通）/)
+    // 没有对外动作、或没给 receipt：没有回执部分
+    const none = await reviewTimeline(ev, { store, incidentId: 'INC-20261105T080000-aaaaaa', origin: ORIGIN, receipt })
+    assert.equal(none.result.receipts_text, null)
+  })
+
   it('读事件、存证据、脚本算次数和时长、渲染报告和要点', async () => {
     const { store, ev } = await setup()
     const out = await reviewTimeline(ev, { store, incidentId: 'INC-20261105T080000-aaaaaa', origin: ORIGIN })

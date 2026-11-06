@@ -8,7 +8,9 @@
    - 不比基线更糟，连续 recover_checks 次后基线下调；回到正常则写“恢复”，事件转“已稳定”；
    - 取数/检测连续失败 degrade_failures 次：写“监听降级”告警（恢复后写恢复）。
 2. 接入矿井自带报警（get_alarms）：新的、仍越限且未确认的报警并入对应工作面的事件（同一轮已为该工作面告警的只记已见）。
-3. 跟踪计划到点（followup_added 的 due_at ≤ 矿井时间）写 followup_due 和告警，唤醒智能体复评。
+3. 人工确认超时：未决的确认（approval_pending 没有 approval_decided）等待超过动作分级表的批准超时（approval_timeout_min，真实时间），
+   写 approval_escalated（提醒谁：escalate_to）和告警，只升级一次；
+4. 跟踪计划到点（followup_added 的 due_at ≤ 矿井时间）写 followup_due 和告警，唤醒智能体复评。
 
 状态（每个工作面的基线、连续次数、已见报警）落盘 state.json，重启后接着监听，不重复告警。
 告警写进事件库；唤醒值班会话是 DSH 事件插件的事（本进程不依赖 DSH）。
@@ -60,6 +62,10 @@ class Sentinel:
         self.state_dir = state_dir or store.dir / "sentinel"
         self.state_path = self.state_dir / "state.json"
         self.state: dict[str, Any] = self._load()
+
+    @staticmethod
+    def wall() -> float:
+        return time.time()
 
     # ── 状态 ──
     def _load(self) -> dict[str, Any]:
@@ -190,6 +196,23 @@ class Sentinel:
                     out.append(self._alert(v["incident_id"], now, "followup_due", f"跟踪计划到点：{f.get('expect') or f['followup_id']}（计划 {f['due_at']}）", followup_id=f["followup_id"], expect=f.get("expect")))
         return out
 
+    def _approvals(self, now: str, wall_now: float) -> list[dict[str, Any]]:
+        """批准超时升级（design-v3 6.3）：未决的人工确认等待超过批准超时，写 approval_escalated 和告警，只升级一次。"""
+        out = []
+        for v in self.store.list():
+            for a in v["pending_approvals"]:
+                limit = a.get("timeout_min")
+                if a["escalated"] or not limit:
+                    continue
+                waited_s = wall_now - datetime.fromisoformat(a["asked_wall"]).timestamp()
+                if waited_s < limit * 60:
+                    continue
+                waited_min = int(waited_s // 60)
+                to = a.get("escalate_to") or "上一级"
+                self.store.append(v["incident_id"], now, "note", BY, {"type": "approval_escalated", "approval_key": a["approval_key"], "tool": a["tool"], "escalate_to": to, "waited_min": waited_min})
+                out.append(self._alert(v["incident_id"], now, "approval_timeout", f"{a['tool']} 等待人工确认已超过 {limit} 分钟（已等 {waited_min} 分钟，确认人：{a.get('confirmer') or '未指定'}），已提醒{to}", approval_key=a["approval_key"], tool=a["tool"], escalate_to=to))
+        return out
+
     async def tick(self) -> list[dict[str, Any]]:
         """返回本次产生的告警条目（可能为空）。矿井时钟读不到时抛错，由调用方记心跳。"""
         now = str((await self.call("get_clock", {}))["now"])[:19]
@@ -205,6 +228,7 @@ class Sentinel:
                 out += got
             out += await self._mine_alarms(now, alerted)
         out += self._followups(now)
+        out += self._approvals(now, self.wall())
         self._save()
         self.heartbeat(now)
         return out

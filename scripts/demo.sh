@@ -36,7 +36,7 @@ tokens() {
 
 wait_healthy() {
   local deadline=$((SECONDS + 600))
-  for svc in mine-sim actions dsh; do
+  for svc in mine-sim actions sentinel dsh; do
     while :; do
       id="$("${COMPOSE[@]}" ps -q "$svc")"
       st="$(docker inspect -f '{{.State.Health.Status}}' "$id" 2>/dev/null || echo starting)"

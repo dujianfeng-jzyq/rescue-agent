@@ -16,6 +16,14 @@
 未完成事项：未确认的告警 {{timeline.result.unhandled_alert_count}} 条；未完成的跟踪计划 {{timeline.result.open_followup_count}} 个
 
 {{/timeline.result.has_unfinished}}
+{{#timeline.result.has_receipts}}
+矿井回执（复盘时向矿井查到的后续状态，计算结果）：{{timeline.result.receipts_text}}
+
+{{#timeline.result.receipt_rows}}
+- {{tool}} {{action_id}} → 矿井回执 {{mine_id}}：{{kind_name}}{{status_name}}{{#has_detail}}（{{detail}}）{{/has_detail}}
+{{/timeline.result.receipt_rows}}
+
+{{/timeline.result.has_receipts}}
 时间线：
 
 {{#timeline.result.rows}}

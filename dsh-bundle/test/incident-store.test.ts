@@ -37,7 +37,7 @@ describe('事件库', () => {
     const name = 'INC-20261105T090000-bbbbbb.jsonl'
     await copyFile(new URL(name, FIX), join(dir, name))
     const store = new IncidentStore(dir)
-    assert.equal((await store.entries('INC-20261105T090000-bbbbbb')).length, 4)
+    assert.equal((await store.entries('INC-20261105T090000-bbbbbb')).length, 8)
     await assert.rejects(store.get('../etc/passwd'), IncidentNotFound)
     await assert.rejects(store.append('INC-20261105T080000-zzzzzz', '2026-11-05T08:00:00', 'note', 'agent'), IncidentNotFound)
     await assert.rejects(store.get('INC-20261105T080000-zzzzzz'), IncidentNotFound)

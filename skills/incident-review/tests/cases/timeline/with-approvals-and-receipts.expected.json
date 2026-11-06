@@ -1,0 +1,166 @@
+{
+ "algorithm_version": "timeline/1.0.0",
+ "params": {
+  "entry_kinds": [
+   "alert",
+   "delivered",
+   "note",
+   "opened"
+  ]
+ },
+ "warnings": [],
+ "result": {
+  "incident_id": "INC-20261105T080000-aaaaaa",
+  "panel": "1201",
+  "category": "fire",
+  "opened_at": "2026-11-05T08:00:00",
+  "last_at": "2026-11-05T08:40:00",
+  "status": "monitoring",
+  "status_name": "监测中",
+  "closed_at": null,
+  "rows": [
+   {
+    "at": "2026-11-05T08:00:00",
+    "kind": "opened",
+    "by": "sentinel",
+    "label": "开事件",
+    "text": "1201 工作面异常",
+    "record_ids": []
+   },
+   {
+    "at": "2026-11-05T08:10:00",
+    "kind": "alert",
+    "by": "sentinel",
+    "label": "告警（监测异常）",
+    "text": "1201 工作面：预警等级由 无 升为 蓝",
+    "record_ids": []
+   },
+   {
+    "at": "2026-11-05T08:10:02",
+    "kind": "delivered",
+    "by": "plugin",
+    "label": "已投递值班会话",
+    "text": "",
+    "record_ids": []
+   },
+   {
+    "at": "2026-11-05T08:15:00",
+    "kind": "note",
+    "by": "flow",
+    "label": "研判",
+    "text": "红色预警；加速氧化",
+    "record_ids": [
+     "RS-20261105T081500-aaaaaa"
+    ]
+   },
+   {
+    "at": "2026-11-05T08:19:00",
+    "kind": "note",
+    "by": "approval",
+    "label": "等待人工确认 publish_warning",
+    "text": "确认人 通风部门负责人；10 分钟内无人处理将升级给值班长",
+    "record_ids": []
+   },
+   {
+    "at": "2026-11-05T08:30:00",
+    "kind": "note",
+    "by": "sentinel",
+    "label": "批准超时升级 publish_warning",
+    "text": "已等 11 分钟，已提醒值班长",
+    "record_ids": []
+   },
+   {
+    "at": "2026-11-05T08:35:00",
+    "kind": "note",
+    "by": "approval",
+    "label": "人工确认结果 publish_warning",
+    "text": "已放行",
+    "record_ids": []
+   },
+   {
+    "at": "2026-11-05T08:36:00",
+    "kind": "note",
+    "by": "guard",
+    "label": "对外动作 publish_warning（已下发）",
+    "text": "A-2222222222",
+    "record_ids": []
+   },
+   {
+    "at": "2026-11-05T08:40:00",
+    "kind": "note",
+    "by": "guard",
+    "label": "对外动作 issue_sealing_plan（已下发）",
+    "text": "A-3333333333",
+    "record_ids": []
+   }
+  ],
+  "counts": {
+   "alerts": 1,
+   "assessments": 1,
+   "effect_reviews": 0,
+   "sealing_plans": 0,
+   "actions_issued": 2,
+   "actions_rejected": 0,
+   "actions_failed": 0,
+   "followups_added": 0,
+   "followups_done": 0,
+   "delivery_failures": 0,
+   "approvals_asked": 1,
+   "approvals_escalated": 1
+  },
+  "counts_text": "告警 1 条；研判 1 次；效果复评 0 次；封闭方案 0 次；对外动作 已下发 2、被拒绝 0、执行失败 0；跟踪计划 登记 0、完成 0；人工确认 等待 1 次、其中超时升级 1 次",
+  "durations": {
+   "alert_to_assessment_min": 5,
+   "alert_to_action_min": 26,
+   "alert_to_issued_min": 26,
+   "opened_to_last_min": 40
+  },
+  "durations_text": {
+   "alert_to_assessment_min": "5 分钟",
+   "alert_to_action_min": "26 分钟",
+   "alert_to_issued_min": "26 分钟",
+   "opened_to_last_min": "40 分钟"
+  },
+  "unhandled_alert_count": 0,
+  "open_followup_count": 0,
+  "has_unfinished": false,
+  "receipt_rows": [
+   {
+    "action_id": "A-2222222222",
+    "tool": "publish_warning",
+    "mine_id": "M-1",
+    "kind_name": "通知",
+    "status": "completed",
+    "status_name": "已完成",
+    "detail": "",
+    "has_detail": false,
+    "updated_at": "2026-11-05T08:36:00"
+   },
+   {
+    "action_id": "A-3333333333",
+    "tool": "issue_sealing_plan",
+    "mine_id": "M-2",
+    "kind_name": "处置",
+    "status": "executing",
+    "status_name": "执行中",
+    "detail": "注惰执行中",
+    "has_detail": true,
+    "updated_at": "2026-11-05T08:41:00"
+   },
+   {
+    "action_id": "A-3333333333",
+    "tool": "issue_sealing_plan",
+    "mine_id": "M-3",
+    "kind_name": "",
+    "status": "unknown",
+    "status_name": "查不到",
+    "detail": "未知回执编号：M-3",
+    "has_detail": true,
+    "updated_at": null
+   }
+  ],
+  "has_receipts": true,
+  "receipts_text": "矿井回执 3 条：已完成 1、执行中 1、失败或被矿井拒绝 0、查不到 1",
+  "has_actions": true
+ }
+}

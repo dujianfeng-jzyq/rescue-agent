@@ -47,6 +47,14 @@
       "escalate_to": "总指挥"
     },
     {
+      "tool": "approve_unsealing",
+      "level": "C",
+      "name": "批准启封",
+      "confirmer": "总指挥",
+      "approval_timeout_min": 30,
+      "escalate_to": "矿长"
+    },
+    {
       "tool": "precheck_plan",
       "level": "A",
       "name": "方案红线自查",

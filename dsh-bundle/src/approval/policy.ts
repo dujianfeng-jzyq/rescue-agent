@@ -32,6 +32,8 @@ export interface ApprovalConfig {
   precheckTimeoutMs: number
   /** guard 服务的令牌（与 RESCUE_MCP_ACTIONS_TOKEN 一致）；为空则不带认证头。 */
   token?: string | undefined
+  /** 事件库目录；给了就把人工确认的等待和结果记进事件时间线，监听器据此做批准超时升级 */
+  incidentDir?: string | undefined
 }
 
 /** 工具的分级：没有登记的按 C 级（fail closed）。 */
@@ -44,7 +46,7 @@ export type Gate = { gated: false } | { gated: true; rawName: string }
 /** 与 DSH PreToolDecision 结构一致的子集，胶水代码直接返回。 */
 export type Verdict =
   | { kind: 'deny'; reason: string; code: string }
-  | { kind: 'ask'; reason: string; displayReason: { en: string; zh: string } }
+  | { kind: 'ask'; reason: string; displayReason: { en: string; zh: string }; incidentId?: string | null; recordIds?: string[] }
 
 /** 契约 ApprovalSummary（rescue_contract.models），由 actions 预检生成 */
 export interface ApprovalSummary {
@@ -54,6 +56,8 @@ export interface ApprovalSummary {
   checks: { name: string; ok: boolean; detail?: string | null }[]
   human_items: string[]
   override_reason?: string | null
+  /** 该动作所属的未关闭火情事件（guard 查）；审批超时升级挂在它上面 */
+  incident_id?: string | null
 }
 
 export interface PrecheckResponse {
@@ -95,6 +99,8 @@ export function askVerdict(rawName: string, config: Pick<ApprovalConfig, 'polici
     const body = summaryText(summary)
     return {
       kind: 'ask',
+      incidentId: summary.incident_id ?? null,
+      recordIds: summary.record_ids,
       reason: `${summary.action}：需由【${who}】确认后执行（红线预检已通过）\n${body}`,
       displayReason: {
         en: `${summary.action} requires confirmation by ${who}. Pre-check passed.\n${body}`,

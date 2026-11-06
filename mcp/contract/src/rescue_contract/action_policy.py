@@ -41,6 +41,7 @@ POLICIES: tuple[ActionPolicy, ...] = (
     ActionPolicy("notify_evacuation", ActionLevel.C, "发布补充撤人名单", "调度员", 5, "值班长"),
     ActionPolicy("issue_dispatch_order", ActionLevel.C, "下发物资调度单", "指挥部指定负责人", 15, "总指挥"),
     ActionPolicy("issue_sealing_plan", ActionLevel.C, "下发封闭方案", "总指挥 + 救护队带队指挥员", 30, "总指挥"),
+    ActionPolicy("approve_unsealing", ActionLevel.C, "批准启封", "总指挥", 30, "矿长"),
     # A 级：只读（不弹确认；审计仍记录）
     ActionPolicy("precheck_plan", ActionLevel.A, "方案红线自查"),
     ActionPolicy("query_last_issued", ActionLevel.A, "查询最近一次下发"),
