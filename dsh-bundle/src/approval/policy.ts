@@ -34,6 +34,8 @@ export interface ApprovalConfig {
   token?: string | undefined
   /** 事件库目录；给了就把人工确认的等待和结果记进事件时间线，监听器据此做批准超时升级 */
   incidentDir?: string | undefined
+  /** 弹了确认但没走到确认弹窗（如会话被取消）的登记保留多久（毫秒），过期清除，缺省 1 小时 */
+  askedTtlMs?: number | undefined
 }
 
 /** 工具的分级：没有登记的按 C 级（fail closed）。 */

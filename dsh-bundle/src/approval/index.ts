@@ -46,17 +46,23 @@ export const Config: Schema<Config> = Schema.object({
   token: Schema.string(),
   /** 事件库目录；给了就把人工确认的等待和结果记进事件时间线，监听器据此做批准超时升级 */
   incidentDir: Schema.string(),
+  askedTtlMs: Schema.natural().default(3_600_000),
 })
 
 export function apply(ctx: Context, config: Config) {
   const fetchImpl = globalThis.fetch as unknown as FetchLike
   const incidents = config.incidentDir ? new IncidentStore(config.incidentDir) : undefined
   /** 弹了确认、还没有结果的调用：callId → 事件和动作信息 */
-  const asked = new Map<string, PendingInfo>()
+  const asked = new Map<string, { info: PendingInfo; at: number }>()
+  /** pre-execute 返回 ask 之后，确认弹窗不一定会出现（会话取消等），登记就留在表里；每次登记前清掉过期的，表不会无限增长 */
+  const sweep = () => {
+    const limit = Date.now() - (config.askedTtlMs ?? 3_600_000)
+    for (const [k, v] of asked) if (v.at < limit) asked.delete(k)
+  }
 
   // 确认的等待和结果记进事件时间线（失败只记警告，不影响确认）
   ;(ctx as any).on('approval/request', async (req: any, next: () => Promise<string>) => {
-    const info = req.callId ? asked.get(String(req.callId)) : undefined
+    const info = req.callId ? asked.get(String(req.callId))?.info : undefined
     if (!info || !incidents) return next()
     const key = String(req.callId)
     await recordPending(incidents, key, info).catch((err: Error) => ctx.logger.warn(`rescue-approval: 记录待确认失败：${err.message}`))
@@ -81,7 +87,9 @@ export function apply(ctx: Context, config: Config) {
     // 先让其他策略表态；有人拒绝或取消就照办，全部放行才请人确认
     const upstream = await next()
     if (upstream.kind !== 'allow') return upstream
-    if (verdict.incidentId) asked.set(String(exec.callId), { incidentId: verdict.incidentId, tool: gate.rawName, recordIds: verdict.recordIds ?? [], policy: config.policies.find((p) => p.tool === gate.rawName) })
+    sweep()
+    asked.delete(String(exec.callId)) // callId 被复用时不能沿用上一次的事件编号
+    if (verdict.incidentId) asked.set(String(exec.callId), { info: { incidentId: verdict.incidentId, tool: gate.rawName, recordIds: verdict.recordIds ?? [], policy: config.policies.find((p) => p.tool === gate.rawName) }, at: Date.now() })
     return { kind: 'ask', reason: verdict.reason, displayReason: verdict.displayReason }
   })
 }
