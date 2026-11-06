@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 FA, XT, ESC = "fire-assessment", "explosion-triangle", "emergency-escalation"
 SP, PC, ER = "sealing-plan", "plan-compliance", "effect-review"
+IR = "incident-review"
 
 
 def evidence(scenario: str, hours: float, kind: str = "assessment", unseal_at: float | None = None, skill: str = FA) -> dict:
@@ -328,12 +329,60 @@ def write_expected(skill: str, script: str, case: str, data: dict) -> None:
     (case_dir(skill, script) / f"{case}.expected.json").write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
+def _entry(i: int, at: str, kind: str, by: str, data: dict) -> dict:
+    return {"event_id": f"EVT-{at[:10].replace('-', '')}T{at[11:].replace(':', '')}-{i:06d}", "at": at, "wall": "2026-11-05T00:00:00+00:00", "kind": kind, "by": by, "data": data}
+
+
+def incident_inputs() -> dict[tuple[str, str, str], dict]:
+    """事件复盘：手写的事件条目（不依赖模拟矿井）。完整过程、仍在处置中（有未完成事项）、只有告警。"""
+    a1 = _entry(2, "2026-11-05T08:10:00", "alert", "sentinel", {"cause": "anomaly", "summary": "1201 工作面：预警等级由 无 升为 蓝"})
+    a2 = _entry(9, "2026-11-05T12:30:00", "alert", "sentinel", {"cause": "followup_due", "summary": "跟踪计划到点：注惰后复评"})
+    base = [
+        _entry(1, "2026-11-05T08:00:00", "opened", "sentinel", {"category": "fire", "panel": "1201", "summary": "1201 工作面异常"}),
+        a1,
+        _entry(3, "2026-11-05T08:10:02", "delivered", "plugin", {"alert_id": a1["event_id"], "session_id": "S1"}),
+        _entry(4, "2026-11-05T08:15:00", "note", "flow", {"type": "assessment", "text": "红色预警；加速氧化", "record_ids": ["RS-20261105T081500-aaaaaa"]}),
+        _entry(5, "2026-11-05T08:20:00", "note", "guard", {"type": "action", "tool": "publish_warning", "status": "rejected", "action_id": None, "record_ids": ["RS-20261105T081500-aaaaaa"], "problems": ["预警等级与记录不一致"]}),
+        _entry(6, "2026-11-05T08:25:00", "note", "guard", {"type": "action", "tool": "publish_warning", "status": "issued", "action_id": "A-1111111111", "record_ids": ["RS-20261105T081500-aaaaaa"], "problems": []}),
+        _entry(7, "2026-11-05T08:30:00", "status", "agent", {"status": "handling", "reason": "开始处置"}),
+        _entry(8, "2026-11-05T10:30:00", "followup_added", "agent", {"followup_id": "FU-1", "due_at": "2026-11-05T12:30:00", "expect": "注惰后复评"}),
+    ]
+    ev = lambda entries, **kw: {"evidence": {"incident_id": "INC-20261105T080000-aaaaaa", "category": "fire", "panel": "1201", "as_of": entries[-1]["at"], "entries": entries, **kw}}  # noqa: E731
+    full = [
+        *base,
+        a2,
+        _entry(10, "2026-11-05T12:31:00", "followup_due", "sentinel", {"followup_id": "FU-1"}),
+        _entry(11, "2026-11-05T12:32:00", "delivered", "plugin", {"alert_id": a2["event_id"], "session_id": "S1"}),
+        _entry(12, "2026-11-05T12:40:00", "note", "flow", {"type": "effect_review", "text": "已受控", "record_ids": ["RS-20261105T124000-bbbbbb"]}),
+        _entry(13, "2026-11-05T12:41:00", "followup_done", "agent", {"followup_id": "FU-1", "result": "已受控"}),
+        _entry(14, "2026-11-05T14:00:00", "recovered", "sentinel", {"summary": "1201 工作面监测指标已恢复正常"}),
+        _entry(15, "2026-11-05T14:00:00", "status", "sentinel", {"status": "stable", "reason": "监测指标恢复正常"}),
+        _entry(16, "2026-11-05T15:00:00", "status", "agent", {"status": "closed", "reason": "稳定"}),
+    ]
+    return {
+        (IR, "timeline", "full-process-closed"): ev(full),
+        (IR, "timeline", "in-progress-unfinished"): ev(base),
+        (IR, "timeline", "alert-only"): ev(base[:2]),
+    }
+
+
+def incident_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
+    out = {}
+    for case in ("full-process-closed", "in-progress-unfinished"):
+        data = inputs[(IR, "timeline", case)]
+        rec = fake_record("timeline", run(IR, "timeline", data), 0)
+        rec["panel"], rec["as_of"] = "1201", data["evidence"]["as_of"]
+        for tpl in ("report", "brief"):
+            out[(IR, tpl, case)] = report_data({"timeline": rec})
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--expected", action="store_true", help="只按现有输入重写期望")
     args = ap.parse_args()
     if args.expected:
-        for skill in (FA, XT, ESC, SP, PC, ER):
+        for skill in (FA, XT, ESC, SP, PC, ER, IR):
             for inp in sorted((SKILLS / skill / "tests" / "cases").glob("*/*.input.json")):
                 write_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/{inp.parent.name}/{inp.name}")
@@ -341,8 +390,8 @@ def main() -> int:
                 write_template_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/templates/{inp.parent.name}/{inp.name}")
         return 0
-    inputs = {**build_inputs(), **sealing_inputs(), **effect_inputs()}
-    for (skill, template, case), data in {**build_template_inputs(inputs), **sealing_template_inputs(inputs), **effect_template_inputs(inputs)}.items():
+    inputs = {**build_inputs(), **sealing_inputs(), **effect_inputs(), **incident_inputs()}
+    for (skill, template, case), data in {**build_template_inputs(inputs), **sealing_template_inputs(inputs), **effect_template_inputs(inputs), **incident_template_inputs(inputs)}.items():
         write_template_case(skill, template, case, data)
         print(f"模板  {skill}/{template}/{case}")
     for (skill, script, case), data in inputs.items():

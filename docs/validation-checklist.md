@@ -145,3 +145,8 @@
   - 通过：监听器写 opened + alert → 控制台 `/sim/state` 的 `incident_store` 显示事件和监听器心跳、演示时钟自动暂停 → 唤醒插件新建值班会话并投递（来源 `rescue-sentinel`），写 delivered → 值班会话里智能体自己调 `get_incident`、`run_fire_assessment`（含阶段子 Agent），`turn/end completed`，没有向人提问。监听器重启后读回状态，不重复告警。
   - 没有验证：C 级动作在无人会话里等人批准；值班会话长时间空闲；操作员同时输入时来事件；`workspaceId` 与会话标题；Docker 演示环境里的 sentinel 容器。
   - 观察（原因未查）：告警是矿井时间 03:23 的“自燃阶段推进为缓慢氧化”，自动暂停有轮询延迟，约 40 矿井分钟后智能体研判时阶段回到 no_sign、等级无。阶段升高目前立即告警；是否改为连续确认，查清原因后定。token 用量没有统计。
+- #26 值班会话的工作区与标题（第三版 P5，2026-11-06，DSH 0.2.1-rc.4）：
+  - 通过：插件在值班目录上用 `ctx.workspaceController.create({ path })` 建工作区（已有则复用，返回 `{ workspace: { workspaceId, … }, created }`），`sessionController.create({ workspaceId, agentPreset })`（与 `cwd` 互斥），会话出现在侧栏该工作区下，不再进折叠的 Ungrouped；创建后 `sessionController.rename({ sessionId, title })` 写入 `session/title` 事件，来源 `user`（显式标题固定，之后不再自动生成）。`create` 本身没有标题参数。
+  - 此前（#24）值班会话的标题由模型生成，会话日志里查不到标题事件，侧栏按标题找不到；固定标题后演示脚本和操作员都能直接找到。
+  - 整条故事线（`make story`）在这套环境上走通一次：监听器 → 无人唤醒 → 研判与人工确认 → 封闭方案下发 → 跟踪计划到点唤醒 → 复盘。
+  - 没有验证：值班会话长时间空闲；操作员同时输入时又来事件；无人会话里等人批准超过很长时间。

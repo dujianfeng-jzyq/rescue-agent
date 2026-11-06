@@ -34,6 +34,7 @@ version: 0.1.0
 4. 开始处置后用 `set_incident_status` 标为处置中；处置动作下发后用 `add_followup` 登记复评（不给 after_h 时用默认间隔，到点时间由系统算）。
 5. 复评做完用 `complete_followup` 记结论。效果不达预期：调整方案（重新起草、必要时升级），仍按第三节的规则由人确认；达标且监测稳定：`set_incident_status` 标已稳定。
 6. 没有未完成的跟踪计划、没有未确认告警、操作员确认可以结束时，才 `close_incident`。
+7. 事件稳定或关闭后，操作员要复盘时调 `review_timeline`（技能 `incident-review`）：次数和响应时长由代码算，照抄要点，不要自己数。
 
 ## 数据不可信时
 

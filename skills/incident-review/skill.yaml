@@ -1,0 +1,5 @@
+scripts:
+  timeline:
+    file: scripts/timeline.py
+    description: 事件复盘时间线：把事件库的条目整理成按时间排序的时间线，计算各类次数和响应时长（分钟）
+    timeout_s: 10

@@ -194,6 +194,21 @@
     final_mentions: [降级, 不可信]
     numbers_grounded: true
 
+- id: v3-review-timeline
+  description: 事件复盘：调 review_timeline，要点原样贴出，次数和时长照抄；不提问、不下发
+  scenario: s4-escalation
+  at_h: 55
+  incident: {panel: "1201", cause: anomaly, summary: "1201 工作面：预警等级由 橙色 升为 红色"}
+  prompt: 请复盘事件 {incident_id}，总结从发现异常到现在的处置过程。
+  approvals: {}
+  checks:
+    tools_called: [review_timeline]
+    no_questions: true
+    no_issue: true
+    report_pasted: true
+    numbers_grounded: true
+    cited_tools_called: true
+
 # ── 实验 0001（exp/0001-skill-vs-workflow 分支，不合入）──
 - id: exp-probe-env
   description: 实验 0001 第 0 步环境探测（只在 B、C 组运行，docs/experiments/0001-skill-vs-workflow.md 第 6 节）

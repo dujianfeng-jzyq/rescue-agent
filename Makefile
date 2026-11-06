@@ -1,5 +1,5 @@
 # 常用命令入口。具体说明见 README.md。
-.PHONY: interface-doc setup setup-py dev dev-eval up down smoke test test-py test-ts lint check skills-check eval eval-agent schema sim-state clean demo-up demo-down demo-reset demo-logs
+.PHONY: dev-story story interface-doc setup setup-py dev dev-eval up down smoke test test-py test-ts lint check skills-check eval eval-agent schema sim-state clean demo-up demo-down demo-reset demo-logs
 
 UV := uv run --project mcp
 
@@ -12,6 +12,10 @@ dev:              ## 启动 MCP 服务 + DSH 网页端
 	scripts/dev.sh
 dev-eval:         ## 智能体评测用：同 dev，但指令台账、记录和审计日志写到 var/eval/ 下（评测会放行指令）
 	RESCUE_ACTIONS_LEDGER=$(CURDIR)/var/eval/actions-ledger.jsonl RESCUE_AUDIT_LOG=$(CURDIR)/var/eval/audit/tool-actions.jsonl RESCUE_RECORD_DIR=$(CURDIR)/var/eval/records RESCUE_INCIDENT_DIR=$(CURDIR)/var/eval/incidents RESCUE_SENTINEL=0 scripts/dev.sh $(ARGS)
+dev-story:        ## 演示故事线用：模拟矿井演示模式 + 监听器 + DSH，数据写到 var/eval/（make story 连它）
+	RESCUE_SIM_MODE=demo RESCUE_ACTIONS_LEDGER=$(CURDIR)/var/eval/actions-ledger.jsonl RESCUE_AUDIT_LOG=$(CURDIR)/var/eval/audit/tool-actions.jsonl RESCUE_RECORD_DIR=$(CURDIR)/var/eval/records RESCUE_INCIDENT_DIR=$(CURDIR)/var/eval/incidents RESCUE_DUTY_CWD=$(CURDIR)/var/eval/duty scripts/dev.sh $(ARGS)
+story:            ## 演示故事线整条走通（需先 make dev-story；ARGS="--url '<DSH 地址带 token>'"）
+	$(UV) --with playwright python eval/agent/story.py $(ARGS)
 up:               ## 只启动 MCP 服务（含模拟矿井）
 	scripts/mcp-up.sh
 down:

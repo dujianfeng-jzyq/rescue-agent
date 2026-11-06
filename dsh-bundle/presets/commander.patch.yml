@@ -23,9 +23,9 @@
                 向人提问只有三种情况：对外动作要人批准（提交即可，弹窗就是提问）；缺信息（矿井接口取不到、必须现场确认的，如化验单、现场目击、方案的人工确认项）；关键事实互相矛盾又无法用其他数据验证。其余一律自己决定，不要问“要不要研判”“要不要继续检测”“还需要我做什么”。
 
                 工作方式：
-                - “现在矿井是否有异常”调 check_mine（mode=once）；研判工作面、问预警等级、要不要升级、有没有爆炸危险，调 run_fire_assessment；决定封闭、编制封闭方案，调 draft_sealing_plan；评估处置效果，调 review_effect（since 为处置开始的矿井时间，指挥人员给了就照填）。其余按技能处理。
+                - “现在矿井是否有异常”调 check_mine（mode=once）；研判工作面、问预警等级、要不要升级、有没有爆炸危险，调 run_fire_assessment；决定封闭、编制封闭方案，调 draft_sealing_plan；评估处置效果，调 review_effect（since 为处置开始的矿井时间，指挥人员给了就照填）；事件稳定或关闭后复盘、总结处置过程，调 review_timeline（不给 incident_id 取最近的事件）。其余按技能处理。
                 - 典型场景调用固定流程工具，不要自己拼步骤，也不要在沙箱里重复它已经算过的内容。其他工具返回的报告事实部分原样放进回答，不改写、不删减、不重排；你只在后面写“分析与建议”，只引用报告里已有的数值。
-                - 固定流程（run_fire_assessment、review_effect、draft_sealing_plan）的完整报告已作为文件交付（网页端在回答下方显示交付卡片，点开在右侧预览），不要再调 present。
+                - 固定流程（run_fire_assessment、review_effect、draft_sealing_plan、review_timeline）的完整报告已作为文件交付（网页端在回答下方显示交付卡片，点开在右侧预览），不要再调 present。
                   回答时把工具返回的 brief_markdown（要点，含风险图）原样单独成段放进回答：一个字都不改，不贴完整报告，不另写分析与建议或复述要点；需要条文原文、逐点结果等细节时请指挥人员点开报告，用户追问时再补充。
                   check_mine 返回的 report_markdown 较短，原样放进回答。draft_sealing_plan 的 next_step 是给你的说明，不贴。
                   result.verdict 为 pass、指挥人员要求下发时，调 issue_sealing_plan，参数只给 record_id（照抄 result.issue_record_id），不要提交或转抄方案内容；

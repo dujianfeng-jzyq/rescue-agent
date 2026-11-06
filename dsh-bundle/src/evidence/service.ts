@@ -83,6 +83,24 @@ export class Evidence {
   }
 
   /**
+   * 存一条不来自矿井的证据记录（如事件库里的事件，复盘用）。内容由调用方给出，仍由技能脚本运行并存为结果记录。
+   * asOf 是矿井时间；记录和其他证据一样不可修改、可按编号核对。
+   */
+  async putEvidence(opts: { skill: string; kind: string; panel: string | null; asOf: string; origin: Origin; origin_of: string; content: Record<string, unknown> }): Promise<RescueRecord> {
+    const skill = await loadSkill(this.cfg.skillsDir, opts.skill)
+    return this.store.put(
+      buildRecord({
+        kind: 'evidence',
+        panel: opts.panel,
+        asOf: opts.asOf,
+        origin: opts.origin,
+        source: { skill: skill.name, skill_version: skill.version, collect_kind: opts.kind, from: opts.origin_of },
+        content: opts.content,
+      }),
+    )
+  }
+
+  /**
    * 运行技能脚本，存为结果记录。脚本的输入只能来自记录：input.json = { <名>: <记录内容>, ..., options }。
    * 结果记录的 panel、as_of 取第一个输入记录的。
    */

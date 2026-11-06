@@ -76,4 +76,5 @@
         incidentDir: !!js "process.env.RESCUE_INCIDENT_DIR || `${process.env.RESCUE_HOME ?? process.cwd()}/var/incidents`"
         cwd: !!js "process.env.RESCUE_DUTY_CWD || `${process.env.RESCUE_HOME ?? process.cwd()}/var/duty`"
         agentPreset: rescue-commander
+        title: 值班会话（监听器告警）
         pollMs: 2000

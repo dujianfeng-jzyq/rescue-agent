@@ -16,15 +16,19 @@ import { IncidentStore } from './store.ts'
 import { Waker } from './wake.ts'
 
 export const name = 'rescue-wake'
-export const inject = ['sessionController', 'sessions']
+export const inject = ['sessionController', 'sessions', 'workspaceController']
 
 export interface Config {
   incidentDir: string
   /** 值班会话的工作目录 */
   cwd: string
   agentPreset: string
-  /** 值班会话所属的工作区（网页端侧栏分组）；缺省不指定 */
+  /** 值班会话的标题：创建后显式设置（DSH 的显式标题会“固定”住，之后不再自动生成），操作员在侧栏里按它找到值班会话 */
+  title: string
+  /** 值班会话所属的工作区 id；缺省在 cwd 上建（或复用）一个工作区，否则网页端侧栏把它放进折叠的 “Ungrouped”（验证清单 #24） */
   workspaceId?: string
+  /** 自动建的工作区的标题 */
+  workspaceTitle: string
   pollMs: number
   /** 投递失败后的重试退避（秒）；用完放弃 */
   backoffS: number[]
@@ -34,7 +38,9 @@ export const Config: Schema<Config> = Schema.object({
   incidentDir: Schema.string().required(),
   cwd: Schema.string().required(),
   agentPreset: Schema.string().default('rescue-commander'),
+  title: Schema.string().default('值班会话（监听器告警）'),
   workspaceId: Schema.string(),
+  workspaceTitle: Schema.string().default('值班'),
   pollMs: Schema.number().default(2000),
   backoffS: Schema.array(Schema.number()).default([30, 120, 600]),
 })
@@ -54,10 +60,27 @@ export function apply(ctx: Context, config: Config): void {
       if (!('error' in resolved)) return { agent: resolved.agent, sessionId: saved.sessionId }
       ctx.logger.warn(`rescue-wake: 值班会话 ${saved.sessionId} 恢复失败，新建：${String(resolved.error?.message ?? resolved.error)}`)
     }
-    const made = await c.sessionController.create({ cwd: config.cwd, agentPreset: config.agentPreset, ...(config.workspaceId ? { workspaceId: config.workspaceId } : {}) })
+    let workspaceId = config.workspaceId
+    if (!workspaceId) {
+      try {
+        // 在值班工作目录上建工作区（已有就复用）；新建的命名为“值班”。失败时退回只给 cwd（会话进 Ungrouped，不影响投递）
+        const made = await c.workspaceController.create({ path: config.cwd })
+        workspaceId = String(made.workspace.workspaceId)
+        if (made.created) await c.workspaceController.rename({ workspaceId, title: config.workspaceTitle }).catch((err: Error) => ctx.logger.warn(`rescue-wake: 工作区命名失败：${err.message}`))
+      } catch (err) {
+        ctx.logger.warn(`rescue-wake: 建值班工作区失败，会话将在 Ungrouped：${(err as Error).message}`)
+      }
+    }
+    const made = await c.sessionController.create({ ...(workspaceId ? { workspaceId } : { cwd: config.cwd }), agentPreset: config.agentPreset })
     const sessionId: string = made.sessionId
     const resolved = await c.sessionController.resolveAgent(sessionId)
     if ('error' in resolved) throw resolved.error
+    // 先命名再投递：显式标题固定后，DSH 不会再用首条消息或模型生成标题。命名失败不影响告警投递
+    try {
+      await c.sessionController.rename({ sessionId, title: config.title })
+    } catch (err) {
+      ctx.logger.warn(`rescue-wake: 值班会话命名失败：${(err as Error).message}`)
+    }
     writeFileSync(dutyFile, JSON.stringify({ sessionId, createdAt: new Date().toISOString() }))
     return { agent: resolved.agent, sessionId }
   }

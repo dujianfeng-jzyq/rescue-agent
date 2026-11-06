@@ -28,6 +28,7 @@ import { STAGE, type StageRunner } from './explanation.ts'
 import { draftSealingPlan, type HumanInput, type Redline, SEALING_FLOW } from './sealing.ts'
 import { IncidentStore } from '../incident/store.ts'
 import { noteOnIncident } from '../incident/timeline.ts'
+import { TIMELINE_FLOW, TimelineInputError, reviewTimeline } from './timeline.ts'
 import { EFFECT_FLOW, EffectInputError, type LastIssued, reviewEffect } from './effect.ts'
 
 export const name = 'rescue-fire-loop'
@@ -378,6 +379,49 @@ export function apply(ctx: Context, config: Config) {
         } catch (err) {
           stopReason = 'failed'
           if (err instanceof EffectInputError) return toJson({ error: err.message })
+          throw err
+        } finally {
+          append(parent.session, 'tool-workflow/run-end', { runId, stopReason })
+        }
+      },
+    }),
+  )
+
+  c.tools.register(
+    defineTool({
+      name: TIMELINE_FLOW,
+      description:
+        '事件复盘（固定流程，事件稳定或关闭后复盘、总结处置过程时调它）：读事件库里的事件，整理成按时间排序的时间线，' +
+        '由代码计算告警、研判、复评、对外动作（已下发、被拒绝、执行失败）、跟踪计划的次数和发现异常到研判、到下发的响应时长，存为记录。' +
+        'incident_id 不给就取最近更新的事件。完整复盘报告已作为文件交付（网页端右侧预览）；回答时把 brief_markdown（要点）原样单独成段放进回答，不要改写、不要贴完整报告、不要另写分析。' +
+        '复盘只描述已发生的事，次数和时长照抄。',
+      parameters: { incident_id: { type: 'string', description: '事件编号（INC-…）；缺省为最近更新的事件' } },
+      output: {
+        schema: { type: 'json' as const },
+        render: (_args: unknown, v: any) => [
+          { type: 'text' as const, text: JSON.stringify(v.error ? v : { summary: v.card.summary, warnings: v.card.warnings, brief_markdown: v.brief_markdown, record_ids: v.record_ids, result: v.result, delivered: v.delivered }) },
+        ],
+      },
+      execute: async (raw: unknown, exec: any) => {
+        const args = raw as { incident_id?: string }
+        const parent = exec.agent
+        if (!parent) throw new Error(`${TIMELINE_FLOW} 需要调用方会话`)
+        if (!incidents) return toJson({ error: '没有配置事件库（fire-loop 的 incidentDir），不能复盘' })
+        const runId = `${TIMELINE_FLOW}-${randomUUID()}`
+        append(parent.session, 'tool-workflow/run-start', { runId, name: '事件复盘' })
+        let stopReason = 'completed'
+        try {
+          const out: any = await reviewTimeline(evidence, {
+            store: incidents,
+            ...(args.incident_id ? { incidentId: String(args.incident_id) } : {}),
+            origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
+            signal: exec.signal,
+          })
+          out.delivered = await deliver(exec, `${out.card.record_ids[0]}.md`, out.report_markdown, `${out.result.incident_id} 事件复盘报告`)
+          return toJson(out)
+        } catch (err) {
+          stopReason = 'failed'
+          if (err instanceof TimelineInputError) return toJson({ error: err.message })
           throw err
         } finally {
           append(parent.session, 'tool-workflow/run-end', { runId, stopReason })

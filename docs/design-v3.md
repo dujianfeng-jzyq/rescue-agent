@@ -212,7 +212,7 @@ incident_id, 状态（监测中/处置中/已稳定/已关闭）, 工作面/火�
 | P2 守卫拆分（已完成 2026-11-05） | actions → guard：对外动作经 guard 调 rescue-mine；动作分级；删除第一版快照 | 红线/校验测试通过；三道防线用例通过（已验证，见 ADR 0008 和 CLAUDE.md） |
 | P3 监听与事件（已完成 2026-11-06） | sentinel、事件库、incident 插件、值班界面/控制台告警；按 V1 结果选唤醒或退路（选唤醒） | 监听器期望测试；事件重启恢复（已验证，见 CLAUDE.md） |
 | P4 智能体改造（部分完成 2026-11-06） | 专家人设、技能 `fire-incident-management`、提问规则、闭环跟踪、降级策略、时间线自动记录、决策评测已做；工具重组、参数重新设计、C 级超时升级暂缓（原因见 CLAUDE.md） | 决策评测通过（各 1 次，见 CLAUDE.md） |
-| P5 评测与演示 | 决策评测、故事线脚本、Docker 演示更新、`review_timeline` | 故事线整条走通；`make check` 通过 |
+| P5 评测与演示（已完成 2026-11-06，Docker 未实测） | 决策评测、故事线脚本 `make story`、Docker 演示更新、`review_timeline` | 故事线整条走通（已验证 1 次，见 CLAUDE.md）；`make check` 通过 |
 
 每个阶段结束更新 CLAUDE.md 进度和 `docs/validation-checklist.md`。
 
