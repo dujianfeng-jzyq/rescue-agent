@@ -12,7 +12,7 @@ from _skill import main
 
 VERSION = "timeline/1.0.0"
 STATUS_NAMES = {"monitoring": "监测中", "handling": "处置中", "stable": "已稳定", "closed": "已关闭"}
-CAUSE_NAMES = {"anomaly": "监测异常", "mine_alarm": "矿井报警", "followup_due": "跟踪计划到点", "degraded": "监听降级"}
+CAUSE_NAMES = {"anomaly": "监测异常", "mine_alarm": "矿井报警", "followup_due": "跟踪计划到点", "degraded": "监听降级", "approval_timeout": "批准超时"}
 NOTE_NAMES = {"assessment": "研判", "effect_review": "效果复评", "sealing_plan": "封闭方案", "unsealing": "启封评估"}
 MINE_STATUS = {"accepted": "已收到", "executing": "执行中", "completed": "已完成", "failed": "失败", "rejected": "矿井拒绝"}
 KIND_NAMES = {"notice": "通知", "dispatch": "调度", "treatment": "处置"}

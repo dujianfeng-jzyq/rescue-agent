@@ -412,7 +412,7 @@ def test_precheck_summary_for_unsealing(world_s5):
     assert out["ok"], out["problems"]
     names = [c["name"] for c in out["summary"]["checks"]]
     assert "启封条件" in names and "方案类型、时效与红线" in names
-    assert out["summary"]["action"].startswith("下发 1201 采空区火区启封方案") or "启封" in out["summary"]["action"]
+    assert out["summary"]["action"].startswith("批准启封 1201 采空区火区启封方案")
     assert out["notes"] and "不可逆" in out["notes"][0]  # 确认人要把关的事项
     bad = precheck("approve_unsealing", {"record_id": rid}, world_s5.holder.engine.now().replace(year=2027), world_s5.records)
     assert not bad["ok"] and any("过时" in p for p in bad["problems"])

@@ -383,6 +383,7 @@ def incident_inputs() -> dict[tuple[str, str, str], dict]:
         (IR, "timeline", "full-process-closed"): ev(full),
         (IR, "timeline", "in-progress-unfinished"): ev(base),
         (IR, "timeline", "alert-only"): ev(base[:2]),
+        (IR, "timeline", "approval-timeout-alert"): ev([*base[:2], _entry(3, "2026-11-05T08:40:00", "alert", "sentinel", {"cause": "approval_timeout", "summary": "publish_warning 等待人工确认已超过 10 分钟（已等 30 分钟，确认人：通风部门负责人），已提醒值班长"})]),
     }
 
 

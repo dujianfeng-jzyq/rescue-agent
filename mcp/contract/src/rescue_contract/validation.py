@@ -265,7 +265,8 @@ def precheck(tool: str, arguments: dict[str, Any], now: datetime | None, records
             else:
                 plan, problems, notes, checks = plan_from_record(tool, record_id, records, now)
                 if plan is not None:
-                    action = f"下发 {plan.title}（{plan.plan_id}）"
+                    verb = "批准启封" if tool == "approve_unsealing" else "下发"  # 启封是不可逆的现场动作，标题不能写成“下发”
+                    action = f"{verb} {plan.title}（{plan.plan_id}）"
         else:
             problems = []  # 撤人名单、调度单：不引用记录（调度单的内容核对在 guard 里，按矿井数据）
     except Exception as exc:
