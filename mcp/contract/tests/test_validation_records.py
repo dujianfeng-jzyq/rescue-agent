@@ -32,7 +32,7 @@ def warn(records, level="red", **kw):
 
 
 def check(tool, args, records, now=NOW):
-    return precheck(tool, args, now, None, records)
+    return precheck(tool, args, now, records)
 
 
 def test_warning_matches_record(records):
@@ -101,11 +101,11 @@ def test_record_without_level(records):
     assert not r["ok"] and "没有可核对的预警等级" in r["problems"][0]
 
 
-def test_both_ids_and_no_record_store(records):
+def test_record_id_is_required_and_record_dir_must_exist(records):
+    r = check("publish_warning", {"notice": {"location": "1201", "level": "red", "summary": "s"}}, records)
+    assert not r["ok"] and "数据契约" in r["problems"][0]  # 第一版的 snapshot_id 已删除：没有 record_id 就是格式错误
     rid = put(records, "fire-assessment", "warning", {"level": "red"})
-    r = check("publish_warning", warn(records, record_id=rid, snapshot_id="SN-x"), records)
-    assert not r["ok"] and "只能给一个" in r["problems"][0]
-    r = precheck("publish_warning", warn(records, record_id=rid), NOW, None, None)
+    r = precheck("publish_warning", warn(records, record_id=rid), NOW, None)
     assert not r["ok"] and "没有配置记录目录" in r["problems"][0]
 
 

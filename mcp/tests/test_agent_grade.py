@@ -343,17 +343,29 @@ def test_report_pasted(tmp_path, final, ok):
     assert r["checks"]["stage_reported"]["ok"]  # 阶段名取自研判快照
 
 
+def _rec_tree(tmp_path, action_args: dict | None):
+    """固定流程 run_fire_assessment 返回 record_ids，再调 publish_warning。"""
+    flow = {"record_ids": {"warning": "RS-20261104T150000-abc123", "escalation": "RS-20261104T150000-def456"}, "result": {"warning": {"level": "red"}}, "brief_markdown": REPORT}
+    events = [{"type": "turn/start"}, _user("请研判 1201 工作面"), *_assistant("", [("w1", "run_fire_assessment", {"panel": "1201"})]), _result("w1", json.dumps(flow, ensure_ascii=False))]
+    if action_args is not None:
+        events += [*_assistant("", [("a1", "mcp__actions__publish_warning", action_args)]), _result("a1", '{"status": "issued"}')]
+    events += [*_assistant(REPORT), {"type": "turn/end"}]
+    _write(tmp_path, ROOT_ID, events, "rescue-commander")
+    return grade.load_tree(ROOT_ID, tmp_path)
+
+
 @pytest.mark.parametrize(
     ("args", "ok"),
     [
-        ({"notice": {"level": "red", "snapshot_id": "SN-20261104T150000-abc123"}}, True),
-        ({"notice": {"level": "red"}}, False),
-        ({"notice": {"level": "red", "snapshot_id": "SN-20261104T150000-zzzzzz"}}, False),
+        ({"notice": {"level": "red", "record_id": "RS-20261104T150000-abc123"}}, True),
+        ({"notice": {"level": "red"}}, False),  # 没有引用记录
+        ({"notice": {"level": "red", "record_id": "RS-20261104T150000-zzzzzz"}}, False),  # 不是本次运行产生的记录
+        ({"notice": {"level": "red", "snapshot_id": "SN-20261104T150000-abc123"}}, False),  # 第一版的 snapshot_id 不再算引用
     ],
 )
-def test_snapshot_referenced(tmp_path, args, ok):
-    r = grade.grade(_wf_tree(tmp_path, REPORT, args), {"snapshot_referenced": True})
-    assert r["checks"]["snapshot_referenced"]["ok"] is ok
+def test_record_referenced(tmp_path, args, ok):
+    r = grade.grade(_rec_tree(tmp_path, args), {"record_referenced": True})
+    assert r["checks"]["record_referenced"]["ok"] is ok
 
 
 def test_workflow_call_covers_internal_tools(tmp_path):

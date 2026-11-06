@@ -346,18 +346,6 @@
       "title": "Basis",
       "type": "array"
     },
-    "snapshot_id": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Snapshot Id"
-    },
     "panel": {
       "anyOf": [
         {
@@ -392,5 +380,5 @@
   ],
   "title": "Plan",
   "type": "object",
-  "$comment": "rescue-contract 0.10.0"
+  "$comment": "rescue-contract 0.11.0"
 }

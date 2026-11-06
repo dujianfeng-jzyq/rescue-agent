@@ -368,7 +368,7 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         只执行，不做红线校验。"""
         if (prior := existing(request.idempotency_key, ActionKind.TREATMENT)) is not None:
             return prior
-        if request.panel not in panel_ids:
+        if request.panel is not None and request.panel not in panel_ids:
             raise ToolError(f"未知工作面：{request.panel}，可选：{sorted(panel_ids)}")
         bad = [x for x in request.roadways if x not in roadway_ids]
         if bad:

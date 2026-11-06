@@ -1,16 +1,16 @@
-"""指令发布前的校验：红线 + 方案类型 + 数据时效 + 研判快照（第一版）或记录（第二版）核对。
+"""指令发布前的校验：红线 + 方案类型 + 数据时效 + 记录核对。
 
-actions 服务（强制执行）、DSH 审批插件的预检接口、kb 服务的自查工具共用这里的逻辑。
-快照核对（docs/workflow-design.md W6）：方案的现场条件和必备步骤、预警等级、升级建议、调度单，
-都要与 workflow 服务生成的研判快照一致——红线引擎的输入来自计算，不来自模型填写。
-store 为 None 时不做快照核对（只用于单元测试红线和时效逻辑）。
+guard 服务（执行前强制）和 DSH 审批插件的预检接口共用这里的逻辑。指令引用证据插件写的结果记录（record_id），
+红线引擎的输入来自计算，不来自模型填写：预警、升级、封闭方案都要按记录核对。
 now 为 None 时不检查时效（只用于自查）；发布和审批预检必须传入矿井时间，取不到时由调用方拒绝（fail closed）。
 
-第二版（docs/design-v2.md 4.8）：预警、升级引用证据插件写的结果记录（record_id）。核对：记录存在、内容哈希没变、
-是规定技能和脚本的结果、时效、工作面，再按记录内容核对等级或升级结论。迁移完成前 snapshot_id 仍可用，二者只能给一个。
-封闭方案（第二版 P3）只提交审核记录的编号（plan-compliance/review）：方案从记录里取，不经模型转抄；核对审核结论为通过、
+记录核对：记录存在、内容哈希没变、是规定技能和脚本的结果、时效、工作面，再按记录内容核对等级或升级结论。
+封闭方案只提交审核记录（plan-compliance/review）的编号：方案从记录里取，不经模型转抄；核对审核结论为通过、
 方案与上游的方案记录（sealing-plan/compose）一致，再做方案类型、时效和红线校验。
 预检结果附 ApprovalSummary（审批弹窗的结构化内容）。
+
+第三版 P2：第一版的研判快照（snapshot_id）、防灭火方案和启封方案的草案核对已删除——它们依赖第一版 workflow 的草案，
+没有对应的第二版流程；需要时随新流程按记录重做（docs/design-v3.md）。
 """
 
 from __future__ import annotations
@@ -19,30 +19,23 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .models import (
-    HUMAN_INPUT_LABELS,
     ApprovalCheck,
     ApprovalSummary,
-    DispatchOrder,
     Escalation,
     Plan,
     PlanKind,
     Record,
     RecordKind,
-    Snapshot,
-    SnapshotKind,
     WarningLevel,
     WarningNotice,
 )
 from .records import RecordNotFound, RecordStore, RecordTampered
 from .redlines import check_plan, format_violations
-from .snapshots import SnapshotNotFound, SnapshotStore
 
 CONTEXT_MAX_AGE = timedelta(hours=2)  # 方案依据的现场条件不得早于 2 小时。TODO(专家): 确认时效要求
 
 PLAN_TOOLS: dict[str, PlanKind] = {
-    "issue_firefighting_plan": PlanKind.FIREFIGHTING,
     "issue_sealing_plan": PlanKind.SEALING,
-    "approve_unsealing": PlanKind.UNSEALING,
 }
 NAMES = {"none": "无", "blue": "蓝色", "yellow": "黄色", "orange": "橙色", "red": "红色"}
 
@@ -57,97 +50,20 @@ def _age_problems(as_of: datetime, now: datetime | None, what: str) -> list[str]
     return []
 
 
-def _snapshot(
-    store: SnapshotStore, snapshot_id: str | None, kind: SnapshotKind, what: str, now: datetime | None = None
-) -> tuple[Snapshot | None, list[str]]:
-    """按编号取快照并核对类型；传入 now 时同时核对时效（快照的矿井时间不得早于 CONTEXT_MAX_AGE）。"""
-    if not snapshot_id:
-        return None, [f"缺少 snapshot_id：{what}必须引用 workflow 生成的快照（kind={kind.value}），不能手写"]
-    try:
-        snap = store.get(snapshot_id)
-    except SnapshotNotFound:
-        return None, [f"找不到快照 {snapshot_id}：snapshot_id 必须照抄 workflow 工具返回的值"]
-    if snap.kind != kind:
-        return None, [f"快照 {snapshot_id} 的类型是 {snap.kind.value}，{what}需要 {kind.value}"]
-    stale = _age_problems(snap.as_of, now, f"{what}引用的快照 {snapshot_id}")
-    return (None, stale) if stale else (snap, [])
-
-
-def _required_steps_in_order(plan: Plan, required: list[str]) -> list[str]:
-    """必备步骤都在、相对顺序不变（可在中间插入其他步骤）。"""
-    seq = [s.type.value for s in sorted(plan.steps, key=lambda s: s.order)]
-    pos = 0
-    for t in required:
-        try:
-            pos = seq.index(t, pos) + 1
-        except ValueError:
-            return [f"必备步骤缺失或顺序被改动：草案要求依次包含 {' → '.join(required)}，方案为 {' → '.join(seq)}"]
-    return []
-
-
-def check_plan_snapshot(plan: Plan, store: SnapshotStore) -> list[str]:
-    snap, problems = _snapshot(store, plan.snapshot_id, SnapshotKind.PLAN_CONTEXT, "方案")
-    if snap is None:
-        return problems
-    r = snap.result
-    if plan.kind.value != r["plan"]["kind"]:
-        problems.append(f"方案类型 {plan.kind.value} 与草案快照 {r['plan']['kind']} 不一致")
-    if plan.panel is not None and plan.panel != snap.panel:
-        problems.append(f"工作面 {plan.panel} 与草案快照 {snap.panel} 不一致")
-    want = r["plan"]["context"]
-    got = plan.context.model_dump(mode="json")
-    diff = [f"{k}（快照 {want.get(k)!r}，提交 {got.get(k)!r}）" for k in sorted(set(want) | set(got)) if want.get(k) != got.get(k)]
-    if diff:
-        problems.append(
-            "现场条件与草案快照不一致，不能手改（需要人工确认的条件请重新调用 draft_plan 传入 human_inputs）：" + "；".join(diff)
-        )
-    problems += _required_steps_in_order(plan, r["required_steps"])
-    return problems
-
-
-def validate_plan(tool: str, plan: Plan, now: datetime | None, store: SnapshotStore | None = None) -> list[str]:
+def validate_plan(tool: str, plan: Plan, now: datetime | None) -> list[str]:
     """返回全部问题；空列表表示可以发布。now 为 None 时不检查时效（自查场景）。"""
     problems = []
     expected = PLAN_TOOLS.get(tool)
     if expected and plan.kind != expected:
         problems.append(f"方案类型应为 {expected.value}，实际为 {plan.kind.value}")
     problems += _age_problems(plan.context.as_of, now, "现场条件")
-    if store is not None:
-        problems += check_plan_snapshot(plan, store)
     violations = check_plan(plan)
     if violations:
         problems.append(format_violations(violations))
     return problems
 
 
-def plan_notes(plan: Plan, store: SnapshotStore) -> list[str]:
-    """给确认人看的现场条件说明：哪些由人工输入（值和确认人照草案快照列出）、哪些系统没有数据也没有人确认。
-
-    人工输入经智能体转述，系统无法核实确认人是否真的确认过，所以必须在人工确认弹窗里逐项列出，由确认人把关。
-    """
-    try:
-        snap = store.get(plan.snapshot_id or "")
-    except SnapshotNotFound:
-        return []
-    ctx = plan.context.model_dump(mode="json")
-
-    def show(v: Any) -> str:
-        return {True: "是", False: "否"}.get(v, str(v)) if isinstance(v, bool) else str(v)
-
-    given = [
-        f"{HUMAN_INPUT_LABELS.get(h['field'], h['field'])}={show(h['value'])}（确认人：{h['confirmed_by']}）"
-        for h in snap.inputs.get("human_inputs") or []
-    ]
-    missing = [label for f, label in HUMAN_INPUT_LABELS.items() if ctx.get(f) is None]
-    notes = []
-    if given:
-        notes.append("以下现场条件为人工输入，系统无法核实，请确认人逐项核对：" + "；".join(given))
-    if missing:
-        notes.append("以下现场条件系统没有数据、也未经人工确认（依赖它们的红线按不通过处理）：" + "、".join(missing))
-    return notes
-
-
-# ── 第二版：按记录核对 ──────────────────────────────────────────────────────
+# ── 按记录核对 ──────────────────────────────────────────────────────────────
 
 # 指令 → 它引用的记录必须是哪个技能、哪个脚本的结果
 RECORD_SOURCES: dict[str, tuple[str, str]] = {
@@ -168,7 +84,7 @@ def _record(records: RecordStore | None, record_id: str, tool: str, what: str, n
         return None, checks
 
     if records is None:
-        return fail("引用记录", "actions 没有配置记录目录，不能核对记录（fail closed）")
+        return fail("引用记录", "guard 没有配置记录目录，不能核对记录（fail closed）")
     try:
         rec = records.get(record_id)
     except RecordNotFound:
@@ -193,10 +109,6 @@ def _record(records: RecordStore | None, record_id: str, tool: str, what: str, n
 def _result(rec: Record) -> dict[str, Any]:
     content = rec.content if isinstance(rec.content, dict) else {}
     return content.get("result") or {}
-
-
-def _both(snapshot_id: str | None, record_id: str | None) -> list[str]:
-    return ["snapshot_id 和 record_id 只能给一个：第二版引用记录（record_id），第一版引用快照（snapshot_id）"] if snapshot_id and record_id else []
 
 
 def check_warning_record(
@@ -242,8 +154,8 @@ def plan_from_record(
     tool: str, record_id: str, records: RecordStore | None, now: datetime | None
 ) -> tuple[Plan | None, list[str], list[str], list[ApprovalCheck]]:
     """第二版：按审核记录取方案并核对。返回（方案, 问题, 给确认人看的说明, 核对项）；有问题时方案为 None。"""
-    if tool not in RECORD_SOURCES:
-        msg = f"{tool} 还不支持按记录下发（第二版只有 issue_sealing_plan），请提交完整方案"
+    if tool not in PLAN_TOOLS:
+        msg = f"{tool} 不支持按记录下发（目前只有 issue_sealing_plan）"
         return None, [msg], [], [ApprovalCheck(name="引用记录", ok=False, detail=msg)]
     rec, checks = _record(records, record_id, tool, "方案", now)
 
@@ -273,57 +185,19 @@ def plan_from_record(
         return fail("方案格式", f"记录里的方案不符合数据契约：{exc}")
     if rec.panel and plan.panel != rec.panel:
         return fail("工作面", f"方案的工作面 {plan.panel} 与记录的工作面 {rec.panel} 不符")
-    problems = validate_plan(tool, plan, now, None)
+    problems = validate_plan(tool, plan, now)
     checks.append(ApprovalCheck(name="方案类型、时效与红线", ok=not problems, detail="；".join(problems) or "通过（与下发时的强制校验同一套规则）"))
     if problems:
         return None, problems, [], checks
     return plan, [], [str(x) for x in r.get("human_items") or []], checks
 
 
-def check_warning(notice: WarningNotice, store: SnapshotStore, now: datetime | None = None) -> tuple[list[str], list[str]]:
-    """第一版（快照）：（问题, 给确认人看的说明）。等级与研判快照不同且没写理由 → 拒绝；写了理由 → 放行并在确认时提示。"""
-    snap, problems = _snapshot(store, notice.snapshot_id, SnapshotKind.ASSESSMENT, "预警", now)
-    if snap is None:
-        return problems, []
-    computed = snap.result["warning"]["level"]
-    if notice.level.value == computed:
-        return [], []
-    if not (notice.override_reason or "").strip():
-        return [
-            f"预警等级 {NAMES[notice.level.value]} 与研判快照计算结果 {NAMES[computed]} 不一致；人工改等级须在 override_reason 写明理由"
-        ], []
-    return [], [f"与计算结果不一致：计算 {NAMES[computed]}，提交 {NAMES[notice.level.value]}，理由：{notice.override_reason}"]
-
-
-def check_escalation(esc: Escalation, store: SnapshotStore, now: datetime | None = None) -> list[str]:
-    snap, problems = _snapshot(store, esc.snapshot_id, SnapshotKind.ESCALATION, "升级", now)
-    if snap is None:
-        return problems
-    if not snap.result.get("recommend"):
-        return [f"升级建议快照 {esc.snapshot_id} 的结论是不建议升级；需要升级时由指挥人员另行决定，不经本工具提交"]
-    return []
-
-
-def check_dispatch(order: DispatchOrder, store: SnapshotStore) -> list[str]:
-    """引用了调度草案快照时逐行核对物资、数量、起止节点；没有引用时放行（调度单仍需人工确认）。"""
-    if not order.snapshot_id:
-        return []
-    snap, problems = _snapshot(store, order.snapshot_id, SnapshotKind.DISPATCH, "调度单")
-    if snap is None:
-        return problems
-    want = sorted((ln["item_type"], float(ln["quantity"]), ln["from_node"], ln["to_node"]) for ln in snap.result["order"]["lines"])
-    got = sorted((ln.item_type, float(ln.quantity), ln.from_node, ln.to_node) for ln in order.lines)
-    return [] if want == got else [f"调度单明细与草案快照 {order.snapshot_id} 不一致：快照 {want}，提交 {got}"]
-
-
 ACTION_NAMES = {
     "publish_warning": "发布预警等级",
-    "issue_firefighting_plan": "下发防灭火方案",
     "escalate_emergency": "升级为应急响应",
     "notify_evacuation": "发布补充撤人名单",
     "issue_dispatch_order": "下发物资调度单",
     "issue_sealing_plan": "下发封闭方案",
-    "approve_unsealing": "批准启封",
 }
 
 
@@ -335,58 +209,38 @@ def _summary(
     action = action or ACTION_NAMES.get(tool, tool)
     if tool == "publish_warning" and body.get("location"):
         action = f"发布 {body['location']} {NAMES.get(str(body.get('level')), body.get('level'))}预警"
-    if not checks:  # 第一版或没有逐项核对的指令：把预检结论作为一项
-        checks = [ApprovalCheck(name="红线与快照预检", ok=not problems, detail="；".join(problems) or None)]
-    ids = [x for x in (body.get("record_id"), body.get("snapshot_id")) if isinstance(x, str) and x]
+    if not checks:  # 没有逐项核对的指令（撤人名单、调度单）：把预检结论作为一项
+        checks = [ApprovalCheck(name="预检", ok=not problems, detail="；".join(problems) or None)]
+    ids = [x for x in (body.get("record_id"),) if isinstance(x, str) and x]
     return ApprovalSummary(
         action=action, tool=tool, record_ids=ids, checks=checks, human_items=notes,
         override_reason=body.get("override_reason") if isinstance(body.get("override_reason"), str) else None,
     ).model_dump(mode="json")  # fmt: skip
 
 
-def precheck(
-    tool: str, arguments: dict[str, Any], now: datetime | None, store: SnapshotStore | None = None, records: RecordStore | None = None
-) -> dict[str, Any]:
+def precheck(tool: str, arguments: dict[str, Any], now: datetime | None, records: RecordStore | None = None) -> dict[str, Any]:
     """arguments 为工具调用参数。返回 {ok, problems, notes, summary}；notes 给确认人看（如人工改等级的理由），
-    summary 是审批弹窗的结构化内容（ApprovalSummary）。records 为第二版的记录库（引用 record_id 时核对）。"""
+    summary 是审批弹窗的结构化内容（ApprovalSummary）。预警、升级、封闭方案都按记录（record_id）核对。"""
     notes: list[str] = []
     checks: list[ApprovalCheck] = []
     action: str | None = None
     try:
-        body = arguments.get({"publish_warning": "notice", "escalate_emergency": "escalation"}.get(tool, ""), arguments)
-        has_record = isinstance(body, dict) and bool(body.get("record_id"))
-        if tool == "publish_warning" and has_record:
-            n = WarningNotice.model_validate(body)
-            problems = _both(n.snapshot_id, n.record_id) or []
-            if not problems:
-                problems, notes, checks = check_warning_record(n, records, now)
-        elif tool == "escalate_emergency" and has_record:
-            e = Escalation.model_validate(body)
-            problems = _both(e.snapshot_id, e.record_id) or []
-            if not problems:
-                problems, checks = check_escalation_record(e, records, now)
-        elif tool in PLAN_TOOLS and isinstance(arguments.get("record_id"), str):
-            if arguments.get("plan") is not None:
-                problems = ["plan 和 record_id 只能给一个：第二版只提交审核记录编号（record_id），方案由 actions 从记录取"]
+        if tool == "publish_warning":
+            n = WarningNotice.model_validate(arguments.get("notice", arguments))
+            problems, notes, checks = check_warning_record(n, records, now)
+        elif tool == "escalate_emergency":
+            e = Escalation.model_validate(arguments.get("escalation", arguments))
+            problems, checks = check_escalation_record(e, records, now)
+        elif tool in PLAN_TOOLS:
+            record_id = arguments.get("record_id")
+            if not isinstance(record_id, str) or not record_id:
+                problems = ["缺少 record_id：封闭方案只提交审核记录编号（draft_sealing_plan 返回的 record_ids.review），方案由 guard 从记录取"]
             else:
-                plan, problems, notes, checks = plan_from_record(tool, arguments["record_id"], records, now)
+                plan, problems, notes, checks = plan_from_record(tool, record_id, records, now)
                 if plan is not None:
                     action = f"下发 {plan.title}（{plan.plan_id}）"
-        elif tool in PLAN_TOOLS:
-            plan = Plan.model_validate(arguments.get("plan", arguments))
-            problems = validate_plan(tool, plan, now, store)
-            if store is not None and not problems:
-                notes = plan_notes(plan, store)
-        elif store is None:
-            problems = []
-        elif tool == "publish_warning":
-            problems, notes = check_warning(WarningNotice.model_validate(arguments.get("notice", arguments)), store, now)
-        elif tool == "escalate_emergency":
-            problems = check_escalation(Escalation.model_validate(arguments.get("escalation", arguments)), store, now)
-        elif tool == "issue_dispatch_order":
-            problems = check_dispatch(DispatchOrder.model_validate(arguments.get("order", arguments)), store)
         else:
-            problems = []
+            problems = []  # 撤人名单、调度单：不引用记录（调度单的内容核对在 guard 里，按矿井数据）
     except Exception as exc:
         problems = [f"指令格式不符合数据契约：{exc}"]
         return {"ok": False, "problems": problems, "notes": [], "summary": _summary(tool, {}, problems, [], [])}
@@ -399,10 +253,8 @@ __all__ = [
     "RECORD_SOURCES",
     "WarningLevel",
     "check_escalation_record",
-    "check_plan_snapshot",
     "check_warning_record",
     "plan_from_record",
-    "plan_notes",
     "precheck",
     "validate_plan",
 ]

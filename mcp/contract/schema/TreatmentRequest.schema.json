@@ -31,8 +31,16 @@
   "description": "处置动作：注惰、灌浆、封闭等。矿井侧只执行，不做红线校验（校验在 rescue-agent 的 guard）。",
   "properties": {
     "panel": {
-      "title": "Panel",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Panel"
     },
     "type": {
       "$ref": "#/$defs/StepType"
@@ -70,11 +78,10 @@
     }
   },
   "required": [
-    "panel",
     "type",
     "idempotency_key"
   ],
   "title": "TreatmentRequest",
   "type": "object",
-  "$comment": "rescue-contract 0.10.0"
+  "$comment": "rescue-contract 0.11.0"
 }

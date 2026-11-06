@@ -25,7 +25,6 @@ CASES = [
 @pytest.mark.parametrize(("build", "tool", "args", "expect"), CASES, ids=[f"{c[1]}-{c[3]}" for c in CASES])
 def test_input_errors_reach_the_agent(build, tool, args, expect, tmp_path, monkeypatch):
     monkeypatch.setenv("RESCUE_CHART_DIR", str(tmp_path))  # 爆炸三角形工具成功时会存图
-    monkeypatch.setenv("RESCUE_SNAPSHOT_DIR", str(tmp_path / "snapshots"))
     monkeypatch.setenv("RESCUE_ACTIONS_LEDGER", str(tmp_path / "ledger.jsonl"))
     async def go():
         async with Client(build()) as c:

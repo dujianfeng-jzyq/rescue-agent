@@ -199,7 +199,7 @@ export function apply(ctx: Context, config: Config) {
       callId: `${exec.callId}:precheck:${n}`,
       rootCallId: exec.rootCallId,
       name: config.precheckTool,
-      arguments: { tool: 'issue_sealing_plan', plan, redlines_only: true },
+      arguments: { tool: 'issue_sealing_plan', plan },
       agent: exec.agent,
       parent: exec.token,
       signal: exec.signal,

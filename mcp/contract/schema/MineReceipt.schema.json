@@ -73,5 +73,5 @@
   ],
   "title": "MineReceipt",
   "type": "object",
-  "$comment": "rescue-contract 0.10.0"
+  "$comment": "rescue-contract 0.11.0"
 }

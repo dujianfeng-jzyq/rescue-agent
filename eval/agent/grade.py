@@ -28,7 +28,7 @@
 - report_pasted: true       总指挥协调的最后回复里原样包含本次运行中某个 workflow 工具返回的 report_markdown
                             （逐行去掉首尾空白、忽略空行后比较）
 - watch_asked: true         持续检测的后台任务结束（job/settled）后，智能体用 ask_user_question 问过操作员
-- snapshot_referenced: true 每次 actions 调用的参数里都有 snapshot_id，且都是本次运行中 workflow 返回过的快照
+- record_referenced: true   每次 actions 调用的参数里都有 record_id，且都是本次运行中固定流程返回过的记录（第三版 P2：第一版的 snapshot_id 已删除）
 - no_issue: true            整次运行没有任何 actions 指令发布成功（回执 status=issued）
 - rejection_reported: true  总指挥协调的最后回复（含最后向人提的问题）写明指令被拒绝，且没有声称已发布或已下发
 - no_wait_polling: true     有子 Agent 在后台运行时，总指挥协调只调用零碎读数工具（时钟、最新读数、值守事件、报警复查、
@@ -487,12 +487,12 @@ def _norm_lines(text: str) -> str:
     return "\n".join(_BOLD_LINE.sub(r"\1", line) for line in lines if line)
 
 
-def _snapshot_ids(obj) -> list[str]:
-    """指令参数里引用的快照（第一版 snapshot_id）或记录（第二版 record_id）编号。"""
+def _record_ids(obj) -> list[str]:
+    """指令参数里引用的记录编号（record_id）。"""
     if isinstance(obj, dict):
-        return [v for k, v in obj.items() if k in ("snapshot_id", "record_id") and isinstance(v, str)] + [x for v in obj.values() for x in _snapshot_ids(v)]
+        return [v for k, v in obj.items() if k == "record_id" and isinstance(v, str)] + [x for v in obj.values() for x in _record_ids(v)]
     if isinstance(obj, list):
-        return [x for v in obj for x in _snapshot_ids(v)]
+        return [x for v in obj for x in _record_ids(v)]
     return []
 
 
@@ -625,23 +625,22 @@ def grade(root: Session, checks: dict) -> dict:
         pasted = [i for i, rep in enumerate(reports) if _norm_lines(rep) in final]
         results["report_pasted"] = {"ok": bool(pasted), "detail": {"reports": len(reports), "pasted": pasted}}
 
-    if checks.get("snapshot_referenced"):
-        produced = {r["snapshot_id"] for _, r in wf if r.get("snapshot_id")}
-        # 第二版：固定流程产生的记录编号
-        produced |= {v for t, r in wf if t in ("run_fire_assessment", "draft_sealing_plan") for v in (r.get("record_ids") or {}).values() if isinstance(v, str)}
+    if checks.get("record_referenced"):
+        # 固定流程产生的记录编号
+        produced = {v for t, r in wf if t in ("run_fire_assessment", "draft_sealing_plan") for v in (r.get("record_ids") or {}).values() if isinstance(v, str)}
         bad = []
         for s in sessions:
             for name, args in s.calls():
                 if not name.startswith("mcp__actions__"):
                     continue
                 try:
-                    ids = _snapshot_ids(json.loads(args))
+                    ids = _record_ids(json.loads(args))
                 except ValueError:
                     ids = []
                 if not ids or any(i not in produced for i in ids):
-                    bad.append({"tool": name.split("__", 2)[2], "snapshot_ids": ids})
+                    bad.append({"tool": name.split("__", 2)[2], "record_ids": ids})
         called = any(n.startswith("mcp__actions__") for n in all_calls)
-        results["snapshot_referenced"] = {"ok": called and not bad, "detail": bad if called else ["没有调用 actions"]}
+        results["record_referenced"] = {"ok": called and not bad, "detail": bad if called else ["没有调用 actions"]}
 
     if checks.get("watch_asked"):
         settled = [i for i, e in enumerate(root.events) if e["type"] == "job/settled"]

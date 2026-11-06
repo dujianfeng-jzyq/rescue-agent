@@ -45,7 +45,7 @@ def with_result(content, **changes):
 
 
 def check(rid, records, now=NOW):
-    return precheck("issue_sealing_plan", {"record_id": rid}, now, None, records)
+    return precheck("issue_sealing_plan", {"record_id": rid}, now, records)
 
 
 def test_reviewed_plan_passes(records):
@@ -113,18 +113,19 @@ def test_redline_still_enforced(records):
     assert not r["ok"] and "第85条" in r["problems"][0]
 
 
-def test_plan_and_record_both(records):
-    rid = reviewed(records)
-    r = precheck("issue_sealing_plan", {"record_id": rid, "plan": COMPOSE["result"]["plan"]}, NOW, None, records)
-    assert not r["ok"] and "只能给一个" in r["problems"][0]
+def test_plan_tools_need_a_record_id(records):
+    """封闭方案不再接受直接提交的方案：没有 record_id 就不通过。"""
+    r = precheck("issue_sealing_plan", {"plan": COMPOSE["result"]["plan"]}, NOW, records)
+    assert not r["ok"] and "缺少 record_id" in r["problems"][0]
 
 
-def test_other_plan_tools_not_by_record(records):
+def test_tools_without_a_record_flow_are_not_plan_tools(records):
+    """防灭火方案、启封方案没有第二版流程，已从 guard 删除：按记录下发的校验只认 issue_sealing_plan。"""
     rid = reviewed(records)
-    r = precheck("approve_unsealing", {"record_id": rid}, NOW, None, records)
-    assert not r["ok"]
+    plan, problems, _, _ = plan_from_record("approve_unsealing", rid, records, NOW)
+    assert plan is None and "不支持按记录下发" in problems[0]
 
 
 def test_no_record_dir():
-    r = precheck("issue_sealing_plan", {"record_id": "RS-20261104T200000-zzzzzz"}, NOW, None, None)
+    r = precheck("issue_sealing_plan", {"record_id": "RS-20261104T200000-zzzzzz"}, NOW, None)
     assert not r["ok"] and "fail closed" in r["problems"][0]

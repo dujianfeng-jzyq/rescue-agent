@@ -17,7 +17,7 @@ from _skill import evidence, load_reference, main, record_result
 
 VERSION = "skeleton/1.0.0"
 
-# 人工确认项（契约 HumanInput.field）：中文名、取值类型
+# 人工确认项（方案现场条件字段）：中文名、取值类型
 HUMAN_FIELDS = {
     "area_temperature_c": ("灾区温度（℃）", "number"),
     "visibility_m": ("能见度（米）", "number"),

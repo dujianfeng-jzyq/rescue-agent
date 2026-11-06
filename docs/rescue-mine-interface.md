@@ -1,6 +1,6 @@
 # rescue-mine 接口说明
 
-> 接口版本 **1.0.0**，数据契约 **0.10.0**。**本文件由代码生成**（`make interface-doc`），不要手改；
+> 接口版本 **1.0.0**，数据契约 **0.11.0**。**本文件由代码生成**（`make interface-doc`），不要手改；
 > 测试会检查它与代码一致。设计依据见 `docs/design-v3.md` 第 4 节。
 
 rescue-mine 是 rescue-agent 与矿井之间的**唯一接口**，也是**唯一随矿井变化的部分**：开发阶段由模拟矿井（mine-sim）实现，
@@ -593,7 +593,7 @@ get_personnel 的返回：人员名单和人数。人数由 of() 统一计算，
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `panel` | string | 是 |  |
+| `panel` | string \| null | 否，缺省 None |  |
 | `type` | StepType | 是 |  |
 | `roadways` | list[string] | 否，可省略 |  |
 | `params` | map[string, number \| integer \| string \| boolean] | 否，可省略 |  |

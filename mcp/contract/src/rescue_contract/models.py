@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, WithJsonSchema, model_validator
 
-CONTRACT_VERSION = "0.10.0"
+CONTRACT_VERSION = "0.11.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -361,31 +361,10 @@ class Plan(_Model):
     context: FireContext
     steps: list[PlanStep] = Field(min_length=1)
     basis: list[Citation] = Field(default_factory=list)
-    # 方案草案快照（workflow 的 draft_plan 生成）。发布时必须有：context 和必备步骤按它核对
-    snapshot_id: str | None = None
     panel: str | None = None  # 工作面编号，用于在指令台账里按工作面查找
-    # 第二版：方案来自哪条审核记录（plan-compliance/review，draft_sealing_plan 生成）。下发时只提交记录编号，
-    # actions 从记录取方案，台账里的方案带上它
+    # 方案来自哪条审核记录（plan-compliance/review，draft_sealing_plan 生成）。下发时只提交记录编号，
+    # guard 从记录取方案，台账里的方案带上它
     record_id: str | None = None
-
-
-class HumanInput(_Model):
-    """系统里没有数据、只能由人确认的现场条件（写明确认人）。"""
-
-    field: Literal["area_temperature_c", "visibility_m", "fire_source_confirmed", "water_supply_sufficient", "return_airway_clear"]
-    value: float | bool
-    confirmed_by: str = Field(min_length=1)  # 确认人（姓名或岗位）
-    note: str | None = None
-
-
-# 人工确认项的中文名：方案草案的待补充清单、人工确认弹窗的说明共用
-HUMAN_INPUT_LABELS: dict[str, str] = {
-    "area_temperature_c": "灾区温度（℃）",
-    "visibility_m": "能见度（米）",
-    "fire_source_confirmed": "火源是否明确",
-    "water_supply_sufficient": "水源、人力和物力是否充足",
-    "return_airway_clear": "回风道是否畅通",
-}
 
 
 # ── 其他需确认的指令 ────────────────────────────────────────────────────────
@@ -404,10 +383,8 @@ class WarningNotice(_Model):
     level: WarningLevel
     summary: str
     basis: list[Citation] = Field(default_factory=list)
-    snapshot_id: str | None = None  # 第一版：研判快照；等级按它核对（迁移完成前保留）
-    # 第二版：预警等级的结果记录（fire-assessment/warning，run_fire_assessment 返回的 record_ids.warning）。
-    # 与 snapshot_id 二选一，发布时必须有其一
-    record_id: str | None = None
+    # 预警等级的结果记录（fire-assessment/warning，run_fire_assessment 返回的 record_ids.warning），发布时按它核对等级
+    record_id: str = Field(min_length=1)
     override_reason: str | None = None  # 等级与计算结果不同时必须写明理由（人工改等级）
 
 
@@ -424,7 +401,6 @@ class DispatchOrder(_Model):
     order_id: str
     purpose: str
     lines: list[DispatchLine] = Field(min_length=1)
-    snapshot_id: str | None = None  # 调度草案快照（workflow 的 draft_dispatch_for_plan）；有则逐行核对
 
 
 class EvacuationNotice(_Model):
@@ -438,40 +414,14 @@ class Escalation(_Model):
     reason: str
     recommended_level: str
     basis: list[Citation] = Field(default_factory=list)
-    snapshot_id: str | None = None  # 第一版：升级建议快照（workflow 的 recommend_escalation）
-    # 第二版：升级建议的结果记录（emergency-escalation/escalation，run_fire_assessment 返回的 record_ids.escalation）。
-    # 与 snapshot_id 二选一，发布时必须有其一
-    record_id: str | None = None
-
-
-# ── 研判快照（workflow 服务生成，指令发布时按编号核对；见 docs/workflow-design.md）──
-
-
-class SnapshotKind(StrEnum):
-    ASSESSMENT = "assessment"  # 研判快照（预警等级、阶段、趋势、爆炸危险性、受威胁人员）
-    EFFECT = "effect"  # 处置效果评估
-    ESCALATION = "escalation"  # 升级为应急响应的建议
-    PLAN_CONTEXT = "plan-context"  # 方案草案（现场条件和必备步骤）
-    DISPATCH = "dispatch"  # 调度单草案
-
-
-class Snapshot(_Model):
-    """工作流的一次计算结果。只新增、不修改；方案、预警、升级都引用它的编号。"""
-
-    snapshot_id: str
-    kind: SnapshotKind
-    panel: str
-    as_of: MineTime  # 取数时的矿井时间
-    created_at: MineTime  # 系统时间（本地），仅用于审计
-    inputs: dict[str, Any] = Field(default_factory=dict)  # 调用参数，含人工输入及其确认人
-    result: dict[str, Any]  # 工作流的结构化结果
-    report_markdown: str | None = None  # 由模板生成的报告事实部分
-    parent_ids: list[str] = Field(default_factory=list)  # 依赖的上游快照
+    # 升级建议的结果记录（emergency-escalation/escalation，run_fire_assessment 返回的 record_ids.escalation），
+    # 发布时按它核对结论
+    record_id: str = Field(min_length=1)
 
 
 # ── 第二版：记录与接口扩展点（docs/design-v2.md 4.3、4.4、4.11；ADR 0007）────────
 # 记录由证据插件（DSH 进程，TypeScript）写入，actions 等 Python 侧只读并重算 content_sha256 核对。
-# 第一版的 Snapshot 和各指令的 snapshot_id 在迁移完成前保留；P2 起指令改为引用 record_id。
+# 第三版 P2 起第一版的研判快照（Snapshot、snapshot_id）已删除：指令只引用 record_id。
 
 
 class Origin(_Model):
@@ -554,7 +504,7 @@ class ResultCard(_Model):
 
 
 class HumanInputItem(_Model):
-    field: str  # 方案现场条件用 HumanInput.field 的取值
+    field: str  # 方案现场条件的字段名（见 sealing-plan 技能的人工确认项）
     label: str
     description: str | None = None
     value_type: Literal["bool", "number", "text", "choice"]
@@ -726,7 +676,7 @@ class DispatchRequest(_Model):
 class TreatmentRequest(_Model):
     """处置动作：注惰、灌浆、封闭等。矿井侧只执行，不做红线校验（校验在 rescue-agent 的 guard）。"""
 
-    panel: str
+    panel: str | None = None  # 共用巷道的动作（如撤人涉及主运输大巷）不属于任何工作面
     type: StepType
     roadways: list[str] = Field(default_factory=list)
     params: dict[str, float | int | str | bool] = Field(default_factory=dict)

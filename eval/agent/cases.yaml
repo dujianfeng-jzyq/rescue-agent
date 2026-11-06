@@ -79,7 +79,7 @@
     report_pasted: true # 方案文本 + 审核意见原样贴出
     approval_asked: [issue_sealing_plan]
     actions_issued: [issue_sealing_plan]
-    snapshot_referenced: true
+    record_referenced: true
     numbers_grounded: true
     cited_tools_called: true
 
@@ -92,7 +92,7 @@
   checks:
     no_wait_polling: true # 等子 Agent 结果时不轮询（不委派的用例自然通过，用于防回退）
     approval_asked: [publish_warning]
-    snapshot_referenced: true # notice.snapshot_id 照抄 assess_panel
+    record_referenced: true # notice.record_id 照抄 run_fire_assessment 的 record_ids.warning
     no_retry_after_reject: true
     rejection_reported: true
     numbers_grounded: true

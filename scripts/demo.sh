@@ -22,9 +22,14 @@ tokens() {
     {
       echo "RESCUE_MCP_MINE_DATA_TOKEN=$(openssl rand -hex 16)"
       echo "RESCUE_MCP_ACTIONS_TOKEN=$(openssl rand -hex 16)"
+      echo "RESCUE_MCP_MINE_ACT_TOKEN=$(openssl rand -hex 16)"
       echo "RESCUE_SIM_CONTROL_TOKEN=$(openssl rand -hex 16)"
     } >"$DEMO/tokens.env"
     echo "  已生成令牌 var/demo/tokens.env"
+  elif ! grep -q '^RESCUE_MCP_MINE_ACT_TOKEN=' "$DEMO/tokens.env"; then
+    # 第三版新增的写入令牌：旧的 tokens.env 补一行，其他令牌不变
+    echo "RESCUE_MCP_MINE_ACT_TOKEN=$(openssl rand -hex 16)" >>"$DEMO/tokens.env"
+    echo "  已向 var/demo/tokens.env 补充 RESCUE_MCP_MINE_ACT_TOKEN"
   fi
   mkdir -p "$DEMO/records" "$DEMO/runs" "$DEMO/ledger" "$DEMO/audit" "$DEMO/dsh-home" "$DEMO/documents"
 }

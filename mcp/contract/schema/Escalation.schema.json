@@ -68,36 +68,18 @@
       "title": "Basis",
       "type": "array"
     },
-    "snapshot_id": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Snapshot Id"
-    },
     "record_id": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Record Id"
+      "minLength": 1,
+      "title": "Record Id",
+      "type": "string"
     }
   },
   "required": [
     "reason",
-    "recommended_level"
+    "recommended_level",
+    "record_id"
   ],
   "title": "Escalation",
   "type": "object",
-  "$comment": "rescue-contract 0.10.0"
+  "$comment": "rescue-contract 0.11.0"
 }
