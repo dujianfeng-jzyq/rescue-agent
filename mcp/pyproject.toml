@@ -10,6 +10,7 @@ dependencies = [
     "rescue-contract",
     "rescue-mine-data-sim",
     "rescue-actions",
+    "rescue-sentinel",
     "networkx>=3.3",   # 技能脚本的依赖（skills/requirements.txt）
 ]
 
@@ -20,15 +21,16 @@ dev = ["pytest>=8", "ruff>=0.11"]
 package = false
 
 [tool.uv.workspace]
-members = ["contract", "mine-data-sim", "actions"]
+members = ["contract", "mine-data-sim", "actions", "sentinel"]
 
 [tool.uv.sources]
 rescue-contract = { workspace = true }
 rescue-mine-data-sim = { workspace = true }
 rescue-actions = { workspace = true }
+rescue-sentinel = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["contract/tests", "mine-data-sim/tests", "actions/tests", "tests"]
+testpaths = ["contract/tests", "mine-data-sim/tests", "actions/tests", "sentinel/tests", "tests"]
 addopts = "--import-mode=importlib"
 
 [tool.ruff]

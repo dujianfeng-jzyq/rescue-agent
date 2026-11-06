@@ -31,7 +31,7 @@ tokens() {
     echo "RESCUE_MCP_MINE_ACT_TOKEN=$(openssl rand -hex 16)" >>"$DEMO/tokens.env"
     echo "  已向 var/demo/tokens.env 补充 RESCUE_MCP_MINE_ACT_TOKEN"
   fi
-  mkdir -p "$DEMO/records" "$DEMO/runs" "$DEMO/ledger" "$DEMO/audit" "$DEMO/dsh-home" "$DEMO/documents"
+  mkdir -p "$DEMO/records" "$DEMO/incidents" "$DEMO/duty" "$DEMO/runs" "$DEMO/ledger" "$DEMO/audit" "$DEMO/dsh-home" "$DEMO/documents"
 }
 
 wait_healthy() {
@@ -69,7 +69,7 @@ case "${1:-}" in
   reset)
     [ -f "$DEMO/tokens.env" ] && "${COMPOSE[@]}" down || true
     # 只清演示数据目录下这几项（不动令牌）；路径都在 $ROOT/var/demo 下
-    for d in records runs ledger audit dsh-home documents; do
+    for d in records incidents duty runs ledger audit dsh-home documents; do
       case "$DEMO/$d" in "$ROOT"/var/demo/*) rm -rf -- "${DEMO:?}/$d" ;; esac
     done
     echo "  已清空 var/demo 的演示数据"

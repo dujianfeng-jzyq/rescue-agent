@@ -67,3 +67,13 @@
       config:
         path: !!js "process.env.RESCUE_AUDIT_LOG ?? (process.env.RESCUE_HOME ?? process.cwd()) + '/var/audit/tool-actions.jsonl'"
         gatedServer: actions
+
+    # 值班会话唤醒（第三版 P3，验证清单 #24）：扫描事件库（常驻监听器写的），把未投递的告警投递到值班会话，
+    # 没有任何网页端连接也能工作。全局一份，不放进预设。
+    - id: rescue-wake
+      name: '@rescue/dsh-bundle/wake'
+      config:
+        incidentDir: !!js "process.env.RESCUE_INCIDENT_DIR || `${process.env.RESCUE_HOME ?? process.cwd()}/var/incidents`"
+        cwd: !!js "process.env.RESCUE_DUTY_CWD || `${process.env.RESCUE_HOME ?? process.cwd()}/var/duty`"
+        agentPreset: rescue-commander
+        pollMs: 2000

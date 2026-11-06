@@ -4,10 +4,11 @@ import json
 import time
 
 import pytest
+from rescue_contract.incidents import IncidentStore
 from rescue_contract.models import Measurand, Quality
 from rescue_mine_data_sim.engine import SimEngine
 from rescue_mine_data_sim.scenarios import load_all
-from rescue_mine_data_sim.server import RecordWatcher, SimHolder
+from rescue_mine_data_sim.server import IncidentWatcher, RecordWatcher, SimHolder, _sentinel_status
 
 SC = load_all()
 
@@ -107,6 +108,31 @@ def test_record_watcher_pauses_on_anomaly(tmp_path):
     hits = w.scan()
     assert [h["record_id"] for h in hits] == ["RS-20261102T100000-cccccc"] and hits[0]["trigger"] == "watch"
     assert w.scan() == []  # 已看过的不再报告
+
+
+def test_incident_watcher_and_sentinel_status(tmp_path):
+    store = IncidentStore(tmp_path)
+    iid = store.open("2026-11-05T08:00:00", category="fire", panel="1201", summary="x")
+    store.append(iid, "2026-11-05T08:01:00", "alert", "sentinel", {"summary": "启动前就有的告警"})
+    sim = SimHolder(mode="demo")
+    w = IncidentWatcher(sim, store)
+    assert w.scan() == []  # 第一次只登记已有的告警，不触发暂停
+    sim.resumed_wall = time.time() - 1
+    store.append(iid, "2026-11-05T08:10:00", "alert", "sentinel", {"summary": "预警等级由 无 升为 蓝"})
+    store.append(iid, "2026-11-05T08:11:00", "delivered", "plugin", {"alert_id": "x"})
+    hits = w.scan()
+    assert [(h["trigger"], h["reasons"], h["panel"]) for h in hits] == [("sentinel", ["预警等级由 无 升为 蓝"], "1201")]
+    assert w.scan() == []
+    # 心跳：没有 = 未启动；新鲜 = 监听中；带错误 = 出错；过期 = 监听中断
+    assert _sentinel_status(tmp_path)["state"] == "absent"
+    (tmp_path / "sentinel").mkdir()
+    hb = tmp_path / "sentinel" / "heartbeat.json"
+    hb.write_text(json.dumps({"wall": time.time(), "mine_now": "t", "error": None, "panels": ["1201"]}))
+    assert _sentinel_status(tmp_path)["state"] == "ok"
+    hb.write_text(json.dumps({"wall": time.time(), "error": "连接失败"}))
+    assert _sentinel_status(tmp_path)["state"] == "error"
+    hb.write_text(json.dumps({"wall": time.time() - 120}))
+    assert _sentinel_status(tmp_path)["state"] == "stale"
 
 
 def test_demo_routes():

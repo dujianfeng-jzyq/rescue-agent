@@ -1,0 +1,5 @@
+{"event_id":"EVT-20261105T090000-000021","at":"2026-11-05T09:00:00","wall":"2026-11-05T00:00:00+00:00","kind":"opened","by":"sentinel","data":{"category":"monitor","panel":"1201","summary":"1201 工作面监听降级"}}
+{"event_id":"EVT-20261105T093000-000022","at":"2026-11-05T09:30:00","wall":"2026-11-05T00:00:00+00:00","kind":"degraded","by":"sentinel","data":{"summary":"监听降级","failures":3}}
+{"event_id":"EVT-20261105T093000-000023","at":"2026-11-05T09:30:00","wall":"2026-11-05T00:00:00+00:00","kind":"alert","by":"sentinel","data":{"cause":"degraded","summary":"监听降级"}}
+{"event_id":"EVT-20261105T093001-000024","at":"2026-11-05T09:30:01","wall":"2026-11-05T00:00:00+00:00","kind":"delivery_failed","by":"plugin","data":{"alert_id":"EVT-20261105T093000-000023","error":"x","attempts":1}}
+{"event_id":"EVT-truncated","at":"2026-11-05T09:40

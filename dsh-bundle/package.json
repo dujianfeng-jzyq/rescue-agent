@@ -9,8 +9,10 @@
     "./audit": "./lib/audit/index.js",
     "./evidence": "./lib/evidence/index.js",
     "./fire-loop": "./lib/fire-loop/index.js",
+    "./incident": "./lib/incident/index.js",
     "./knowledge": "./lib/knowledge/index.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./wake": "./lib/incident/wake-plugin.js"
   },
   "files": [
     "lib",

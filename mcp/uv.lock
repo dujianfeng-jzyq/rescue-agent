@@ -12,6 +12,7 @@ members = [
     "rescue-contract",
     "rescue-mcp-workspace",
     "rescue-mine-data-sim",
+    "rescue-sentinel",
 ]
 
 [[package]]
@@ -679,6 +680,7 @@ dependencies = [
     { name = "rescue-actions" },
     { name = "rescue-contract" },
     { name = "rescue-mine-data-sim" },
+    { name = "rescue-sentinel" },
 ]
 
 [package.dev-dependencies]
@@ -693,6 +695,7 @@ requires-dist = [
     { name = "rescue-actions", editable = "actions" },
     { name = "rescue-contract", editable = "contract" },
     { name = "rescue-mine-data-sim", editable = "mine-data-sim" },
+    { name = "rescue-sentinel", editable = "sentinel" },
 ]
 
 [package.metadata.requires-dev]
@@ -715,6 +718,17 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "rescue-contract", editable = "contract" },
 ]
+
+[[package]]
+name = "rescue-sentinel"
+version = "0.1.0"
+source = { editable = "sentinel" }
+dependencies = [
+    { name = "rescue-contract" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "rescue-contract", editable = "contract" }]
 
 [[package]]
 name = "rpds-py"

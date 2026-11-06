@@ -29,3 +29,13 @@ anomaly:
   stage_up: true            # 自燃阶段推进
   required_failed: true     # 基线时正常的必需测点失效，或必需测点组没有匹配的测点
   data_gap: true            # 基线时正常的必需参数超过 data_gap_h 没有新数据
+
+# 常驻监听器（sentinel，第三版 P3，docs/design-v3.md 7.1）的参数：编排与去重，判据仍在 check.py。演示用占位值，待专家评审。
+# 监听器用上面的 required、data_gap_h、anomaly 判据，基线 = 上一次已上报的状态：同一异常持续存在不重复告警，
+# 等级升高、新异常类别、新实时报警才产生新告警；检测恢复到不比基线更糟并保持 recover_checks 次后，基线下调（回到正常即写“恢复”）。
+sentinel:
+  interval_min: 10          # 检测间隔（矿井分钟）
+  confirm_checks: 2         # 数据类异常（测点失效、数据中断）连续这么多次检测都在才告警（滤掉瞬时毛刺）；等级/阶段升高、新实时报警立即告警
+  recover_checks: 3         # 不比基线更糟连续这么多次检测后，基线下调
+  degrade_failures: 3       # 取数/检测连续失败这么多次，产生“监听降级”告警
+  heartbeat_stale_s: 60     # 心跳（真实时间）超过这么多秒没更新，控制台显示“监听中断”

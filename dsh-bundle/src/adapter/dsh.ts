@@ -19,3 +19,14 @@ export type {
 export { default as Schema } from '@deepseek-ai/schemastery'
 export { Service } from '@deepseek-ai/cordis'
 export { defineTool } from '@deepseek-ai/dsh-tools'
+
+/**
+ * 构造一条用户消息（唤醒值班会话用）。createUserMessage 在 @deepseek-ai/dsh-llm，bundle 没有这个依赖：
+ * 从 dsh-tools 的位置解析（它依赖 dsh-llm，验证清单 #24）。
+ */
+export async function loadCreateUserMessage(): Promise<(init: { content: { type: 'text'; text: string }[]; source: { kind: string } }) => unknown> {
+  const { createRequire } = await import('node:module')
+  const toolsEntry = createRequire(import.meta.url).resolve('@deepseek-ai/dsh-tools')
+  const llm = await import(createRequire(toolsEntry).resolve('@deepseek-ai/dsh-llm'))
+  return llm.createUserMessage
+}

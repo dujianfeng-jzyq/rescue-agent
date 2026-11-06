@@ -1,0 +1,12 @@
+{"event_id":"EVT-20261105T080000-000001","at":"2026-11-05T08:00:00","wall":"2026-11-05T00:00:00+00:00","kind":"opened","by":"sentinel","data":{"category":"fire","panel":"1201","summary":"1201 工作面异常"}}
+{"event_id":"EVT-20261105T081000-000002","at":"2026-11-05T08:10:00","wall":"2026-11-05T00:00:00+00:00","kind":"alert","by":"sentinel","data":{"cause":"anomaly","summary":"1201 工作面：预警等级由 无 升为 蓝"}}
+{"event_id":"EVT-20261105T081002-000003","at":"2026-11-05T08:10:02","wall":"2026-11-05T00:00:00+00:00","kind":"delivered","by":"plugin","data":{"alert_id":"EVT-20261105T081000-000002","session_id":"S1"}}
+{"event_id":"EVT-20261105T083000-000004","at":"2026-11-05T08:30:00","wall":"2026-11-05T00:00:00+00:00","kind":"status","by":"agent","data":{"status":"handling","reason":"开始处置"}}
+{"event_id":"EVT-20261105T083100-000005","at":"2026-11-05T08:31:00","wall":"2026-11-05T00:00:00+00:00","kind":"followup_added","by":"agent","data":{"followup_id":"FU-1","due_at":"2026-11-05T10:30:00","expect":"注惰 2 小时后复评"}}
+{"event_id":"EVT-20261105T090000-000006","at":"2026-11-05T09:00:00","wall":"2026-11-05T00:00:00+00:00","kind":"alert","by":"sentinel","data":{"cause":"anomaly","summary":"升为 橙"}}
+{"event_id":"EVT-20261105T103000-000007","at":"2026-11-05T10:30:00","wall":"2026-11-05T00:00:00+00:00","kind":"followup_due","by":"sentinel","data":{"followup_id":"FU-1"}}
+{"event_id":"EVT-20261105T103000-000008","at":"2026-11-05T10:30:00","wall":"2026-11-05T00:00:00+00:00","kind":"alert","by":"sentinel","data":{"cause":"followup_due","summary":"跟踪计划到点","followup_id":"FU-1"}}
+{"event_id":"EVT-20261105T103100-000009","at":"2026-11-05T10:31:00","wall":"2026-11-05T00:00:00+00:00","kind":"acked","by":"agent","data":{"alert_id":"EVT-20261105T103000-000008"}}
+{"event_id":"EVT-20261105T104000-000010","at":"2026-11-05T10:40:00","wall":"2026-11-05T00:00:00+00:00","kind":"followup_done","by":"agent","data":{"followup_id":"FU-1"}}
+{"event_id":"EVT-20261105T120000-000011","at":"2026-11-05T12:00:00","wall":"2026-11-05T00:00:00+00:00","kind":"status","by":"sentinel","data":{"status":"stable","reason":"监测指标恢复正常"}}
+{"event_id":"EVT-20261105T130000-000012","at":"2026-11-05T13:00:00","wall":"2026-11-05T00:00:00+00:00","kind":"alert","by":"sentinel","data":{"cause":"anomaly","summary":"再次异常"}}

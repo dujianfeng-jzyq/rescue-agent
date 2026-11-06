@@ -81,6 +81,10 @@
       </div>
     </section>
     <section>
+      <h2>值班事件 <span id="sentinel" class="tag"></span></h2>
+      <div id="incidents"></div>
+    </section>
+    <section>
       <h2>事件</h2>
       <div id="events"></div>
     </section>
@@ -127,6 +131,7 @@ function setOverride() {
 }
 
 function kv(el, rows) { el.innerHTML = rows.map(([k, v]) => `<div class="muted">${k}</div><div>${v}</div>`).join('') }
+const STATE_CLS = { ok: 'ok', absent: 'warn', stale: 'bad', error: 'bad' }
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
 
 function renderSensors() {
@@ -166,7 +171,7 @@ async function refresh() {
   kv($('status'), [['矿井时间', state.now.slice(0, 19).replace('T', ' ')], ['阶段', esc(phase)], ['倍速', `${state.speed}（1 真实秒 = ${(state.speed / 60).toFixed(1)} 矿井分钟）`],
     ['时钟', state.paused ? '<span class="warn">已暂停</span>' : '<span class="ok">运行中</span>'], ['自动暂停', state.auto_pause ? '开' : '关']])
   $('autopause').checked = state.auto_pause
-  const anomalies = state.anomalies.slice(-8).reverse().map((a) => `<li><span class="bad">异常检测记录</span> ${esc(a.record_id)}（${esc(a.panel)}，${esc(a.as_of)}${a.trigger === 'watch' ? '，持续检测' : ''}）：${esc(a.reasons.join('；'))}${a.paused ? '；已自动暂停' : ''}<br><span class="muted">如果会话里没有出现提问，按退路手动提问“看一下现在矿井是否有异常”</span></li>`)
+  const anomalies = state.anomalies.slice(-8).reverse().map((a) => `<li><span class="bad">异常检测记录</span> ${esc(a.record_id)}（${esc(a.panel)}，${esc(a.as_of)}${a.trigger === 'watch' ? '，持续检测' : ''}）：${esc(a.reasons.join('；'))}${a.paused ? '；已自动暂停' : ''}</li>`)
   const script = state.script.map((a) => `<li class="${a.applied ? '' : 'muted'}">${a.at.slice(0, 19).replace('T', ' ')} 剧本 ${esc(a.type)} ${esc(JSON.stringify(a.params))}${a.applied ? '' : '（未到）'}</li>`)
   const actions = state.actions.slice(-10).reverse().map((a) => `<li>${a.at.slice(0, 19).replace('T', ' ')} ${a.source === 'action' ? '<b>指令执行</b>' : a.source} ${esc(a.type)} ${esc(JSON.stringify(a.params))}</li>`)
   const ovs = state.overrides.filter((o) => !o.until).map((o) => `<li><span class="tag">人工设置</span> ${o.sensor_id}${o.measurand ? '/' + o.measurand : ''} ${o.mode}${o.value != null ? ' ' + o.value : ''}${o.minutes ? `（${o.minutes} 分钟）` : ''}${o.fault ? ' ' + o.fault : ''}，自 ${o.from.slice(0, 19).replace('T', ' ')}</li>`)
@@ -174,9 +179,24 @@ async function refresh() {
     `<div class="muted" style="margin-top:6px">场景剧本事件</div><ul>${script.join('') || '<li class="muted">无</li>'}</ul>` +
     `<div class="muted" style="margin-top:6px">已执行的处置（来自 actions 或控制台）</div><ul>${actions.join('') || '<li class="muted">无</li>'}</ul>` +
     `<div class="muted" style="margin-top:6px">当前的读数设置（记入模拟器日志，复盘时可区分）</div><ul>${ovs.join('') || '<li class="muted">无</li>'}</ul>`
+  renderIncidents(state.incident_store)
   const t = state.truth
   kv($('truth'), [['高温点温度', `${t.temperature_c} ℃`], ['高温点氧浓度', `${t.o2_pct} %`], ['距工作面', `${t.depth_m} m`], ['注氮', `${t.n2_m3_h} m³/h`], ['已封闭', t.sealed ? '是' : '否'], ['明火', t.open_fire ? '<span class="bad">是</span>' : '否']])
   renderSensors()
+}
+
+function renderIncidents(st) {
+  const tag = $('sentinel')
+  if (!st || !st.enabled) { tag.textContent = '未接入事件库'; tag.className = 'tag'; $('incidents').innerHTML = '<div class="muted">没有设置 RESCUE_INCIDENT_DIR，控制台看不到监听器的事件</div>'; return }
+  tag.textContent = st.sentinel.detail; tag.className = `tag ${STATE_CLS[st.sentinel.state] || ''}`
+  const open = st.incidents.filter((i) => i.status !== 'closed'), closed = st.incidents.filter((i) => i.status === 'closed')
+  const card = (i) => `<div style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin:6px 0">
+    <b>${esc(i.incident_id)}</b> ${esc(i.panel || '全矿')} ${i.category === 'monitor' ? '监听降级' : '火情'}，<b>${esc(i.status_name)}</b>
+    <span class="muted">（${esc(i.opened_at.replace('T', ' '))} 起，${i.entry_count} 条）</span>
+    ${i.unconfirmed.length ? `<div class="bad">未确认的告警 ${i.unconfirmed.length} 条（值班会话还没处理）：<ul>${i.unconfirmed.map((a) => `<li>${esc(a.at.replace('T', ' '))} ${esc(a.summary)}</li>`).join('')}</ul></div>` : ''}
+    ${i.followups.filter((f) => f.state !== 'done').map((f) => `<div class="warn">跟踪计划 ${esc(f.followup_id)}：${esc(f.due_at.replace('T', ' '))} 复评${f.state === 'due' ? '（已到点）' : ''}，预期 ${esc(f.expect || '')}</div>`).join('')}
+    <details><summary class="muted">时间线（最近 ${i.timeline.length} 条）</summary><ul>${i.timeline.map((t) => `<li>${esc(t.at.replace('T', ' '))} ${esc(t.kind)} <span class="muted">${esc(t.by)}</span> ${esc(t.text)}</li>`).join('')}</ul></details></div>`
+  $('incidents').innerHTML = (open.map(card).join('') || '<div class="ok">监测中，一切正常</div>') + (closed.length ? `<div class="muted">已关闭 ${closed.length} 个</div>` : '')
 }
 
 async function load() {

@@ -76,6 +76,15 @@ def compare(state, base, cfg):
     return reasons
 
 
+def escalated(state, base):
+    """是否有“升级”类变化：预警等级升高、自燃阶段推进、出现新的实时报警（监听器据此立即告警；测点失效、数据中断等数据类异常不算）。"""
+    return (
+        LEVELS.index(state["level"]) > LEVELS.index(base["level"])
+        or STAGES.index(state["stage"]) > STAGES.index(base["stage"])
+        or any(k not in base["alarm_keys"] for k in state["alarm_keys"])
+    )
+
+
 def run(data, _args):
     ev = evidence(data)
     th = load_reference("thresholds.yaml")
@@ -122,6 +131,7 @@ def run(data, _args):
         "data_quality": w["data_quality"],
         "notes": w["notes"],
         "anomaly": bool(reasons),
+        "escalated": escalated(state, base),
         "reasons": reasons,
         "compared_with": base_from,
         "baseline_state": base,

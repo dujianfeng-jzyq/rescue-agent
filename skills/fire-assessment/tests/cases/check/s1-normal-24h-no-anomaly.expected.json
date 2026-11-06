@@ -52,6 +52,7 @@
   "data_quality": [],
   "notes": [],
   "anomaly": false,
+  "escalated": false,
   "reasons": [],
   "compared_with": "正常状态（没有基线）",
   "baseline_state": {

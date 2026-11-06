@@ -1,4 +1,4 @@
-# 演示部署（docs/design-v2.md 7.2）。用 make demo-up 启动：它生成令牌（var/demo/tokens.env）、建好数据目录，再调 docker compose。
+# 演示部署（docs/design-v2.md 7.2；第三版加监听器）。用 make demo-up 启动：它生成令牌（var/demo/tokens.env）、建好数据目录，再调 docker compose。
 # 宿主机只映射两个端口：13080 网页端、13090 演示控制台（模拟矿井的 /console；它的 MCP 和 /sim/ 接口都要令牌）。
 # 令牌按服务分开：DSH 只拿 mine_data 只读令牌和 actions 令牌，不拿 /sim 控制令牌（设计 7.1）。
 name: rescue-demo
@@ -21,8 +21,10 @@ services:
       RESCUE_MCP_MINE_ACT_TOKEN: ${RESCUE_MCP_MINE_ACT_TOKEN:?}     # rescue-mine 写入类工具（通知、调度、处置）的令牌，只有 guard（actions 容器）持有
       RESCUE_SIM_CONTROL_TOKEN: ${RESCUE_SIM_CONTROL_TOKEN:?}
       RESCUE_RECORD_DIR: /data/records            # 只读：看到异常检测记录就自动暂停（只为演示）
+      RESCUE_INCIDENT_DIR: /data/incidents        # 只读：监听器的告警自动暂停；控制台显示事件和监听器心跳
     volumes:
       - ../var/demo/records:/data/records:ro
+      - ../var/demo/incidents:/data/incidents:ro
     ports: ["127.0.0.1:${DEMO_CONSOLE_PORT:-13090}:8101"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8101/healthz', timeout=3)"]
@@ -50,6 +52,20 @@ services:
       interval: 5s
       retries: 20
 
+  sentinel:                                       # 常驻监听器（第三版 P3）：不经模型，按矿井时钟检测、去重、写事件库
+    <<: *python
+    command: ["python", "-m", "rescue_sentinel"]
+    environment:
+      RESCUE_MCP_MINE_DATA_TOKEN: ${RESCUE_MCP_MINE_DATA_TOKEN:?}   # 只读令牌
+      RESCUE_MCP_MINE_DATA_URL: http://mine-sim:8101/mcp
+      RESCUE_INCIDENT_DIR: /data/incidents
+      RESCUE_SKILLS_DIR: /app/skills
+    volumes:
+      - ../skills:/app/skills:ro
+      - ../var/demo/incidents:/data/incidents
+    depends_on:
+      mine-sim: {condition: service_healthy}
+
   dsh:
     build: {context: .., dockerfile: docker/dsh.Dockerfile}
     image: rescue-demo-dsh
@@ -63,6 +79,8 @@ services:
       RESCUE_MCP_ACTIONS_URL: http://actions:8106/mcp
       RESCUE_REDLINE_CHECK_URL: http://actions:8106/redlines/check
       RESCUE_RECORD_DIR: /data/records
+      RESCUE_INCIDENT_DIR: /data/incidents        # 事件库：事件插件读写，唤醒插件扫描
+      RESCUE_DUTY_CWD: /data/duty                 # 值班会话的工作目录
       RESCUE_RUN_DIR: /data/runs                  # 技能脚本的运行目录
       RESCUE_AUDIT_LOG: /data/audit/tool-actions.jsonl
       DSH_PUBLIC_PORT: ${DEMO_WEB_PORT:-13080}
@@ -74,6 +92,8 @@ services:
     volumes:
       - ../skills:/app/skills:ro                  # 技能目录只读（子进程不在沙箱里，设计 7.1）
       - ../var/demo/records:/data/records
+      - ../var/demo/incidents:/data/incidents
+      - ../var/demo/duty:/data/duty
       - ../var/demo/runs:/data/runs
       - ../var/demo/audit:/data/audit
       - ../var/demo/dsh-home:/home/node/.dsh-home

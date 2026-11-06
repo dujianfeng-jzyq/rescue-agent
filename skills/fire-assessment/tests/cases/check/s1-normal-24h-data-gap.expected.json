@@ -55,6 +55,7 @@
   "data_quality": [],
   "notes": [],
   "anomaly": true,
+  "escalated": false,
   "reasons": [
    "数据中断：BT-1201-G2/CO 超过规定时长没有新数据",
    "数据中断：BT-1201-G2/O2 超过规定时长没有新数据"

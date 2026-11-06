@@ -1,0 +1,43 @@
+{
+  "INC-20261105T080000-aaaaaa": {
+    "category": "fire",
+    "degraded": false,
+    "entry_count": 12,
+    "followups": [
+      {
+        "added_at": "2026-11-05T08:31:00",
+        "due_at": "2026-11-05T10:30:00",
+        "expect": "注惰 2 小时后复评",
+        "followup_id": "FU-1",
+        "state": "done"
+      }
+    ],
+    "incident_id": "INC-20261105T080000-aaaaaa",
+    "opened_at": "2026-11-05T08:00:00",
+    "panel": "1201",
+    "pending_alerts": [
+      "EVT-20261105T090000-000006",
+      "EVT-20261105T130000-000012"
+    ],
+    "status": "monitoring",
+    "status_name": "监测中",
+    "summary": "1201 工作面异常",
+    "updated_at": "2026-11-05T13:00:00"
+  },
+  "INC-20261105T090000-bbbbbb": {
+    "category": "monitor",
+    "degraded": true,
+    "entry_count": 4,
+    "followups": [],
+    "incident_id": "INC-20261105T090000-bbbbbb",
+    "opened_at": "2026-11-05T09:00:00",
+    "panel": "1201",
+    "pending_alerts": [
+      "EVT-20261105T093000-000023"
+    ],
+    "status": "monitoring",
+    "status_name": "监测中",
+    "summary": "1201 工作面监听降级",
+    "updated_at": "2026-11-05T09:30:01"
+  }
+}

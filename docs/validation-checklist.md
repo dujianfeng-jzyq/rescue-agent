@@ -140,3 +140,8 @@
   - 踩到的坑：① 消息来源 `kind` 不能是 `plugin`（v4 会话格式拒绝，报 `format v4 message requires a producer-owned source kind`），其他非空字符串都行；② 落盘失败时没有改名，每个轮询周期都会重投并报同样的错，正式实现要限制重试并退避，反复失败记“投递失败”事件；③ `createUserMessage` 在 `@deepseek-ai/dsh-llm`，bundle 没有这个依赖（验证插件从 dsh-tools 的位置解析），正式实现要把它收进 `src/adapter/dsh.ts`；④ 投递是“至少一次”：flush 之后、改名之前崩溃会重复投递（`dsh-schedule` 文档写明了同类限制），事件要带 `incident_id`/事件编号，智能体按编号去重。
   - 没有验证：无人会话里遇到需人批准的 C 级动作（`ask_user_question` 的阻塞与“Waiting for answer”标记在 #20 验证过，审批弹窗同属“等待人”，但未单独复测）；值班会话长时间空闲（超过 20 分钟）；操作员正在同一会话输入时又来事件（交错）；`workspaceId` 与标题。
   - 结论：**唤醒可行，设计 7.3 的退路不启用**（sentinel 的“发现异常—通知操作员”仍独立于模型；唤醒失败时仍按 #23 的两道补救，最后由控制台显示“未确认的异常”）。
+- #25 监听器 + 事件库 + 唤醒插件的整条链路（第三版 P3，2026-11-06，deepseek-flash，真实 DSH 0.2.1-rc.4，`scripts/dev.sh` 起全部服务，事件库在临时目录）：
+  - 做法：模拟矿井演示模式（倍速 3600）+ 监听器（`rescue_sentinel`）+ DSH（唤醒插件 `rescue-wake` 在 `cordis.patch.yml`，事件插件在预设的 `rescue` 组里）；`scripts/sim.py inject s4-escalation` 注入事故。**全程没有浏览器连接**。
+  - 通过：监听器写 opened + alert → 控制台 `/sim/state` 的 `incident_store` 显示事件和监听器心跳、演示时钟自动暂停 → 唤醒插件新建值班会话并投递（来源 `rescue-sentinel`），写 delivered → 值班会话里智能体自己调 `get_incident`、`run_fire_assessment`（含阶段子 Agent），`turn/end completed`，没有向人提问。监听器重启后读回状态，不重复告警。
+  - 没有验证：C 级动作在无人会话里等人批准；值班会话长时间空闲；操作员同时输入时来事件；`workspaceId` 与会话标题；Docker 演示环境里的 sentinel 容器。
+  - 观察（原因未查）：告警是矿井时间 03:23 的“自燃阶段推进为缓慢氧化”，自动暂停有轮询延迟，约 40 矿井分钟后智能体研判时阶段回到 no_sign、等级无。阶段升高目前立即告警；是否改为连续确认，查清原因后定。token 用量没有统计。

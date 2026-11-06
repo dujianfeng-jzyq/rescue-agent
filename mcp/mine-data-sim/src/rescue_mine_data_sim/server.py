@@ -8,7 +8,8 @@
 
 演示模式（RESCUE_SIM_MODE=demo，docs/design-v2.md 4.10）：启动即按常态（s1-normal 的参数）连续运行、没有终点；
 /sim/demo/inject 把事故场景接到当前矿井时间上；/sim/overrides 设置单个测点的读数（只改读数，不改物理模型）；
-设置了 RESCUE_RECORD_DIR 时只读地看记录目录，出现 anomaly 为真的检测记录就自动暂停（只为演示，不是矿井接口的一部分）。
+设置了 RESCUE_RECORD_DIR 时只读地看记录目录，出现 anomaly 为真的检测记录就自动暂停；设置了 RESCUE_INCIDENT_DIR 时只读地看事件库，
+监听器写出新的告警也自动暂停，并在 /sim/state 里给出事件和监听器心跳供控制台显示（只为演示，不是矿井接口的一部分）。
 演示控制台在 /console（页面本身不需要令牌，调用 /sim/ 接口时带控制令牌）。
 """
 
@@ -23,6 +24,7 @@ from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from rescue_contract.incidents import IncidentStore
 from rescue_contract.interface import ALL_TOOLS, FEATURES, INTERFACE_VERSION
 from rescue_contract.models import (
     CONTRACT_VERSION,
@@ -164,6 +166,66 @@ class RecordWatcher(threading.Thread):
             except Exception:  # noqa: BLE001  看门狗线程不能退出
                 pass
             time.sleep(self.poll_s)
+
+
+class IncidentWatcher(threading.Thread):
+    """只读地看事件库：监听器写出新的告警（alert）就自动暂停模拟时钟（演示的自动暂停，与 RecordWatcher 同一机制）。"""
+
+    def __init__(self, sim: SimHolder, store: IncidentStore, poll_s: float = 2.0) -> None:
+        super().__init__(daemon=True, name="incident-watcher")
+        self.sim, self.store, self.poll_s = sim, store, poll_s
+        self.seen: set[str] = set()
+        self.primed = False
+
+    def scan(self) -> list[dict]:
+        found = []
+        since = getattr(self.sim, "resumed_wall", 0.0)
+        for inc in self.store.list(include_closed=True):
+            try:
+                entries = self.store.entries(inc["incident_id"])
+            except Exception:  # noqa: BLE001
+                continue
+            for e in entries:
+                if e["kind"] != "alert" or e["event_id"] in self.seen:
+                    continue
+                self.seen.add(e["event_id"])
+                if not self.primed:
+                    continue  # 启动前就有的告警不触发暂停
+                try:
+                    if datetime.fromisoformat(e["wall"]).timestamp() < since:
+                        continue
+                except ValueError:
+                    continue
+                found.append({"record_id": e["event_id"], "panel": inc.get("panel") or "全矿", "as_of": e["at"], "reasons": [e["data"].get("summary", "")], "trigger": "sentinel"})
+        self.primed = True
+        return found
+
+    def run(self) -> None:
+        while True:
+            try:
+                for h in self.scan():
+                    if self.sim.mode == "demo":
+                        h["paused"] = bool(self.sim.auto_pause and not self.sim.engine.clock.paused)
+                        if h["paused"]:
+                            self.sim.engine.clock.set_paused(True)
+                        self.sim.anomalies.append(h)
+            except Exception:  # noqa: BLE001  看门狗线程不能退出
+                pass
+            time.sleep(self.poll_s)
+
+
+def _sentinel_status(directory: Path, stale_s: float = 60.0) -> dict:
+    """监听器心跳（真实时间）。没有心跳文件 = 监听器没启动；心跳过期或带错误 = 监听中断。"""
+    try:
+        hb = json.loads((directory / "sentinel" / "heartbeat.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"state": "absent", "detail": "监听器未启动（没有心跳）"}
+    age = time.time() - float(hb.get("wall", 0))
+    if age > stale_s:
+        return {"state": "stale", "detail": f"监听中断：{int(age)} 秒没有心跳", "mine_now": hb.get("mine_now")}
+    if hb.get("error"):
+        return {"state": "error", "detail": f"监听出错：{hb['error']}", "mine_now": hb.get("mine_now")}
+    return {"state": "ok", "detail": "监听中", "mine_now": hb.get("mine_now"), "panels": hb.get("panels", [])}
 
 
 def _unknown_sensors(ids: list[str]) -> list[str]:
@@ -392,11 +454,31 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
     if holder is None and record_dir:
         RecordWatcher(sim, Path(record_dir)).start()
 
+    incident_dir = os.environ.get("RESCUE_INCIDENT_DIR")
+    incidents = IncidentStore(incident_dir) if incident_dir else None
+    if holder is None and incidents is not None:
+        IncidentWatcher(sim, incidents).start()
+
+    def incident_state() -> dict:
+        if incidents is None:
+            return {"enabled": False}
+        rows = []
+        for v in incidents.list(include_closed=True)[-20:]:
+            try:
+                entries = incidents.entries(v["incident_id"])
+            except Exception:  # noqa: BLE001
+                continue
+            want = set(v["pending_alerts"])
+            rows.append({**v, "unconfirmed": [{"event_id": x["event_id"], "at": x["at"], "summary": x["data"].get("summary", "")} for x in entries if x["event_id"] in want],
+                         "timeline": [{"at": x["at"], "kind": x["kind"], "by": x["by"], "text": x["data"].get("summary") or x["data"].get("reason") or x["data"].get("text") or x["data"].get("expect") or ""} for x in entries[-12:]]})  # fmt: skip
+        return {"enabled": True, "sentinel": _sentinel_status(incidents.dir), "incidents": rows}
+
     @server.custom_route("/sim/state", methods=["GET"])
     async def sim_state(_req: Request) -> JSONResponse:
         e = sim.engine
         return JSONResponse(
             {
+                "incident_store": incident_state(),
                 "mode": sim.mode,
                 "injected": e.injected,
                 "auto_pause": sim.auto_pause,

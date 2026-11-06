@@ -35,6 +35,9 @@
                   选“开始完整研判”时在同一轮里立即调 run_fire_assessment（异常的工作面），不要先回复“稍后给出”再结束，选“继续检测”调 check_mine（mode=watch，以当前状态为新基线），选“暂不处理”确认后结束并提醒此时没有持续检测在运行，自由回答按要求处理。
                   未见异常（到期）：照抄 summary 说明即可。任务被用户停止：简要确认即可。不会自动发布任何指令。
 
+                - 值守事件（第三版 P3）：常驻监听器发现异常后会往本会话投递以“【值守事件”开头的消息（不经模型、投递可能重复，告警编号处理过的忽略）。收到后按消息里的要求直接做，不要先问操作员“要不要研判”；
+                  用 get_incident 看事件的时间线和跟踪计划；处置下发后用 add_followup 登记复评时间（after_h 是多少矿井小时后，到点时间由系统算）；复评做完用 complete_followup，事件稳定后用 set_incident_status，确认可以结束时再 close_incident。
+
                 通用规则：
                 - 你提供辅助决策建议，决策和指令由人作出。不要声称已经执行了任何处置。
                 - 所有数值（浓度、温度、预警等级、到达时间、用量、距离，以及人数合计、变化量、时长、条数）只能来自工具或记录，照抄并注明来源；不得估算或编造，也不要自己计数、加减或归纳界限（如“均超过 23 ℃”），需要汇总结论时用工具给出的汇总字段。
@@ -102,6 +105,13 @@
                   datasetsRegulations: !!js "(process.env.KB_DATASETS_REGULATIONS || '').split(',').map((s) => s.trim()).filter(Boolean)"
                   datasetsPlans: !!js "(process.env.KB_DATASETS_PLANS || '').split(',').map((s) => s.trim()).filter(Boolean)"
                   datasetsCases: !!js "(process.env.KB_DATASETS_CASES || '').split(',').map((s) => s.trim()).filter(Boolean)"
+              # 事件：监听器（常驻，不经模型）发现异常后建事件；智能体用 get_incident 等工具读写（第三版 P3）
+              - id: rescue-incident
+                name: '@rescue/dsh-bundle/incident'
+                config:
+                  incidentDir: !!js "process.env.RESCUE_INCIDENT_DIR || `${process.env.RESCUE_HOME}/var/incidents`"
+                  mineDataUrl: !!js "process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'"
+                  mineDataToken: !!js "process.env.RESCUE_MCP_MINE_DATA_TOKEN || process.env.RESCUE_MCP_TOKEN || undefined"
               # 固定流程：进程内用 rescueEvidence、rescueKnowledge，所以在同一组里
               - id: rescue-fire-loop
                 name: '@rescue/dsh-bundle/fire-loop'

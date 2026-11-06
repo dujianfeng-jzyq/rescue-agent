@@ -1,0 +1,132 @@
+import assert from 'node:assert/strict'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, it } from 'node:test'
+
+import { registerTools } from '../src/incident/index.ts'
+import { IncidentStore } from '../src/incident/store.ts'
+import { composeMessage, Waker } from '../src/incident/wake.ts'
+
+async function setup() {
+  const store = new IncidentStore(await mkdtemp(join(tmpdir(), 'inc-')))
+  const id = await store.open('2026-11-05T08:00:00', { category: 'fire', panel: '1201', summary: 'x', by: 'sentinel' })
+  const alert = await store.append(id, '2026-11-05T08:10:00', 'alert', 'sentinel', { cause: 'anomaly', summary: '1201 工作面：预警等级由 无 升为 蓝' })
+  return { store, id, alert }
+}
+
+describe('唤醒', () => {
+  it('投递一次后写 delivered，不再重复', async () => {
+    const { store, id, alert } = await setup()
+    const sent: string[] = []
+    const w = new Waker(store, { backoffS: [1], deliver: async (text) => (sent.push(text), { sessionId: 'S1' }) })
+    assert.deepEqual(await w.drain(), [alert.event_id])
+    assert.deepEqual(await w.drain(), [])
+    assert.equal(sent.length, 1)
+    assert.match(sent[0]!, new RegExp(`【值守事件 ${id}】`))
+    assert.match(sent[0]!, new RegExp(alert.event_id))
+    assert.match(sent[0]!, /run_fire_assessment/)
+    assert.deepEqual((await store.get(id)).pending_alerts, [])
+    const delivered = (await store.entries(id)).find((e) => e.kind === 'delivered')!
+    assert.deepEqual(delivered.data, { alert_id: alert.event_id, session_id: 'S1' })
+  })
+
+  it('同一事件的多条告警合并成一条消息', async () => {
+    const { store, id } = await setup()
+    await store.append(id, '2026-11-05T09:00:00', 'alert', 'sentinel', { cause: 'followup_due', summary: '到点' })
+    const sent: string[] = []
+    const w = new Waker(store, { backoffS: [], deliver: async (t) => (sent.push(t), { sessionId: 'S1' }) })
+    assert.equal((await w.drain()).length, 2)
+    assert.equal(sent.length, 1)
+    assert.match(sent[0]!, /review_effect/)
+  })
+
+  it('失败按退避重试，用完放弃；放弃后告警仍是未确认', async () => {
+    const { store, id } = await setup()
+    let now = Date.parse('2026-11-05T00:00:00Z')
+    let fail = true
+    let calls = 0
+    const w = new Waker(store, {
+      backoffS: [10, 60],
+      now: () => now,
+      deliver: async () => {
+        calls += 1
+        if (fail) throw new Error('会话落盘失败')
+        return { sessionId: 'S1' }
+      },
+    })
+    const stamp = async () => (await store.entries(id)).filter((e) => e.kind === 'delivery_failed').length
+    // wall 取系统时间；把“现在”设在其后以便按退避判断
+    now = Date.now()
+    await w.drain()
+    assert.equal(calls, 1)
+    assert.equal(await stamp(), 1)
+    await w.drain() // 退避内：不重试
+    assert.equal(calls, 1)
+    now += 11_000
+    await w.drain()
+    assert.equal(calls, 2)
+    now += 61_000
+    await w.drain()
+    assert.equal(calls, 3)
+    now += 10 * 3600_000
+    await w.drain() // 已放弃
+    assert.equal(calls, 3)
+    assert.equal((await store.get(id)).pending_alerts.length, 1)
+    // 放弃之后不会自动恢复，但新告警仍会投递
+    fail = false
+    await store.append(id, '2026-11-05T12:00:00', 'alert', 'sentinel', { cause: 'anomaly', summary: '新的' })
+    await w.drain()
+    assert.equal(calls, 4)
+  })
+
+  it('消息按原因给要求，监听降级不带研判指令', async () => {
+    const { store, id } = await setup()
+    const entries = await store.entries(id)
+    const view = await store.get(id)
+    const degraded = { ...entries[1]!, data: { cause: 'degraded', summary: '监听降级' } }
+    const text = composeMessage(view, [degraded])
+    assert.doesNotMatch(text, /run_fire_assessment/)
+    assert.match(text, /不可信/)
+  })
+})
+
+describe('事件工具', () => {
+  async function tools() {
+    const store = new IncidentStore(await mkdtemp(join(tmpdir(), 'inc-')))
+    const reg: Record<string, any> = {}
+    registerTools({ tools: { register: (t: any) => (reg[t.name] = t) } }, store, async () => '2026-11-05T10:00:00')
+    const call = async (name: string, args: Record<string, unknown>) => reg[name].execute(args)
+    return { store, call, reg }
+  }
+
+  it('开事件、合并、登记跟踪计划（到点时间由代码算）、关闭的前置条件', async () => {
+    const { call } = await tools()
+    const o: any = await call('open_incident', { panel: '1201', summary: '操作员报告上隅角 CO 偏高' })
+    assert.equal(o.opened, true)
+    assert.equal(((await call('open_incident', { panel: '1201', summary: 'again' })) as any).opened, false)
+    const id = o.incident.incident_id
+    const f: any = await call('add_followup', { incident_id: id, after_h: 2.5, expect: '注惰后 CO 回落' })
+    assert.equal(f.due_at, '2026-11-05T12:30:00')
+    await assert.rejects(call('add_followup', { incident_id: id, after_h: -1, expect: 'x' }), /after_h/)
+    await assert.rejects(call('close_incident', { incident_id: id, reason: 'x' }), /未完成的跟踪计划/)
+    await call('complete_followup', { incident_id: id, followup_id: f.followup_id, result: 'CO 已回落' })
+    await assert.rejects(call('complete_followup', { incident_id: id, followup_id: 'FU-none', result: 'x' }), /没有跟踪计划/)
+    await assert.rejects(call('set_incident_status', { incident_id: id, status: 'closed', reason: 'x' }), /status/)
+    const closed: any = await call('close_incident', { incident_id: id, reason: '稳定' })
+    assert.equal(closed.status, 'closed')
+    const list: any = await call('get_incident', {})
+    assert.equal(list.count, 0)
+  })
+
+  it('有未确认告警不能关闭；get_incident 给出时间线', async () => {
+    const { store, call } = await tools()
+    const id = await store.open('2026-11-05T08:00:00', { category: 'fire', panel: '1201', summary: 'x' })
+    const a = await store.append(id, '2026-11-05T08:10:00', 'alert', 'sentinel', { cause: 'anomaly', summary: 's' })
+    await assert.rejects(call('close_incident', { incident_id: id, reason: 'x' }), /未确认的告警/)
+    const v: any = await call('get_incident', { incident_id: id })
+    assert.deepEqual(v.pending_alerts, [a.event_id])
+    assert.equal(v.pending_alert_details[0].summary, 's')
+    assert.equal(v.timeline.length, 2)
+  })
+})
