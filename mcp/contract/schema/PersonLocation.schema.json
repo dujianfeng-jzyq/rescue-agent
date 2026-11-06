@@ -40,5 +40,5 @@
   ],
   "title": "PersonLocation",
   "type": "object",
-  "$comment": "rescue-contract 0.9.0"
+  "$comment": "rescue-contract 0.10.0"
 }

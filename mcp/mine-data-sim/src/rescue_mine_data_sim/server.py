@@ -23,33 +23,65 @@ from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from rescue_contract.interface import ALL_TOOLS, FEATURES, INTERFACE_VERSION
 from rescue_contract.models import (
+    CONTRACT_VERSION,
+    ActionKind,
+    ActionStatus,
+    AlarmLevel,
+    AlarmStatus,
+    DispatchRequest,
+    EquipmentState,
+    EquipmentStatus,
     FireArea,
     Measurand,
+    MineAlarm,
+    MineCapabilities,
     MineClock,
+    MineDescription,
     MineEvent,
     MineNetwork,
+    MineReceipt,
+    NoticeRequest,
     PersonnelSnapshot,
     Reading,
     RescueTeam,
     ResourceItem,
     SensorPoint,
+    StepType,
+    TreatmentRequest,
 )
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 
 from .engine import SimEngine, all_sensor_ids
-from .mine import INVENTORY, NETWORK, RESCUE_TEAMS, SENSOR_BY_ID, SENSORS
+from .mine import EQUIPMENT, INVENTORY, MINE_ID, MINE_NAME, NETWORK, PANELS, RESCUE_TEAMS, SENSOR_BY_ID, SENSORS
 from .scenarios import load_all
 
 INSTRUCTIONS = (
-    "矿井实时数据服务。提供通风网络、测点清单、监测数据（含数据质量标记）、报警事件、井下人员位置、"
-    "应急物资和救援力量台账。所有时间以 get_clock 返回的矿井当前时间为准，不要使用系统时间。"
+    "rescue-mine 接口（模拟矿井实现）。提供接口自描述、通风网络、测点清单（含语义角色）、监测数据（含数据质量标记）、"
+    "报警事件和矿井报警、设备状态、井下人员位置、应急物资和救援力量台账，以及通知、调度、处置的执行与回执。"
+    "所有时间以 get_clock 返回的矿井当前时间为准，不要使用系统时间。"
     "数据质量为 missing 或 suspect 的读数不能作为研判依据，需在结论中说明数据缺失。"
 )
 
 
 NORMAL = "s1-normal"
+
+# 模拟：调度“执行中”多久（矿井分钟）后算完成，用来体现异步回执
+DISPATCH_RUN_MIN = 30
+# 模拟矿井能执行的处置类型（其余返回 rejected 回执）
+SIM_TREATMENTS = {
+    StepType.INERT_INJECTION,
+    StepType.GROUTING,
+    StepType.INHIBITOR_SPRAY,
+    StepType.LEAK_SEALING,
+    StepType.PRESSURE_BALANCING,
+    StepType.TEMPORARY_SEAL,
+    StepType.PERMANENT_SEAL,
+    StepType.UNSEAL,
+    StepType.EVACUATE,
+}
 
 
 class SimHolder:
@@ -58,10 +90,19 @@ class SimHolder:
         self.mode = "scenario"
         self.auto_pause = True
         self.anomalies: list[dict] = []
+        self.clear_actions()
         if (mode or os.environ.get("RESCUE_SIM_MODE", "scenario")) == "demo":
             self.reset_normal(float(os.environ.get("RESCUE_SIM_SPEED", "60")))
         else:
             self.reset(scenario_id or os.environ.get("RESCUE_SIM_SCENARIO", "s2-slow-oxidation"), manual_clock)
+
+    def clear_actions(self) -> None:
+        """通知、指令的回执和报警确认状态（重置场景时清空）。"""
+        self.receipts: dict[str, MineReceipt] = {}
+        self.by_key: dict[str, str] = {}
+        self.notices: list[dict] = []
+        self.dispatches: list[dict] = []
+        self.acked: dict[str, datetime] = {}
 
     def reset(self, scenario_id: str, manual_clock: bool = False) -> None:
         if scenario_id not in self.scenarios:
@@ -69,6 +110,7 @@ class SimHolder:
         self.engine = SimEngine(self.scenarios[scenario_id], manual_clock=manual_clock)
         self.mode = "scenario"
         self.anomalies = []
+        self.clear_actions()
 
     def reset_normal(self, speed: float | None = None) -> None:
         """演示：回到常态连续运行（s1-normal 的参数，没有终点）。"""
@@ -77,6 +119,7 @@ class SimHolder:
             self.engine.clock.set_speed(speed)
         self.mode = "demo"
         self.anomalies = []
+        self.clear_actions()
         self.resumed_wall = time.time()
 
 
@@ -202,6 +245,146 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
     def get_rescue_teams() -> list[RescueTeam]:
         """救援力量台账：救护队、人数、驻地、响应时间。"""
         return RESCUE_TEAMS
+
+
+    # ── 自描述（rescue-mine 接口，docs/design-v3.md 第 4 节）──
+
+    @server.tool()
+    def get_capabilities() -> MineCapabilities:
+        """接口版本，以及本矿实际提供哪些工具和可选功能。对接前先调用它；工具和功能以此为准。"""
+        return MineCapabilities(
+            interface_version=INTERFACE_VERSION,
+            contract_version=CONTRACT_VERSION,
+            mine_id=MINE_ID,
+            implementation="mine-sim",
+            tools=sorted(ALL_TOOLS),
+            features=list(FEATURES),
+        )
+
+    @server.tool()
+    def describe_mine() -> MineDescription:
+        """本矿有哪些工作面（进回风巷、工作面、采空区、避难硐室分别是哪条巷道），以及测点用到了哪些语义角色。
+        技能按角色取数（list_sensors 里每个测点有 panel 和 role），不要写死测点编号。"""
+        return MineDescription(mine_id=MINE_ID, name=MINE_NAME, panels=PANELS, sensor_roles=sorted({s.role for s in SENSORS}, key=lambda r: r.value))
+
+    # ── 矿井自带报警与设备 ──
+
+    @server.tool()
+    def get_alarms(hours: float = 24, active_only: bool = False) -> list[MineAlarm]:
+        """矿井报警平台的报警（拉取）：最近若干小时内越限的测点，含当前是否仍越限、是否已被值班人员确认。
+        这是矿井自己的报警，不是 fire-assessment 重算的结果；active_only 只返回仍越限的。"""
+        e = sim.engine
+        out = []
+        for sid, m, raised, cleared, value, limit in e.alarms(e.now_h() - hours, e.now_h()):
+            if active_only and cleared is not None:
+                continue
+            aid = f"AL-{sid}-{m.value}-{raised:%Y%m%d%H%M}"
+            ack = sim.acked.get(aid)
+            out.append(
+                MineAlarm(
+                    alarm_id=aid, sensor_id=sid, measurand=m, level=AlarmLevel.ALARM,
+                    status=AlarmStatus.CLEARED if cleared is not None else AlarmStatus.ACTIVE,
+                    raised_at=raised, cleared_at=cleared, value=value, threshold=limit,
+                    acknowledged=ack is not None, acknowledged_at=ack,
+                    message=f"{SENSOR_BY_ID[sid].name} {m.value}={value} 超过报警值 {limit}",
+                )
+            )  # fmt: skip
+        return out
+
+    @server.tool()
+    def get_equipment_status() -> list[EquipmentStatus]:
+        """风机、水泵、制氮、注浆设备的运行状态。模拟矿井里制氮机组、注浆站在处置（注惰、灌浆）被执行后转为运行。"""
+        now = sim.engine.now()
+        done = {iv.type for iv in sim.engine.action_log}
+        out = []
+        for eid, name, kind, node in EQUIPMENT:
+            state = EquipmentState.RUNNING
+            if eid == "EQ-PUMP-1":
+                state = EquipmentState.STANDBY
+            elif eid == "EQ-N2-1":
+                state = EquipmentState.RUNNING if StepType.INERT_INJECTION.value in done else EquipmentState.STANDBY
+            elif eid == "EQ-GROUT-1":
+                state = EquipmentState.RUNNING if StepType.GROUTING.value in done else EquipmentState.STANDBY
+            out.append(EquipmentStatus(equipment_id=eid, name=name, kind=kind, node_id=node, state=state, updated_at=now))
+        return out
+
+    # ── 通知与指令：只执行，不判断（红线、记录核对、台账在 rescue-agent 的 guard）──
+
+    node_ids = {n.id for n in NETWORK.nodes}
+    roadway_ids = {r.id for r in NETWORK.roadways}
+    panel_ids = {p.panel_id for p in PANELS}
+
+    def receipt_for(key: str, kind: ActionKind, status: ActionStatus, detail: str | None) -> MineReceipt:
+        now = sim.engine.now()
+        r = MineReceipt(action_id=f"MA-{len(sim.receipts) + 1:05d}", kind=kind, status=status, received_at=now, updated_at=now, idempotency_key=key, detail=detail)
+        sim.receipts[r.action_id] = r
+        sim.by_key[key] = r.action_id
+        return r
+
+    def existing(key: str, kind: ActionKind) -> MineReceipt | None:
+        """相同幂等 key 重复提交只执行一次，返回同一个回执；key 被别的种类的动作用过则报错。"""
+        aid = sim.by_key.get(key)
+        if aid is None:
+            return None
+        r = refreshed(sim.receipts[aid])
+        if r.kind != kind:
+            raise ToolError(f"幂等 key {key} 已用于另一种动作（{r.kind.value}），请换一个")
+        return r
+
+    def refreshed(r: MineReceipt) -> MineReceipt:
+        """异步回执：调度“执行中”满 DISPATCH_RUN_MIN 个矿井分钟后完成。"""
+        now = sim.engine.now()
+        if r.kind == ActionKind.DISPATCH and r.status == ActionStatus.EXECUTING and now - r.received_at >= timedelta(minutes=DISPATCH_RUN_MIN):
+            r = r.model_copy(update={"status": ActionStatus.COMPLETED, "updated_at": r.received_at + timedelta(minutes=DISPATCH_RUN_MIN)})
+            sim.receipts[r.action_id] = r
+        return r
+
+    @server.tool()
+    def send_notice(request: NoticeRequest) -> MineReceipt:
+        """发送预警、撤人等通知，返回回执。相同 idempotency_key 重复提交只发一次。"""
+        if (prior := existing(request.idempotency_key, ActionKind.NOTICE)) is not None:
+            return prior
+        if request.panel is not None and request.panel not in panel_ids:
+            raise ToolError(f"未知工作面：{request.panel}，可选：{sorted(panel_ids)}")
+        r = receipt_for(request.idempotency_key, ActionKind.NOTICE, ActionStatus.COMPLETED, f"通知已发送（{request.kind.value}）")
+        sim.notices.append({"action_id": r.action_id, "at": r.received_at.isoformat(), **request.model_dump(mode="json")})
+        return r
+
+    @server.tool()
+    def dispatch_order(request: DispatchRequest) -> MineReceipt:
+        """下发物资、人员调度，返回回执。真实矿井异步生效：状态先为 executing，用 get_action_status 查询完成情况。"""
+        if (prior := existing(request.idempotency_key, ActionKind.DISPATCH)) is not None:
+            return prior
+        bad = sorted({n for ln in request.lines for n in (ln.from_node, ln.to_node) if n not in node_ids})
+        if bad:
+            raise ToolError(f"未知网络节点：{bad}")
+        r = receipt_for(request.idempotency_key, ActionKind.DISPATCH, ActionStatus.EXECUTING, f"调度执行中（{len(request.lines)} 项）")
+        sim.dispatches.append({"action_id": r.action_id, "at": r.received_at.isoformat(), **request.model_dump(mode="json")})
+        return r
+
+    @server.tool()
+    def submit_treatment(request: TreatmentRequest) -> MineReceipt:
+        """提交处置动作（注惰、灌浆、封闭等），返回回执。模拟矿井里动作作用于物理模型；不支持的类型返回 rejected 回执。
+        只执行，不做红线校验。"""
+        if (prior := existing(request.idempotency_key, ActionKind.TREATMENT)) is not None:
+            return prior
+        if request.panel not in panel_ids:
+            raise ToolError(f"未知工作面：{request.panel}，可选：{sorted(panel_ids)}")
+        bad = [x for x in request.roadways if x not in roadway_ids]
+        if bad:
+            raise ToolError(f"未知巷道：{bad}")
+        if request.type not in SIM_TREATMENTS:
+            return receipt_for(request.idempotency_key, ActionKind.TREATMENT, ActionStatus.REJECTED, f"模拟矿井不能执行 {request.type.value}")
+        sim.engine.apply(request.type.value, dict(request.params), request.roadways, "action")
+        return receipt_for(request.idempotency_key, ActionKind.TREATMENT, ActionStatus.COMPLETED, f"{request.type.value} 已执行")
+
+    @server.tool()
+    def get_action_status(action_id: str) -> MineReceipt:
+        """按回执编号查询通知、调度、处置的执行状态（异步生效的动作用它跟踪）。"""
+        r = sim.receipts.get(action_id)
+        if r is None:
+            raise ToolError(f"未知回执编号：{action_id}")
+        return refreshed(r)
 
     # ── /sim/* 控制接口（不是 MCP 工具）──────────────────────────────────
 
@@ -340,6 +523,13 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         e = sim.engine
         hours = min(float(q.get("hours", 6)), 72)
         return JSONResponse({"sensor_id": sid, "measurand": m.value, "points": e.series(sid, m, e.now_h() - hours, e.now_h())})
+
+    @server.custom_route("/sim/alarms/ack", methods=["POST"])
+    async def sim_ack_alarm(req: Request) -> JSONResponse:
+        """模拟值班人员在矿井报警平台确认一条报警（演示控制台、评测用）。"""
+        body = await req.json()
+        sim.acked[str(body["alarm_id"])] = sim.engine.now()
+        return JSONResponse({"ok": True})
 
     @server.custom_route("/sim/sensors", methods=["GET"])
     async def sim_sensors(_req: Request) -> JSONResponse:

@@ -41,6 +41,15 @@ EXPORTED = [
     "HumanInputRequest",
     "ApprovalSummary",
     "FlowEvent",
+    # 第三版（0.10.0）：rescue-mine 接口的自描述、报警、设备、通知与指令
+    "MineCapabilities",
+    "MineDescription",
+    "MineAlarm",
+    "EquipmentStatus",
+    "NoticeRequest",
+    "DispatchRequest",
+    "TreatmentRequest",
+    "MineReceipt",
 ]
 
 

@@ -9,17 +9,22 @@ from __future__ import annotations
 
 from rescue_contract.models import (
     AirwayKind,
+    EquipmentKind,
     Measurand,
     MineNetwork,
     Node,
+    Panel,
+    PanelKind,
     RescueTeam,
     ResourceItem,
     Roadway,
     SensorPoint,
+    SensorRole,
     SensorSource,
 )
 
 MINE_ID = "demo-mine"
+MINE_NAME = "示范矿井（模拟）"
 
 NODES = [
     Node(id="N0", name="主井口", is_surface=True),
@@ -151,6 +156,8 @@ SENSORS = [
         measurands=[M.CO, M.CH4, M.O2, M.TEMPERATURE],
         roadway_id="R-1201-FACE",
         position_m=215,
+        panel="1201",
+        role=SensorRole.UPPER_CORNER,
     ),
     SensorPoint(
         id="SM-1201-RET",
@@ -159,6 +166,8 @@ SENSORS = [
         measurands=[M.CO, M.CH4, M.TEMPERATURE, M.WIND_SPEED],
         roadway_id="R-1201-RET",
         position_m=30,
+        panel="1201",
+        role=SensorRole.RETURN_AIRWAY,
     ),
     SensorPoint(
         id="SM-1201-IN",
@@ -167,6 +176,8 @@ SENSORS = [
         measurands=[M.CO, M.CH4, M.WIND_SPEED],
         roadway_id="R-1201-IN",
         position_m=1700,
+        panel="1201",
+        role=SensorRole.INTAKE_AIRWAY,
     ),
     SensorPoint(
         id="SM-RET-MAIN",
@@ -175,6 +186,7 @@ SENSORS = [
         measurands=[M.CO, M.CH4, M.WIND_SPEED],
         roadway_id="R-RET-MAIN",
         position_m=100,
+        role=SensorRole.MAIN_RETURN,
     ),
     SensorPoint(
         id="BT-1201-G1",
@@ -183,6 +195,8 @@ SENSORS = [
         measurands=TUBE,
         roadway_id="R-1201-GOAF",
         goaf_depth_m=20,
+        panel="1201",
+        role=SensorRole.GOAF_GAS_TUBE,
     ),
     SensorPoint(
         id="BT-1201-G2",
@@ -191,6 +205,8 @@ SENSORS = [
         measurands=TUBE,
         roadway_id="R-1201-GOAF",
         goaf_depth_m=50,
+        panel="1201",
+        role=SensorRole.GOAF_GAS_TUBE,
     ),
     SensorPoint(
         id="BT-1201-G3",
@@ -199,6 +215,8 @@ SENSORS = [
         measurands=TUBE,
         roadway_id="R-1201-GOAF",
         goaf_depth_m=80,
+        panel="1201",
+        role=SensorRole.GOAF_GAS_TUBE,
     ),
     SensorPoint(
         id="TP-1201-G1",
@@ -207,6 +225,8 @@ SENSORS = [
         measurands=[M.TEMPERATURE],
         roadway_id="R-1201-GOAF",
         goaf_depth_m=20,
+        panel="1201",
+        role=SensorRole.GOAF_TEMPERATURE,
     ),
     SensorPoint(
         id="TP-1201-G2",
@@ -215,6 +235,8 @@ SENSORS = [
         measurands=[M.TEMPERATURE],
         roadway_id="R-1201-GOAF",
         goaf_depth_m=50,
+        panel="1201",
+        role=SensorRole.GOAF_TEMPERATURE,
     ),
     SensorPoint(
         id="TP-1201-G3",
@@ -223,9 +245,41 @@ SENSORS = [
         measurands=[M.TEMPERATURE],
         roadway_id="R-1201-GOAF",
         goaf_depth_m=80,
+        panel="1201",
+        role=SensorRole.GOAF_TEMPERATURE,
     ),
 ]
 SENSOR_BY_ID = {s.id: s for s in SENSORS}
+
+# 工作面拓扑（describe_mine）。真实矿井由适配器按该矿图纸如实回答。
+PANELS = [
+    Panel(
+        panel_id="1201",
+        name="1201综采工作面",
+        kind=PanelKind.LONGWALL,
+        intake_roadway_id="R-1201-IN",
+        return_roadway_id="R-1201-RET",
+        face_roadway_id="R-1201-FACE",
+        goaf_roadway_id="R-1201-GOAF",
+        refuge_node_id="N8",
+    ),
+    Panel(
+        panel_id="1202",
+        name="1202掘进工作面",
+        kind=PanelKind.HEADING,
+        intake_roadway_id="R-1202-IN",
+        return_roadway_id="R-1202-RET",
+    ),
+]
+
+# 设备台账：(设备编号, 名称, 类型, 所在节点)。运行状态由模拟引擎的处置记录推导（见 server.py）
+EQUIPMENT = [
+    ("EQ-FAN-MAIN", "主通风机", EquipmentKind.MAIN_FAN, "N7"),
+    ("EQ-FAN-1202", "1202局部通风机", EquipmentKind.LOCAL_FAN, "N9"),
+    ("EQ-PUMP-1", "井下排水泵", EquipmentKind.PUMP, "N1"),
+    ("EQ-N2-1", "地面制氮机组", EquipmentKind.NITROGEN_PLANT, "N0"),
+    ("EQ-GROUT-1", "地面注浆站", EquipmentKind.GROUT_STATION, "N0"),
+]
 
 INVENTORY = [
     ResourceItem(item_type="nitrogen_capacity_m3_h", name="地面制氮机组（产能）", quantity=1200, unit="m³/h", depot_node="N0"),

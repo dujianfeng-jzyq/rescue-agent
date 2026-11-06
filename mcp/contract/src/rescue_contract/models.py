@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, WithJsonSchema, model_validator
 
-CONTRACT_VERSION = "0.9.0"
+CONTRACT_VERSION = "0.10.0"
 
 
 def _no_tz(v: datetime) -> datetime:
@@ -122,6 +122,31 @@ class SensorSource(StrEnum):
     TEMPERATURE = "temperature"  # 测温系统（测点或光纤）
 
 
+class SensorRole(StrEnum):
+    """测点的语义角色：技能按角色取数，不按测点编号（换矿只要 describe_mine 如实回答，技能不改）。
+
+    角色按“位置/用途”划分，测什么由 measurands 说明。占位词表（TODO(专家)：演示后补全）。"""
+
+    UPPER_CORNER = "upper_corner"  # 工作面上隅角
+    RETURN_AIRWAY = "return_airway"  # 工作面回风巷
+    INTAKE_AIRWAY = "intake_airway"  # 工作面进风巷
+    GOAF_GAS_TUBE = "goaf_gas_tube"  # 采空区束管取样点
+    GOAF_TEMPERATURE = "goaf_temperature"  # 采空区测温点
+    MAIN_RETURN = "main_return"  # 总回风巷
+    OTHER = "other"  # 其他（词表里没有的）
+
+
+SENSOR_ROLE_INFO: dict[SensorRole, str] = {
+    SensorRole.UPPER_CORNER: "工作面上隅角：采空区漏出气体最先到达的位置，自燃早期的 CO 在此最先显现",
+    SensorRole.RETURN_AIRWAY: "工作面回风巷：与上隅角交叉校核，判断气体是否随风流带出",
+    SensorRole.INTAKE_AIRWAY: "工作面进风巷：进风侧参照，用于排除外来气体",
+    SensorRole.GOAF_GAS_TUBE: "采空区束管取样点：多组分气体分析（预警、阶段、爆炸三角形的主要依据）",
+    SensorRole.GOAF_TEMPERATURE: "采空区测温点：采空区内部温度（辅助判断，也用于爆炸三角形的温度补偿）",
+    SensorRole.MAIN_RETURN: "总回风巷：全矿回风参照",
+    SensorRole.OTHER: "其他测点",
+}
+
+
 class SensorPoint(_Model):
     id: str
     name: str
@@ -130,6 +155,8 @@ class SensorPoint(_Model):
     roadway_id: str
     position_m: float | None = None  # 距巷道起点距离
     goaf_depth_m: float | None = None  # 束管/测温点距工作面的采空区深度
+    panel: str | None = None  # 所属工作面编号（全矿性测点为 None）
+    role: SensorRole = SensorRole.OTHER  # 语义角色，技能按它取数
 
 
 class Quality(StrEnum):
@@ -573,3 +600,160 @@ class FlowEvent(_Model):
     record_ids: list[str] = Field(default_factory=list)
     detail: str | None = None
 
+
+
+# ── 接口自描述（rescue-mine，第三版）────────────────────────────────────────
+
+
+class PanelKind(StrEnum):
+    LONGWALL = "longwall"  # 综采工作面（有采空区）
+    HEADING = "heading"  # 掘进工作面
+
+
+class Panel(_Model):
+    """一个工作面的拓扑：它的进回风巷、工作面、采空区和避难硐室分别是网络里的哪条巷道/哪个节点。"""
+
+    panel_id: str
+    name: str
+    kind: PanelKind
+    intake_roadway_id: str | None = None
+    return_roadway_id: str | None = None
+    face_roadway_id: str | None = None
+    goaf_roadway_id: str | None = None  # 采空区漏风通道（综采工作面才有）
+    refuge_node_id: str | None = None
+
+
+class MineDescription(_Model):
+    """describe_mine 的返回：本矿有哪些工作面、测点用到了哪些角色。"""
+
+    mine_id: str
+    name: str
+    panels: list[Panel]
+    sensor_roles: list[SensorRole]  # 本矿测点实际用到的角色（⊆ SensorRole）
+
+
+class MineCapabilities(_Model):
+    """get_capabilities 的返回：接口版本，以及本矿实际提供哪些工具和功能。"""
+
+    interface_version: str
+    contract_version: str
+    mine_id: str
+    implementation: str  # 实现名，如 mine-sim（模拟矿井）或某矿的适配器
+    tools: list[str]
+    features: list[str]  # 可选功能：alarms、equipment、notice、dispatch、treatment
+
+
+# ── 矿井自带报警与设备 ───────────────────────────────────────────────────────
+
+
+class AlarmLevel(StrEnum):
+    WARNING = "warning"  # 预警
+    ALARM = "alarm"  # 报警
+    CRITICAL = "critical"  # 断电、撤人级别
+
+
+class AlarmStatus(StrEnum):
+    ACTIVE = "active"
+    CLEARED = "cleared"  # 已恢复
+
+
+class MineAlarm(_Model):
+    """矿井自己的报警平台里的一条报警（拉取，含确认状态）。不是 fire-assessment 重算的结果。"""
+
+    alarm_id: str
+    sensor_id: str | None = None
+    measurand: Measurand | None = None
+    level: AlarmLevel
+    status: AlarmStatus
+    raised_at: MineTime
+    cleared_at: MineTime | None = None
+    value: float | None = None
+    threshold: float | None = None
+    acknowledged: bool = False
+    acknowledged_at: MineTime | None = None
+    message: str
+
+
+class EquipmentKind(StrEnum):
+    MAIN_FAN = "main_fan"  # 主通风机
+    LOCAL_FAN = "local_fan"  # 局部通风机
+    PUMP = "pump"  # 水泵
+    NITROGEN_PLANT = "nitrogen_plant"  # 制氮机组
+    GROUT_STATION = "grout_station"  # 注浆站
+    OTHER = "other"
+
+
+class EquipmentState(StrEnum):
+    RUNNING = "running"
+    STANDBY = "standby"
+    STOPPED = "stopped"
+    FAULT = "fault"
+
+
+class EquipmentStatus(_Model):
+    equipment_id: str
+    name: str
+    kind: EquipmentKind
+    node_id: str | None = None  # 所在网络节点
+    state: EquipmentState
+    updated_at: MineTime
+
+
+# ── 通知与指令（只执行，不判断；返回回执）────────────────────────────────────────
+
+
+class NoticeKind(StrEnum):
+    WARNING = "warning"  # 预警广播
+    EVACUATION = "evacuation"  # 撤人通知
+    INFO = "info"  # 一般提示
+
+
+class NoticeRequest(_Model):
+    kind: NoticeKind
+    message: str
+    panel: str | None = None
+    level: str | None = None  # 预警等级等，原样传递，矿井侧不解释
+    targets: list[str] = Field(default_factory=list)  # 人员编号、班组或区域；空表示按工作面广播
+    idempotency_key: str  # 相同 key 重复提交只执行一次，返回同一个回执
+
+
+class DispatchRequest(_Model):
+    purpose: str
+    lines: list[DispatchLine] = Field(min_length=1)
+    idempotency_key: str
+
+
+class TreatmentRequest(_Model):
+    """处置动作：注惰、灌浆、封闭等。矿井侧只执行，不做红线校验（校验在 rescue-agent 的 guard）。"""
+
+    panel: str
+    type: StepType
+    roadways: list[str] = Field(default_factory=list)
+    params: dict[str, float | int | str | bool] = Field(default_factory=dict)
+    idempotency_key: str
+
+
+class ActionKind(StrEnum):
+    NOTICE = "notice"
+    DISPATCH = "dispatch"
+    TREATMENT = "treatment"
+
+
+class ActionStatus(StrEnum):
+    ACCEPTED = "accepted"  # 已收到
+    EXECUTING = "executing"  # 执行中（真实矿井异步生效）
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REJECTED = "rejected"  # 矿井侧拒绝（如设备不可用）
+
+
+class MineReceipt(_Model):
+    """通知、指令的回执。真实矿井异步生效时，用 get_action_status 查后续状态。"""
+
+    action_id: str
+    kind: ActionKind
+    status: ActionStatus
+    received_at: MineTime
+    updated_at: MineTime
+    idempotency_key: str
+    detail: str | None = None

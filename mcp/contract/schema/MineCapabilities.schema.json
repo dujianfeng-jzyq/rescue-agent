@@ -1,0 +1,47 @@
+{
+  "additionalProperties": false,
+  "description": "get_capabilities 的返回：接口版本，以及本矿实际提供哪些工具和功能。",
+  "properties": {
+    "interface_version": {
+      "title": "Interface Version",
+      "type": "string"
+    },
+    "contract_version": {
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "mine_id": {
+      "title": "Mine Id",
+      "type": "string"
+    },
+    "implementation": {
+      "title": "Implementation",
+      "type": "string"
+    },
+    "tools": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools",
+      "type": "array"
+    },
+    "features": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Features",
+      "type": "array"
+    }
+  },
+  "required": [
+    "interface_version",
+    "contract_version",
+    "mine_id",
+    "implementation",
+    "tools",
+    "features"
+  ],
+  "title": "MineCapabilities",
+  "type": "object",
+  "$comment": "rescue-contract 0.10.0"
+}

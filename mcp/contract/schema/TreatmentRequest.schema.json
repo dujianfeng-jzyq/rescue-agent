@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "StepType": {
+      "description": "方案步骤类型。红线规则按步骤类型和顺序做确定性校验，所以方案必须结构化。",
+      "enum": [
+        "monitor",
+        "evacuate",
+        "power_cutoff",
+        "inert_injection",
+        "grouting",
+        "inhibitor_spray",
+        "leak_sealing",
+        "pressure_balancing",
+        "temporary_seal",
+        "permanent_seal",
+        "reverse_ventilation",
+        "short_circuit_ventilation",
+        "stop_main_fan",
+        "reduce_airflow",
+        "enter_disaster_area",
+        "direct_firefighting",
+        "water_firefighting",
+        "inspect_sealed_area",
+        "unseal"
+      ],
+      "title": "StepType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "处置动作：注惰、灌浆、封闭等。矿井侧只执行，不做红线校验（校验在 rescue-agent 的 guard）。",
+  "properties": {
+    "panel": {
+      "title": "Panel",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/StepType"
+    },
+    "roadways": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Roadways",
+      "type": "array"
+    },
+    "params": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "title": "Params",
+      "type": "object"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "panel",
+    "type",
+    "idempotency_key"
+  ],
+  "title": "TreatmentRequest",
+  "type": "object",
+  "$comment": "rescue-contract 0.10.0"
+}

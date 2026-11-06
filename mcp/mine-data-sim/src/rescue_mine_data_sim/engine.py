@@ -572,6 +572,25 @@ class SimEngine:
                     active.discard(key)
         return sorted(out, key=lambda e: e.ts)
 
+    def alarms(self, start_h: float, end_h: float) -> list[tuple[str, Measurand, datetime, datetime | None, float, float]]:
+        """报警平台视角：每次越限一条 (传感器, 参数, 越限时间, 恢复时间或 None, 越限时读数, 报警值)。
+        缺数不算报警（那是 get_events 的测点故障）。窗口起点之前就已越限的报警从窗口第一个读数算起。"""
+        end_h = min(end_h, self.now_h())
+        out: list[tuple[str, Measurand, datetime, datetime | None, float, float]] = []
+        for (sid, m), limit in ALARM_THRESHOLDS.items():
+            open_: tuple[datetime, float] | None = None
+            for r in self.readings([sid], start_h, end_h, [m]):
+                if r.quality == Quality.MISSING or r.value is None:
+                    continue
+                if r.value > limit and open_ is None:
+                    open_ = (r.ts, r.value)
+                elif r.value <= limit and open_ is not None:
+                    out.append((sid, m, open_[0], r.ts, open_[1], limit))
+                    open_ = None
+            if open_ is not None:
+                out.append((sid, m, open_[0], None, open_[1], limit))
+        return sorted(out, key=lambda a: a[2])
+
     # ── 人员 ──────────────────────────────────────────────────────────────
 
     def personnel(self) -> list[PersonLocation]:

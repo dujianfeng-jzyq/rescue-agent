@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "NoticeKind": {
+      "enum": [
+        "warning",
+        "evacuation",
+        "info"
+      ],
+      "title": "NoticeKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "$ref": "#/$defs/NoticeKind"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "panel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Panel"
+    },
+    "level": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Level"
+    },
+    "targets": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Targets",
+      "type": "array"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "message",
+    "idempotency_key"
+  ],
+  "title": "NoticeRequest",
+  "type": "object",
+  "$comment": "rescue-contract 0.10.0"
+}

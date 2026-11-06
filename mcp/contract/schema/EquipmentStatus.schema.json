@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "EquipmentKind": {
+      "enum": [
+        "main_fan",
+        "local_fan",
+        "pump",
+        "nitrogen_plant",
+        "grout_station",
+        "other"
+      ],
+      "title": "EquipmentKind",
+      "type": "string"
+    },
+    "EquipmentState": {
+      "enum": [
+        "running",
+        "standby",
+        "stopped",
+        "fault"
+      ],
+      "title": "EquipmentState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "equipment_id": {
+      "title": "Equipment Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/EquipmentKind"
+    },
+    "node_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Node Id"
+    },
+    "state": {
+      "$ref": "#/$defs/EquipmentState"
+    },
+    "updated_at": {
+      "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "equipment_id",
+    "name",
+    "kind",
+    "state",
+    "updated_at"
+  ],
+  "title": "EquipmentStatus",
+  "type": "object",
+  "$comment": "rescue-contract 0.10.0"
+}

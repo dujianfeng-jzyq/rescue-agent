@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "AlarmLevel": {
+      "enum": [
+        "warning",
+        "alarm",
+        "critical"
+      ],
+      "title": "AlarmLevel",
+      "type": "string"
+    },
+    "AlarmStatus": {
+      "enum": [
+        "active",
+        "cleared"
+      ],
+      "title": "AlarmStatus",
+      "type": "string"
+    },
+    "Measurand": {
+      "enum": [
+        "CO",
+        "CO2",
+        "CH4",
+        "O2",
+        "N2",
+        "C2H4",
+        "C2H2",
+        "C2H6",
+        "H2",
+        "TEMP",
+        "WIND"
+      ],
+      "title": "Measurand",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "矿井自己的报警平台里的一条报警（拉取，含确认状态）。不是 fire-assessment 重算的结果。",
+  "properties": {
+    "alarm_id": {
+      "title": "Alarm Id",
+      "type": "string"
+    },
+    "sensor_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sensor Id"
+    },
+    "measurand": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Measurand"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "level": {
+      "$ref": "#/$defs/AlarmLevel"
+    },
+    "status": {
+      "$ref": "#/$defs/AlarmStatus"
+    },
+    "raised_at": {
+      "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+      "title": "Raised At",
+      "type": "string"
+    },
+    "cleared_at": {
+      "anyOf": [
+        {
+          "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cleared At"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Value"
+    },
+    "threshold": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Threshold"
+    },
+    "acknowledged": {
+      "default": false,
+      "title": "Acknowledged",
+      "type": "boolean"
+    },
+    "acknowledged_at": {
+      "anyOf": [
+        {
+          "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Acknowledged At"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "alarm_id",
+    "level",
+    "status",
+    "raised_at",
+    "message"
+  ],
+  "title": "MineAlarm",
+  "type": "object",
+  "$comment": "rescue-contract 0.10.0"
+}

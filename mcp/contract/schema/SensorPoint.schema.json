@@ -17,6 +17,20 @@
       "title": "Measurand",
       "type": "string"
     },
+    "SensorRole": {
+      "description": "测点的语义角色：技能按角色取数，不按测点编号（换矿只要 describe_mine 如实回答，技能不改）。\n\n角色按“位置/用途”划分，测什么由 measurands 说明。占位词表（TODO(专家)：演示后补全）。",
+      "enum": [
+        "upper_corner",
+        "return_airway",
+        "intake_airway",
+        "goaf_gas_tube",
+        "goaf_temperature",
+        "main_return",
+        "other"
+      ],
+      "title": "SensorRole",
+      "type": "string"
+    },
     "SensorSource": {
       "enum": [
         "safety_monitor",
@@ -74,6 +88,22 @@
       ],
       "default": null,
       "title": "Goaf Depth M"
+    },
+    "panel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Panel"
+    },
+    "role": {
+      "$ref": "#/$defs/SensorRole",
+      "default": "other"
     }
   },
   "required": [
@@ -85,5 +115,5 @@
   ],
   "title": "SensorPoint",
   "type": "object",
-  "$comment": "rescue-contract 0.9.0"
+  "$comment": "rescue-contract 0.10.0"
 }

@@ -1,0 +1,145 @@
+{
+  "$defs": {
+    "Panel": {
+      "additionalProperties": false,
+      "description": "一个工作面的拓扑：它的进回风巷、工作面、采空区和避难硐室分别是网络里的哪条巷道/哪个节点。",
+      "properties": {
+        "panel_id": {
+          "title": "Panel Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/PanelKind"
+        },
+        "intake_roadway_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Intake Roadway Id"
+        },
+        "return_roadway_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Return Roadway Id"
+        },
+        "face_roadway_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Face Roadway Id"
+        },
+        "goaf_roadway_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Goaf Roadway Id"
+        },
+        "refuge_node_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Refuge Node Id"
+        }
+      },
+      "required": [
+        "panel_id",
+        "name",
+        "kind"
+      ],
+      "title": "Panel",
+      "type": "object"
+    },
+    "PanelKind": {
+      "enum": [
+        "longwall",
+        "heading"
+      ],
+      "title": "PanelKind",
+      "type": "string"
+    },
+    "SensorRole": {
+      "description": "测点的语义角色：技能按角色取数，不按测点编号（换矿只要 describe_mine 如实回答，技能不改）。\n\n角色按“位置/用途”划分，测什么由 measurands 说明。占位词表（TODO(专家)：演示后补全）。",
+      "enum": [
+        "upper_corner",
+        "return_airway",
+        "intake_airway",
+        "goaf_gas_tube",
+        "goaf_temperature",
+        "main_return",
+        "other"
+      ],
+      "title": "SensorRole",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "describe_mine 的返回：本矿有哪些工作面、测点用到了哪些角色。",
+  "properties": {
+    "mine_id": {
+      "title": "Mine Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "panels": {
+      "items": {
+        "$ref": "#/$defs/Panel"
+      },
+      "title": "Panels",
+      "type": "array"
+    },
+    "sensor_roles": {
+      "items": {
+        "$ref": "#/$defs/SensorRole"
+      },
+      "title": "Sensor Roles",
+      "type": "array"
+    }
+  },
+  "required": [
+    "mine_id",
+    "name",
+    "panels",
+    "sensor_roles"
+  ],
+  "title": "MineDescription",
+  "type": "object",
+  "$comment": "rescue-contract 0.10.0"
+}

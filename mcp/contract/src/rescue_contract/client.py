@@ -18,17 +18,25 @@ from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 
 from .models import (
+    DispatchRequest,
+    EquipmentStatus,
     FireArea,
+    MineAlarm,
+    MineCapabilities,
     MineClock,
+    MineDescription,
     MineNetwork,
+    MineReceipt,
+    NoticeRequest,
     PersonLocation,
     PersonnelSnapshot,
     Reading,
     RescueTeam,
     ResourceItem,
     SensorPoint,
+    TreatmentRequest,
 )
-from .serving import auth_headers
+from .serving import auth_headers, mine_act_headers
 
 MINE_DATA_URL_ENV = "RESCUE_MCP_MINE_DATA_URL"
 DEFAULT_MINE_DATA_URL = "http://127.0.0.1:8101/mcp"
@@ -39,13 +47,14 @@ class MineDataError(RuntimeError):
 
 
 @asynccontextmanager
-async def connect(target: Any, service: str = "mine_data") -> AsyncIterator[Client]:
+async def connect(target: Any, service: str = "mine_data", act: bool = False) -> AsyncIterator[Client]:
     """打开到 MCP 服务的客户端会话。
 
     `target` 是 URL 时，按 `service` 带上该服务的 Bearer 令牌（RESCUE_MCP_<服务>_TOKEN 或 RESCUE_MCP_TOKEN，见 serving）；
     也可以是进程内的 MCPServer 实例（测试用）。所有 Python 侧的 MCP 连接都应经过这里。
+    `act=True` 带写入令牌（rescue-mine 的写入类工具，只有 guard 用，见 serving.mine_act_headers）。
     """
-    headers = auth_headers(service)
+    headers = mine_act_headers() if act else auth_headers(service)
     if isinstance(target, str) and headers:
         async with httpx2.AsyncClient(headers=headers, timeout=30) as http:
             async with Client(streamable_http_client(target, http_client=http)) as c:
@@ -68,8 +77,8 @@ class MineData:
     def from_env(cls) -> MineData:
         return cls(os.environ.get(MINE_DATA_URL_ENV, DEFAULT_MINE_DATA_URL))
 
-    async def _call(self, tool: str, args: dict[str, Any]) -> Any:
-        async with connect(self._target) as c:
+    async def _call(self, tool: str, args: dict[str, Any], act: bool = False) -> Any:
+        async with connect(self._target, act=act) as c:
             r = await c.call_tool(tool, args)
         if r.is_error:
             text = " ".join(getattr(b, "text", "") for b in r.content)
@@ -123,3 +132,31 @@ class MineData:
 
     async def now(self) -> datetime:
         return MineClock.model_validate(await self._call("get_clock", {})).now
+
+    # ── 自描述、报警、设备（第三版）──
+
+    async def capabilities(self) -> MineCapabilities:
+        return MineCapabilities.model_validate(await self._call("get_capabilities", {}))
+
+    async def describe(self) -> MineDescription:
+        return MineDescription.model_validate(await self._call("describe_mine", {}))
+
+    async def alarms(self, hours: float = 24, active_only: bool = False) -> list[MineAlarm]:
+        return [MineAlarm.model_validate(x) for x in await self._call("get_alarms", {"hours": hours, "active_only": active_only})]
+
+    async def equipment(self) -> list[EquipmentStatus]:
+        return [EquipmentStatus.model_validate(x) for x in await self._call("get_equipment_status", {})]
+
+    # ── 通知与指令（写入令牌；只有 guard 调用）──
+
+    async def send_notice(self, request: NoticeRequest) -> MineReceipt:
+        return MineReceipt.model_validate(await self._call("send_notice", {"request": request.model_dump(mode="json")}, act=True))
+
+    async def dispatch_order(self, request: DispatchRequest) -> MineReceipt:
+        return MineReceipt.model_validate(await self._call("dispatch_order", {"request": request.model_dump(mode="json")}, act=True))
+
+    async def submit_treatment(self, request: TreatmentRequest) -> MineReceipt:
+        return MineReceipt.model_validate(await self._call("submit_treatment", {"request": request.model_dump(mode="json")}, act=True))
+
+    async def action_status(self, action_id: str) -> MineReceipt:
+        return MineReceipt.model_validate(await self._call("get_action_status", {"action_id": action_id}))

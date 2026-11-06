@@ -3,6 +3,9 @@
 DSH 的 MCP 客户端只发送静态请求头，所以服务间认证用静态 Bearer 令牌（docs/design-v2.md 7.1）：
 - 每个服务认自己的令牌 RESCUE_MCP_<服务>_TOKEN（如 RESCUE_MCP_MINE_DATA_TOKEN、RESCUE_MCP_ACTIONS_TOKEN）；
   没有设置时退回共用的 RESCUE_MCP_TOKEN（第一版和本机开发）；都没有则不校验（仅限本机开发）。
+- rescue-mine 接口的写入类工具（interface.WRITE_TOOLS：send_notice、dispatch_order、submit_treatment）另认写入令牌
+  RESCUE_MCP_MINE_ACT_TOKEN，只有 guard 持有；设置后，只读令牌调用写入工具会被拒绝（读写分离：证据插件读矿井，
+  不能下发）。没有设置时写入工具退回认 mine_data 的令牌（本机开发）。
 - 模拟矿井的 /sim/ 控制接口认 RESCUE_SIM_CONTROL_TOKEN（没有时同 mine_data 的令牌）。设置后，mine_data 的只读令牌
   打不开控制接口：证据插件（DSH）只拿只读令牌，读不到真值、改不了模拟器（CLAUDE.md 约定 4）。
 """
@@ -38,6 +41,7 @@ DEFAULT_PORTS = {
 
 SHARED_TOKEN_ENV = "RESCUE_MCP_TOKEN"
 SIM_CONTROL_TOKEN_ENV = "RESCUE_SIM_CONTROL_TOKEN"
+MINE_ACT_TOKEN_ENV = "RESCUE_MCP_MINE_ACT_TOKEN"
 SIM_CONTROL_PREFIX = "/sim/"
 
 
@@ -54,6 +58,11 @@ def sim_control_token() -> str | None:
     return os.environ.get(SIM_CONTROL_TOKEN_ENV) or service_token("mine_data")
 
 
+def mine_act_token() -> str | None:
+    """rescue-mine 写入类工具的令牌；没有设置返回 None（写入工具不另设令牌）。"""
+    return os.environ.get(MINE_ACT_TOKEN_ENV) or None
+
+
 def _bearer(token: str | None) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"} if token else {}
 
@@ -61,6 +70,11 @@ def _bearer(token: str | None) -> dict[str, str]:
 def auth_headers(service: str = "mine_data") -> dict[str, str]:
     """调用某个服务要带的认证头（与 BearerTokenMiddleware 对应）；未设置令牌时为空。"""
     return _bearer(service_token(service))
+
+
+def mine_act_headers() -> dict[str, str]:
+    """guard 调用 rescue-mine 写入类工具要带的认证头：写入令牌，没有则退回 mine_data 的令牌。"""
+    return _bearer(mine_act_token() or service_token("mine_data"))
 
 
 def sim_control_headers() -> dict[str, str]:
@@ -76,11 +90,21 @@ class BearerTokenMiddleware:
     浏览器点下载链接时带不上令牌。`token` 为 None 时，除 path_tokens 外都不校验。
     """
 
-    def __init__(self, app: ASGIApp, token: str | None, public_prefixes: tuple[str, ...] = (), path_tokens: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        token: str | None,
+        public_prefixes: tuple[str, ...] = (),
+        path_tokens: dict[str, str] | None = None,
+        tool_tokens: dict[str, str] | None = None,
+    ) -> None:
         self.app = app
         self.expected = f"Bearer {token}".encode() if token else None
         self.public_prefixes = public_prefixes
         self.path_tokens = {p: f"Bearer {t}".encode() for p, t in (path_tokens or {}).items()}
+        # 工具名 → 调用它必须带的令牌（读令牌不行）；持有这些令牌的调用方也能做普通读取
+        self.tool_tokens = {n: f"Bearer {t}".encode() for n, t in (tool_tokens or {}).items()}
+        self.extra_accepted = set(self.tool_tokens.values())
 
     def _expected_for(self, path: str) -> bytes | None:
         for prefix, expected in self.path_tokens.items():
@@ -90,14 +114,53 @@ class BearerTokenMiddleware:
             return None
         return self.expected
 
+    @staticmethod
+    def _called_tools(body: bytes) -> set[str]:
+        """JSON-RPC 请求（单个或批量）里 tools/call 调用的工具名；解析不了返回空集（交给下游报错）。"""
+        try:
+            msg = json.loads(body)
+        except ValueError:
+            return set()
+        items = msg if isinstance(msg, list) else [msg]
+        return {
+            str(i["params"]["name"])
+            for i in items
+            if isinstance(i, dict) and i.get("method") == "tools/call" and isinstance(i.get("params"), dict) and "name" in i["params"]
+        }
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http":
-            expected = self._expected_for(scope.get("path") or "")
+            path = scope.get("path") or ""
+            expected = self._expected_for(path)
+            got = dict(scope.get("headers") or []).get(b"authorization", b"")
             if expected is not None:
-                got = dict(scope.get("headers") or []).get(b"authorization", b"")
-                if not hmac.compare_digest(got, expected):
+                accepted = [expected] + ([*self.extra_accepted] if expected is self.expected else [])
+                if not any(hmac.compare_digest(got, a) for a in accepted):
                     await JSONResponse({"error": "unauthorized"}, status_code=401)(scope, receive, send)
                     return
+            if self.tool_tokens and scope.get("method") == "POST" and not path.startswith(tuple(self.path_tokens)):
+                chunks: list[bytes] = []
+                more = True
+                while more:  # 读完请求体，再原样回放给下游
+                    msg = await receive()
+                    chunks.append(msg.get("body", b""))
+                    more = msg.get("more_body", False)
+                body = b"".join(chunks)
+                for name in self._called_tools(body) & self.tool_tokens.keys():
+                    if not hmac.compare_digest(got, self.tool_tokens[name]):
+                        await JSONResponse({"error": f"{name} 是写入类工具，需要写入令牌"}, status_code=401)(scope, receive, send)
+                        return
+                sent = False
+
+                async def replay() -> dict[str, Any]:
+                    nonlocal sent
+                    if not sent:
+                        sent = True
+                        return {"type": "http.request", "body": body, "more_body": False}
+                    return await receive()
+
+                await self.app(scope, replay, send)
+                return
         await self.app(scope, receive, send)
 
 
@@ -152,8 +215,13 @@ def build_app(server: MCPServer, public_prefixes: tuple[str, ...] = (), key: str
     path_tokens = {}
     if key == "mine_data" and (control := sim_control_token()):
         path_tokens[SIM_CONTROL_PREFIX] = control
-    if token or path_tokens:
-        app = BearerTokenMiddleware(app, token, public_prefixes, path_tokens)
+    tool_tokens: dict[str, str] = {}
+    if key == "mine_data" and (act := mine_act_token()):
+        from .interface import WRITE_TOOLS
+
+        tool_tokens = dict.fromkeys(WRITE_TOOLS, act)
+    if token or path_tokens or tool_tokens:
+        app = BearerTokenMiddleware(app, token, public_prefixes, path_tokens, tool_tokens)
     return app
 
 

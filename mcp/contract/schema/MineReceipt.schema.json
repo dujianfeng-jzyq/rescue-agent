@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "ActionKind": {
+      "enum": [
+        "notice",
+        "dispatch",
+        "treatment"
+      ],
+      "title": "ActionKind",
+      "type": "string"
+    },
+    "ActionStatus": {
+      "enum": [
+        "accepted",
+        "executing",
+        "completed",
+        "failed",
+        "rejected"
+      ],
+      "title": "ActionStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "通知、指令的回执。真实矿井异步生效时，用 get_action_status 查后续状态。",
+  "properties": {
+    "action_id": {
+      "title": "Action Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/ActionKind"
+    },
+    "status": {
+      "$ref": "#/$defs/ActionStatus"
+    },
+    "received_at": {
+      "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+      "title": "Received At",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "矿井本地时间，ISO 8601，不带时区，如 2026-11-07T08:00:00",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "detail": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detail"
+    }
+  },
+  "required": [
+    "action_id",
+    "kind",
+    "status",
+    "received_at",
+    "updated_at",
+    "idempotency_key"
+  ],
+  "title": "MineReceipt",
+  "type": "object",
+  "$comment": "rescue-contract 0.10.0"
+}
