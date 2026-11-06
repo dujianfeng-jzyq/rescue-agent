@@ -137,7 +137,7 @@ def test_treatment_acts_on_the_physical_model_and_is_idempotent():
 
 def test_unsupported_treatment_is_rejected_by_receipt_not_exception():
     _, server = make()
-    r = run(MineData(server).submit_treatment(TreatmentRequest(panel="1201", type=StepType.MONITOR, idempotency_key="m")))
+    r = run(MineData(server).submit_treatment(TreatmentRequest(panel="1201", type=StepType.REVERSE_VENTILATION, idempotency_key="m")))
     assert r.status == ActionStatus.REJECTED and "不能执行" in (r.detail or "")
 
 

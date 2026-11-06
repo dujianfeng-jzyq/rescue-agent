@@ -44,6 +44,30 @@ describe('review_timeline', () => {
     assert.equal(none.result.receipts_text, null)
   })
 
+  it('回执并行查（有并发上限），每个回执只查一次，结果与串行一致', async () => {
+    const { store, ev } = await setup()
+    const id = await store.open('2026-11-06T08:00:00', { category: 'fire', panel: '1201', summary: 'x' })
+    const mids = Array.from({ length: 20 }, (_, i) => `M-${i + 1}`)
+    await store.append(id, '2026-11-06T08:10:00', 'note', 'guard', { type: 'action', tool: 'issue_sealing_plan', status: 'issued', action_id: 'A-1', record_ids: [], problems: [], mine_receipt_ids: mids })
+    await store.append(id, '2026-11-06T08:20:00', 'note', 'guard', { type: 'action', tool: 'publish_warning', status: 'issued', action_id: 'A-2', record_ids: [], problems: [], mine_receipt_ids: ['M-1', 'M-2'] }) // 重复的回执编号
+    const asked: string[] = []
+    let running = 0
+    let peak = 0
+    const receipt = async (mid: string) => {
+      asked.push(mid)
+      running++
+      peak = Math.max(peak, running)
+      await new Promise((r) => setTimeout(r, 10))
+      running--
+      return { action_id: mid, kind: 'treatment', status: 'completed', received_at: '2026-11-06T08:10:00', updated_at: '2026-11-06T08:10:00', idempotency_key: 'k', detail: null }
+    }
+    const out = await reviewTimeline(ev, { store, incidentId: id, origin: ORIGIN, receipt })
+    assert.deepEqual([...asked].sort(), [...mids].sort()) // 每个只查一次
+    assert.ok(peak > 1 && peak <= 6, `并发峰值 ${peak}`)
+    // 脚本按各次对外动作引用的回执计数（M-1、M-2 被两次动作引用，算 22 条），查询只发一次
+    assert.equal(out.result.receipts_text, '矿井回执 22 条：已完成 22、执行中 0、失败或被矿井拒绝 0、查不到 0')
+  })
+
   it('读事件、存证据、脚本算次数和时长、渲染报告和要点', async () => {
     const { store, ev } = await setup()
     const out = await reviewTimeline(ev, { store, incidentId: 'INC-20261105T080000-aaaaaa', origin: ORIGIN })

@@ -83,6 +83,8 @@ SIM_TREATMENTS = {
     StepType.PERMANENT_SEAL,
     StepType.UNSEAL,
     StepType.EVACUATE,
+    StepType.MONITOR,  # 检查、观测、断电：模拟矿井只记录（进 action_log），不改变物理模型
+    StepType.POWER_CUTOFF,
 }
 
 

@@ -46,11 +46,10 @@ def test_sealing_plan_is_issued_and_executed_by_the_mine(world):
     assert not r.is_error, r.content[0].text
     out = r.structured_content
     assert out["status"] == "issued" and "确认人" in (out["note"] or "")
-    # 每个步骤一条矿井回执，顺序与方案一致；矿井不能执行的步骤（监测）在 mine_not_executed 里如实列出
+    # 每个步骤一条矿井回执，顺序与方案一致；矿井不能执行的步骤会在 mine_not_executed 里如实列出（模拟矿井现在全部能执行）
     assert [m["kind"] for m in out["mine_receipts"]] == ["treatment"] * 8
-    assert [iv.type for iv in world.holder.engine.action_log] == ["evacuate", "leak_sealing", "inert_injection", "temporary_seal", "permanent_seal", "grouting"]
-    assert [m["status"] for m in out["mine_receipts"]].count("rejected") == 2 and len(out["mine_not_executed"]) == 2
-    assert all("monitor" in x for x in out["mine_not_executed"])
+    assert [m["status"] for m in out["mine_receipts"]] == ["completed"] * 8 and out["mine_not_executed"] == []
+    assert [iv.type for iv in world.holder.engine.action_log if iv.type != "monitor"] == ["evacuate", "leak_sealing", "inert_injection", "temporary_seal", "permanent_seal", "grouting"]
     # 台账：来源记录、Origin、回执
     row = world.rows()[-1]
     assert row["status"] == "issued" and row["record_ids"] == [rid] and row["origin"]["channel"] == "web" and row["incident_id"] is None
@@ -355,28 +354,28 @@ def _unseal_content(mutate=None, ready=True):
     return sample
 
 
-def test_approve_unsealing_runs_the_fixed_steps_on_the_mine(world_s5, monkeypatch):
-    from rescue_mine_data_sim import server as sim_server
-
-    # 模拟矿井缺省不能执行检查、断电；这里让它能执行，验证全部步骤按顺序下发
-    monkeypatch.setattr(sim_server, "SIM_TREATMENTS", sim_server.SIM_TREATMENTS | {sim_server.StepType.MONITOR, sim_server.StepType.POWER_CUTOFF})
+def test_approve_unsealing_runs_the_fixed_steps_on_the_mine(world_s5):
     rid = world_s5.put("unsealing-plan", "unsealing_plan", _unseal_content())
     r = world_s5.call("approve_unsealing", {"record_id": rid})
     assert not r.is_error, r.content[0].text
     receipt = r.structured_content
     assert receipt["status"] == "issued" and len(receipt["mine_receipts"]) == 5 and receipt["mine_not_executed"] == []
-    assert [a.type for a in world_s5.holder.engine.action_log if a.type in ("evacuate", "unseal")] == ["evacuate", "unseal"]
+    # 顺序：检查、撤人、断电、启封、观测
+    assert [a.type for a in world_s5.holder.engine.action_log] == ["monitor", "evacuate", "power_cutoff", "unseal", "monitor"]
     assert world_s5.rows()[-1]["tool"] == "approve_unsealing" and world_s5.rows()[-1]["record_ids"] == [rid]
 
 
-def test_approve_unsealing_stops_when_a_prior_step_is_not_executed(world_s5):
-    """模拟矿井缺省不执行检查、断电：前置步骤被拒绝，启封不能照常下发（RL-164 要求先检查、断电、撤人）。"""
+def test_approve_unsealing_stops_when_a_prior_step_is_not_executed(world_s5, monkeypatch):
+    """矿井不执行断电（真实矿井可能拒绝）：启封不能照常下发（RL-164 要求先检查、断电、撤人）。"""
+    from rescue_mine_data_sim import server as sim_server
+
+    monkeypatch.setattr(sim_server, "SIM_TREATMENTS", sim_server.SIM_TREATMENTS - {sim_server.StepType.POWER_CUTOFF})
     rid = world_s5.put("unsealing-plan", "unsealing_plan", _unseal_content())
     r = world_s5.call("approve_unsealing", {"record_id": rid})
     assert r.is_error and "已停止" in r.content[0].text
-    assert not any(a.type in ("unseal", "evacuate") for a in world_s5.holder.engine.action_log)  # 第一步就被拒，后面一步都没执行
+    assert not any(a.type == "unseal" for a in world_s5.holder.engine.action_log)  # 断电被拒，启封一步都没执行
     row = world_s5.rows()[-1]
-    assert row["tool"] == "approve_unsealing" and row["status"] == "failed" and len(row["mine_receipts"]) == 1
+    assert row["tool"] == "approve_unsealing" and row["status"] == "failed" and [m["status"] for m in row["mine_receipts"]] == ["completed", "completed", "rejected"]
 
 
 def test_approve_unsealing_refuses_when_not_ready(world_s5):

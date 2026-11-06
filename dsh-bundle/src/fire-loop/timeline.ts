@@ -11,6 +11,8 @@ import type { Evidence } from '../evidence/service.ts'
 import type { IncidentStore } from '../incident/store.ts'
 import type { FlowEvent } from './assessment.ts'
 
+const RECEIPT_CONCURRENCY = 6 // 同时向矿井查回执的上限
+
 export const TIMELINE_FLOW = 'review_timeline'
 const IR = 'incident-review'
 
@@ -62,17 +64,30 @@ export async function reviewTimeline(ev: Evidence, opts: TimelineOptions) {
   // 对外动作的矿井回执：guard 记进时间线的 mine_receipt_ids，逐个向矿井查后续状态；查不到的记下原因，由脚本算“查不到”
   const receipts: Record<string, unknown> = {}
   if (opts.receipt) {
+    const query = opts.receipt
+    const wanted = new Set<string>()
     for (const e of entries) {
       if (e.kind !== 'note' || e.data.type !== 'action') continue
-      for (const mid of (e.data.mine_receipt_ids as string[] | undefined) ?? []) {
-        if (mid in receipts) continue
+      for (const mid of (e.data.mine_receipt_ids as string[] | undefined) ?? []) wanted.add(mid)
+    }
+    // 回执之间互不依赖，限制并发地并行查（矿井接口慢时不至于把复盘拖成回执数 × 单次耗时）；结果按出现顺序放入 receipts
+    const ids = [...wanted]
+    const results: unknown[] = new Array(ids.length)
+    let next = 0
+    const worker = async () => {
+      while (next < ids.length) {
+        const i = next++
         try {
-          receipts[mid] = await opts.receipt(mid)
+          results[i] = await query(ids[i]!)
         } catch (err) {
-          receipts[mid] = { error: (err as Error).message }
+          results[i] = { error: (err as Error).message }
         }
       }
     }
+    await Promise.all(Array.from({ length: Math.min(RECEIPT_CONCURRENCY, ids.length) }, worker))
+    ids.forEach((mid, i) => {
+      receipts[mid] = results[i]
+    })
   }
   const evidence = await step('evidence', () =>
     ev.putEvidence({
