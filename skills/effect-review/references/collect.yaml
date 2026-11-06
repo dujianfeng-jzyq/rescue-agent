@@ -9,13 +9,13 @@ kinds:
   effect:
     sensors:
       - name: tubes               # 采空区束管：CO，以及判断新出现标志气体的 C2H4、C2H2
-        select: {source: bundle_tube, panel: true}
+        select: {role: goaf_gas_tube, panel: true}
         require_measurands: [CO]
         measurands: [CO, C2H4, C2H2]
         before_since_h: 12
         required: true
       - name: goaf_temperature    # 采空区测温
-        select: {source: temperature, panel: true}
+        select: {role: goaf_temperature, panel: true}
         require_measurands: [TEMP]
         measurands: [TEMP]
         before_since_h: 12

@@ -29,16 +29,16 @@ kinds:
   check:
     sensors:
       - name: tubes
-        select: {source: bundle_tube, panel: true}
+        select: {role: goaf_gas_tube, panel: true}
         require_measurands: [O2, CO2]
         window_h: 6
         required: true
       - name: upper_corner
-        select: {ids: ["SM-{panel}-UC"]}
+        select: {role: upper_corner, panel: true}
         measurands: [CO, CH4]
         required: true
       - name: nothing
-        select: {ids: ["NO-SUCH-{panel}"]}
+        select: {role: main_return, panel: true}   # 总回风没有所属工作面：按工作面取不到，要记进 missing
         required: true
     events_h: 6
     fire_areas: true
@@ -46,7 +46,7 @@ kinds:
   effect:
     sensors:
       - name: tubes
-        select: {source: bundle_tube, panel: true}
+        select: {role: goaf_gas_tube, panel: true}
         measurands: [CO, C2H4]
         before_since_h: 12
 """
@@ -62,6 +62,48 @@ def test_spec_validation():
         parse_collect_spec("kinds: {}\n")
     with pytest.raises(ValueError, match="name 和 select"):
         parse_collect_spec("status: placeholder\nkinds:\n  check:\n    sensors:\n      - name: x\n")
+
+
+def test_select_accepts_only_role_source_panel():
+    base = "status: placeholder\nkinds:\n  check:\n    sensors:\n      - name: x\n        select: %s\n"
+    parse_collect_spec(base % "{role: upper_corner, panel: true}")
+    parse_collect_spec(base % "{source: safety_monitor}")
+    with pytest.raises(ValueError, match="不再支持 ids"):
+        parse_collect_spec(base % '{ids: ["SM-{panel}-UC"]}')
+    with pytest.raises(ValueError, match="不认识的键"):
+        parse_collect_spec(base % "{roel: upper_corner}")
+    with pytest.raises(ValueError, match="至少要有 role 或 source"):
+        parse_collect_spec(base % "{panel: true}")
+
+
+def test_selection_is_by_role_and_by_the_panel_field():
+    from rescue_contract.collect import _select
+
+    def s(sid, panel, role, source="bundle_tube"):
+        return {"id": sid, "panel": panel, "role": role, "source": source, "measurands": ["CO"]}
+
+    sensors = [
+        s("X-1", "1201", "goaf_gas_tube"),
+        s("Y-9", "1202", "goaf_gas_tube"),  # 编号里没有工作面号也要按 panel 字段分
+        s("Z-3", "1201", "upper_corner", "safety_monitor"),
+        s("W-1", None, "goaf_gas_tube"),  # 没有所属工作面：按工作面取不到
+    ]
+    pick = lambda sel, panel="1201": [x["id"] for x in _select(sensors, {"select": sel}, panel)]  # noqa: E731
+    assert pick({"role": "goaf_gas_tube", "panel": True}) == ["X-1"]
+    assert pick({"role": "goaf_gas_tube", "panel": True}, "1202") == ["Y-9"]
+    assert pick({"role": "goaf_gas_tube"}) == ["W-1", "X-1", "Y-9"]
+    assert pick({"source": "safety_monitor", "panel": True}) == ["Z-3"]
+
+
+def test_skill_collect_roles_are_in_the_vocabulary(tmp_path):
+    from rescue_contract.skills import check_collect_spec
+
+    good = tmp_path / "collect.yaml"
+    good.write_text("status: placeholder\nkinds:\n  check:\n    sensors:\n      - name: a\n        select: {role: upper_corner, panel: true}\n")
+    assert check_collect_spec(good, "t/collect.yaml") == []
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("status: placeholder\nkinds:\n  check:\n    sensors:\n      - name: a\n        select: {role: upper_corer, panel: true}\n")
+    assert "词表里没有的角色 upper_corer" in check_collect_spec(bad, "t/bad.yaml")[0]
 
 
 def _free_port() -> int:

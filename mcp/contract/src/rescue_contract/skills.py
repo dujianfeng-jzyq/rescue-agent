@@ -242,6 +242,27 @@ def check_references(skill: Skill) -> list[str]:
             problems.append(f"{rel}：顶层要有 status: placeholder 或 reviewed")
         elif data["status"] == "reviewed" and not data.get("reviewed_by"):
             problems.append(f"{rel}：status 为 reviewed 时要写 reviewed_by（审定人和日期）")
+        if path.name == "collect.yaml":
+            problems += check_collect_spec(path, rel)
+    return problems
+
+
+def check_collect_spec(path: Path, rel: str) -> list[str]:
+    """采集清单：格式合法，select 用的角色都在契约的词表里（技能按角色取数，词表是各矿共同遵守的）。"""
+    from .collect import parse_collect_spec
+    from .models import SensorRole
+
+    try:
+        spec = parse_collect_spec(path.read_text(encoding="utf-8"), rel)
+    except ValueError as err:
+        return [str(err)]
+    vocabulary = {r.value for r in SensorRole}
+    problems = []
+    for kind, k in spec["kinds"].items():
+        for g in (k or {}).get("sensors") or []:
+            role = g["select"].get("role")
+            if role is not None and role not in vocabulary:
+                problems.append(f"{rel}：{kind} 的测点组 {g['name']} 用了词表里没有的角色 {role}（词表：{sorted(vocabulary)}）")
     return problems
 
 

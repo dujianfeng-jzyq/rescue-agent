@@ -39,7 +39,23 @@ def parse_collect_spec(text: str, where: str = "collect.yaml") -> dict[str, Any]
         for g in (k or {}).get("sensors") or []:
             if not g.get("name") or not isinstance(g.get("select"), dict):
                 raise ValueError(f"{where}：{kind} 的测点组要有 name 和 select")
+            _check_select(g["select"], f"{where}：{kind} 的测点组 {g['name']}")
     return spec
+
+
+SELECT_KEYS = {"role", "source", "panel"}
+
+
+def _check_select(sel: dict[str, Any], where: str) -> None:
+    """select 只认 role（语义角色）、source（测点来源）、panel（true：只取本工作面的测点）。
+    不再按测点编号取数：换矿时测点编号会变，角色由 describe_mine/list_sensors 如实回答。"""
+    if "ids" in sel:
+        raise ValueError(f"{where}：select 不再支持 ids，请改用 role（按语义角色取数）")
+    unknown = set(sel) - SELECT_KEYS
+    if unknown:
+        raise ValueError(f"{where}：select 里有不认识的键 {sorted(unknown)}（只认 {sorted(SELECT_KEYS)}）")
+    if not sel.get("role") and not sel.get("source"):
+        raise ValueError(f"{where}：select 至少要有 role 或 source")
 
 
 def mine_time_to_seconds(t: str) -> str:
@@ -64,13 +80,12 @@ def _sort_readings(rs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _select(sensors: list[dict[str, Any]], g: dict[str, Any], panel: str) -> list[dict[str, Any]]:
     sel = g["select"]
-    ids = [i.replace("{panel}", panel) for i in sel["ids"]] if sel.get("ids") is not None else None
     req = g.get("require_measurands") or []
     out = [
         s for s in sensors
-        if (ids is None or s["id"] in ids)
+        if (not sel.get("role") or s.get("role") == sel["role"])
         and (not sel.get("source") or s["source"] == sel["source"])
-        and (not sel.get("panel") or panel in s["id"])
+        and (not sel.get("panel") or s.get("panel") == panel)
         and all(m in s["measurands"] for m in req)
     ]  # fmt: skip
     return sorted(out, key=lambda s: s["id"])

@@ -16,7 +16,7 @@ import { mineTimeToSeconds } from './records.ts'
 
 export interface SensorGroupSpec {
   name: string
-  select: { source?: string; panel?: boolean; ids?: string[] }
+  select: { role?: string; source?: string; panel?: boolean }
   /** 测点必须同时具备的参数 */
   require_measurands?: string[]
   /** 取哪些参数的读数；缺省为测点的全部参数 */
@@ -47,6 +47,16 @@ export interface CollectSpec {
 
 export type CallTool = (tool: string, args: Record<string, unknown>) => Promise<any>
 
+const SELECT_KEYS = ['role', 'source', 'panel']
+
+/** select 只认 role（语义角色）、source（测点来源）、panel（true：只取本工作面的测点）；不再按测点编号取数。与 Python 侧同一规则。 */
+function checkSelect(sel: Record<string, unknown>, where: string): void {
+  if ('ids' in sel) throw new Error(`${where}：select 不再支持 ids，请改用 role（按语义角色取数）`)
+  const unknown = Object.keys(sel).filter((k) => !SELECT_KEYS.includes(k)).sort()
+  if (unknown.length) throw new Error(`${where}：select 里有不认识的键 [${unknown.join(', ')}]（只认 [${SELECT_KEYS.join(', ')}]）`)
+  if (!sel.role && !sel.source) throw new Error(`${where}：select 至少要有 role 或 source`)
+}
+
 export function parseCollectSpec(text: string, where = 'collect.yaml'): CollectSpec {
   const spec = parseYaml(text)
   if (!spec || typeof spec !== 'object') throw new Error(`${where}：不是映射`)
@@ -55,6 +65,7 @@ export function parseCollectSpec(text: string, where = 'collect.yaml'): CollectS
   for (const [kind, k] of Object.entries<any>(spec.kinds)) {
     for (const g of k.sensors ?? []) {
       if (!g.name || !g.select || typeof g.select !== 'object' || Array.isArray(g.select)) throw new Error(`${where}：${kind} 的测点组要有 name 和 select`)
+      checkSelect(g.select, `${where}：${kind} 的测点组 ${g.name}`)
     }
   }
   return spec as CollectSpec
@@ -79,11 +90,10 @@ export function minusHours(asOf: string, hours: number): string {
 }
 
 function selectSensors(all: any[], g: SensorGroupSpec, panel: string): any[] {
-  const ids = g.select.ids?.map((id) => id.replaceAll('{panel}', panel))
   return all
-    .filter((s) => (ids ? ids.includes(s.id) : true))
+    .filter((s) => (g.select.role ? s.role === g.select.role : true))
     .filter((s) => (g.select.source ? s.source === g.select.source : true))
-    .filter((s) => (g.select.panel ? String(s.id).includes(panel) : true))
+    .filter((s) => (g.select.panel ? s.panel === panel : true))
     .filter((s) => (g.require_measurands ?? []).every((m) => s.measurands.includes(m)))
     .sort((a, b) => cmp(a.id, b.id))
 }

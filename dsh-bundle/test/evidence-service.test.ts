@@ -12,9 +12,10 @@ const ORIGIN = { channel: 'web', trigger: 'chat', caller: '调度员' } as const
 
 // 假 mine_data：两个束管测点、一个上隅角测点
 const SENSORS = [
-  { id: 'BT-1201-G2', name: '束管 2', source: 'bundle_tube', measurands: ['CO', 'O2', 'CO2'], roadway_id: 'R1' },
-  { id: 'BT-1201-G1', name: '束管 1', source: 'bundle_tube', measurands: ['CO', 'O2', 'CO2'], roadway_id: 'R1' },
-  { id: 'SM-1201-UC', name: '上隅角', source: 'safety_monitoring', measurands: ['CO', 'CH4'], roadway_id: 'R2' },
+  { id: 'BT-1201-G2', name: '束管 2', source: 'bundle_tube', measurands: ['CO', 'O2', 'CO2'], roadway_id: 'R1', panel: '1201', role: 'goaf_gas_tube' },
+  { id: 'BT-1201-G1', name: '束管 1', source: 'bundle_tube', measurands: ['CO', 'O2', 'CO2'], roadway_id: 'R1', panel: '1201', role: 'goaf_gas_tube' },
+  { id: 'BT-1202-G1', name: '别的工作面的束管', source: 'bundle_tube', measurands: ['CO', 'O2', 'CO2'], roadway_id: 'R1', panel: '1202', role: 'goaf_gas_tube' },
+  { id: 'SM-1201-UC', name: '上隅角', source: 'safety_monitoring', measurands: ['CO', 'CH4'], roadway_id: 'R2', panel: '1201', role: 'upper_corner' },
 ]
 const reading = (sensor_id: string, measurand: string, value: number) => ({ sensor_id, measurand, ts: '2026-11-07T08:00:00', value, quality: 'ok' })
 async function mineData(tool: string, args: any): Promise<any> {
@@ -54,7 +55,7 @@ async function setup() {
   await writeFile(join(skill, 'scripts', 'max_co.py'), SCRIPT)
   await writeFile(
     join(skill, 'references', 'collect.yaml'),
-    'status: placeholder\nkinds:\n  check:\n    sensors:\n      - name: tubes\n        select: {source: bundle_tube, panel: true}\n        measurands: [CO]\n        required: true\n',
+    'status: placeholder\nkinds:\n  check:\n    sensors:\n      - name: tubes\n        select: {role: goaf_gas_tube, panel: true}\n        measurands: [CO]\n        required: true\n',
   )
   const recordDir = join(root, 'records')
   return { root, recordDir, ev: new Evidence({ skillsDir: join(root, 'skills'), recordDir, python: PYTHON, mineData }) }

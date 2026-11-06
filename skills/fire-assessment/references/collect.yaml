@@ -12,22 +12,22 @@ kinds:
   check:
     sensors: &sensors
       - name: tubes               # 采空区束管：预警等级、自燃阶段、标志气体、复燃征兆、爆炸三角形
-        select: {source: bundle_tube, panel: true}
+        select: {role: goaf_gas_tube, panel: true}
         window_h: 24
         required: true
       - name: upper_corner        # 上隅角
-        select: {ids: ["SM-{panel}-UC"]}
+        select: {role: upper_corner, panel: true}
         window_h: 24
         required: true
       - name: return              # 回风巷：与上隅角 CO 交叉校核
-        select: {ids: ["SM-{panel}-RET"]}
+        select: {role: return_airway, panel: true}
         window_h: 24
         required: true
       - name: intake              # 进风巷（辅助）
-        select: {ids: ["SM-{panel}-IN"]}
+        select: {role: intake_airway, panel: true}
         window_h: 24
       - name: goaf_temperature    # 采空区测温（辅助；爆炸三角形的温度）
-        select: {source: temperature, panel: true}
+        select: {role: goaf_temperature, panel: true}
         window_h: 24
       - name: methane             # 全矿巷道甲烷：第75条实时报警（人员可能所在的巷道）
         select: {source: safety_monitor}

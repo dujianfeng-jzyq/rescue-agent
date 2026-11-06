@@ -86,7 +86,7 @@ kinds:                          # 一份清单可以有多种采集，如 check�
   check:
     sensors:                    # 测点组
       - name: tubes             # 证据里 groups.<name>
-        select: {source: bundle_tube, panel: true}   # 按来源、按工作面编号（测点 id 含工作面），或 ids: ["SM-{panel}-UC"]
+        select: {role: goaf_gas_tube, panel: true}   # 按语义角色（契约 SensorRole；list_sensors 的 role）、可选按来源 source；panel: true 只取本工作面（测点的 panel 字段）。不按测点编号取数
         require_measurands: [O2, CO2]                # 可选：测点必须同时具备的参数
         measurands: [CO, O2, CH4, C2H4, C2H2, H2, CO2, N2]   # 可选：只取这些参数（缺省为测点的全部参数）
         window_h: 6             # 可选：历史窗口（矿井小时）；缺省只取最新值

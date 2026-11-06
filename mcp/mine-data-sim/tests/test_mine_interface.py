@@ -9,7 +9,7 @@ from datetime import timedelta
 import pytest
 import uvicorn
 from rescue_contract.client import MineData, MineDataError
-from rescue_contract.conformance import check_capabilities, check_description, check_tools, run_all
+from rescue_contract.conformance import check_tools, run_all
 from rescue_contract.interface import ALL_TOOLS, FEATURES, REQUIRED_TOOLS, WRITE_TOOLS, tools_for
 from rescue_contract.models import (
     ActionKind,
@@ -68,7 +68,7 @@ def test_actions_checks_are_off_by_default():
 
 
 def test_interface_table_is_consistent():
-    assert WRITE_TOOLS == {"send_notice", "dispatch_order", "submit_treatment"}
+    assert {"send_notice", "dispatch_order", "submit_treatment"} == WRITE_TOOLS
     assert REQUIRED_TOOLS < ALL_TOOLS
     assert tools_for(FEATURES) == ALL_TOOLS
     assert tools_for([]) == REQUIRED_TOOLS  # 没有任何可选功能：不要求 get_action_status

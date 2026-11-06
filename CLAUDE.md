@@ -5,6 +5,7 @@
 - 方案（为什么这样做）：`docs/implementation-plan.md`（主版本；同名 PDF 是第一版的带图快照）
 - **第三版设计（草稿，`v3` 分支）**：`docs/design-v3.md`（rescue-agent + rescue-mine、常驻监听与事件、专家型智能体）
 - **第二版设计（实施中，`v2` 分支）**：`docs/design-v2.md`，决策见 `docs/decisions/0007-skills-plugins-fixed-flows.md`
+- **rescue-mine 接口说明（代码生成，`make interface-doc`）**：`docs/rescue-mine-interface.md`
 - 架构（怎么连起来）：`docs/architecture.md`（第二版；第 8 节是过渡期）；设计决策：`docs/decisions/`
 - 真实 DSH 上的验证记录（含已知问题）：`docs/validation-checklist.md`
 - 第一版的工作流与智能体分工（P4 后停用）：`docs/workflow-design.md`，决策见 ADR 0006
@@ -28,6 +29,8 @@ python3 scripts/sim.py state|reset <场景>|advance <小时>|apply <处置>   # 
 make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API_KEY）
 make demo-up / demo-down / demo-reset   # 演示环境（Docker）：网页端 13080、控制台 13090/console，数据在 var/demo/，令牌在 var/demo/tokens.env
 make skills-check             # 第二版技能自检（结构、import、样例）
+make interface-doc            # 重新生成 rescue-mine 接口说明（工具或模型改动后；测试会检查它是最新的）
+python -m rescue_contract.conformance <URL> [--with-actions]   # 接口一致性检查；--with-actions 会真的执行通知/调度/处置，只对模拟矿井加
 python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清单取一次证据（Python 采集小工具）
 ```
 
@@ -54,7 +57,7 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 2. **只有 `rescue-commander` 挂载 actions**；其他预设只读（第二版只有这一个预设，固定流程的阶段子 Agent 用 `tools.guard` 限制为只能提交结果）。`scripts/check_patches.py` 会检查。指令必须引用研判快照（`snapshot_id`，第二版改为记录 `record_id`），现场条件、预警等级按快照或记录核对（`rescue_contract/validation.py`），不能由模型填写。
 3. **红线规则只在 `rescue_contract/redlines.py` 实现一次**（第二版不迁入技能）。新增规则：改规则表 + `contract/tests/test_redlines.py` + `skills/compliance/red-line-rules/SKILL.md`（有同步测试；第二版是 `plan-compliance` 技能）。知识库插件需要的条号由规则表导出，不在 TS 里再写一遍。未知值按不通过处理（fail closed）。
 4. **智能体看不到模拟器真值**。`/sim/state` 的 truth、读数设置、倍速只给控制台和评测；不要通过 MCP 工具或证据插件暴露。DSH 不持有 `/sim` 控制令牌。
-5. **mine-data 的工具集合就是真实矿井适配器要实现的接口**。增删工具要同步 `rescue_contract/conformance.py`；第二版的采集清单（技能的 `references/collect.yaml`）只能用这些工具。
+5. **mine-data 的工具集合就是真实矿井适配器要实现的接口（rescue-mine，第三版）**。接口表在 `rescue_contract/interface.py`（工具、分组、读写、可选功能），增删工具要改它、同步 `rescue_contract/conformance.py`，并 `make interface-doc`；采集清单（技能的 `references/collect.yaml`）只能用这些工具，且按角色取数（`select: {role, source, panel}`），不写测点编号。写入类工具另认写入令牌（`RESCUE_MCP_MINE_ACT_TOKEN`）。
 6. 阈值（`fire-model/.../thresholds.yaml`）、场景参数、评测期望都是**开发占位值**。可以为了测试调整，但要在提交说明里写明，并且不要声称它们“正确”。
 7. MCP Python SDK 是 2.x：`from mcp.server.mcpserver import MCPServer`（没有 FastMCP）。工具返回 pydantic 模型或 `dict[str, Any]`，不要返回裸 `dict`（会丢结构化输出）。输入错误抛 `ToolError`（`mcp.server.mcpserver.exceptions`）：其他异常的说明传不到 Agent（`mcp/tests/test_tool_errors.py`）。
 8. DSH 版本锁定在 0.2.1-rc.4。DSH 的 `DSH_*` 环境变量必须 export，写在 `.env` 里不生效。
@@ -102,3 +105,4 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 ## 第三版进度（`v3` 分支）
 
 - P0（2026-11-05）：V1、V2 通过（验证清单 #24，验证代码在 `spike/v3-wake` 分支，不合入）：插件扫描事件目录，用 `ctx.sessionController.create/resolveAgent` + `agent.followup` 在没有任何网页端连接时唤醒值班会话，冷会话、热会话、从零新建三条路径都成立，退路不启用。注意：消息来源 `kind` 不能是 `plugin`（用 `rescue-sentinel`）；投递是至少一次，事件要带编号让智能体去重；值班会话要用 `workspaceId` 放进默认工作区并命名（未验证）。下一步 P1（rescue-mine 接口）。
+- P1（2026-11-05，进行中的 `v3` 分支）：rescue-mine 接口。契约 0.10.0：`SensorPoint` 加 `panel`、`role`（`SensorRole` 占位词表），新增 `MineCapabilities`、`MineDescription`、`MineAlarm`、`EquipmentStatus`、`NoticeRequest`/`DispatchRequest`/`TreatmentRequest`、`MineReceipt`；接口表 `rescue_contract/interface.py`（接口版本 1.0.0，与数据契约版本分开）。mine-sim 新增 8 个工具：`get_capabilities`、`describe_mine`、`get_alarms`、`get_equipment_status`、`send_notice`、`dispatch_order`、`submit_treatment`、`get_action_status`（幂等 key；调度模拟异步回执，执行中 30 个矿井分钟后完成，占位值）。写入类工具认写入令牌（中间件按 JSON-RPC 的工具名区分，批量请求里夹带写入调用同样被拒；写入令牌也能读）。conformance 按接口表检查（工具集合与 `get_capabilities` 声明一致、拓扑与角色一致、报警设备回执），写入类检查默认关闭。采集清单改按角色取数，Python 和 TS 两端同一规则（`ids` 被拒绝，`panel: true` 按测点的 `panel` 字段匹配），技能自检校验角色在词表里。`docs/rescue-mine-interface.md` 由代码生成。验收：`make check` 通过（Python 330、TS 117），基线评测 6/6 且各等级首次到达小时数与改动前逐项相同，技能自检 56/56。服务名仍是 `mine_data`（端口 8101、`RESCUE_MCP_MINE_DATA_URL` 不变），没有改名以免牵动部署；actions 目前仍经 `/sim/interventions` 转发处置，P2 改为 guard 调 `submit_treatment`。

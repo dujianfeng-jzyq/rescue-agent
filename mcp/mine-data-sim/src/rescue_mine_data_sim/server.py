@@ -219,8 +219,8 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
     def get_events(hours: float = 24) -> list[MineEvent]:
         """最近若干小时安全监控系统自身产生的事件：测点超报警值、测点故障（无数据）。
 
-        这是矿井监控系统的记录，不包含 fire_model 计算出的红线报警（check_realtime_alarms）；
-        后者没有出现在这里是正常的，不代表报警未留痕。"""
+        这是矿井监控系统的记录，不包含 rescue-agent 按红线规则重算出的报警（fire-assessment 的 alarms）；
+        后者没有出现在这里是正常的，不代表报警未留痕。矿井报警平台的报警（含确认状态）用 get_alarms。"""
         e = sim.engine
         return e.events(e.now_h() - hours, e.now_h())
 

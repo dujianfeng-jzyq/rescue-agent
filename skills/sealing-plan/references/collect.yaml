@@ -10,22 +10,22 @@ kinds:
   plan:
     sensors:
       - name: tubes               # 采空区束管：爆炸三角形（爆炸危险性、氧浓度）、预警等级
-        select: {source: bundle_tube, panel: true}
+        select: {role: goaf_gas_tube, panel: true}
         window_h: 24
         required: true
       - name: upper_corner        # 上隅角
-        select: {ids: ["SM-{panel}-UC"]}
+        select: {role: upper_corner, panel: true}
         window_h: 24
         required: true
       - name: return              # 回风巷
-        select: {ids: ["SM-{panel}-RET"]}
+        select: {role: return_airway, panel: true}
         window_h: 24
         required: true
       - name: intake              # 进风巷（辅助）
-        select: {ids: ["SM-{panel}-IN"]}
+        select: {role: intake_airway, panel: true}
         window_h: 24
       - name: goaf_temperature    # 采空区测温（爆炸三角形的温度）
-        select: {source: temperature, panel: true}
+        select: {role: goaf_temperature, panel: true}
         window_h: 24
       - name: methane             # 巷道甲烷：方案现场条件的甲烷浓度和是否上升（取本工作面的测点）
         select: {source: safety_monitor}
