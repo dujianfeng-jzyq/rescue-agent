@@ -11,7 +11,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import models
+from . import action_policy, models
 from .redlines import RULES
 
 # 红线规则所依据的规程（RULES 的条号都指这部规程）
@@ -76,11 +76,22 @@ def render() -> dict[str, str]:
     return out
 
 
+# DSH bundle 运行时读取的导出（审批插件按它决定哪些工具弹确认）：放在 bundle 的 data/ 下随包发布
+BUNDLE_DATA = Path(__file__).parents[4] / "dsh-bundle" / "data"
+
+
+def render_bundle_data() -> dict[str, str]:
+    return {"action-policy.json": json.dumps(action_policy.export(), ensure_ascii=False, indent=2) + "\n"}
+
+
 def main() -> None:
     target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parents[2] / "schema"
     target.mkdir(parents=True, exist_ok=True)
     for filename, text in render().items():
         (target / filename).write_text(text, encoding="utf-8")
+    if len(sys.argv) <= 1:  # 导出到默认目录时同时更新 bundle 的数据文件
+        for filename, text in render_bundle_data().items():
+            (BUNDLE_DATA / filename).write_text(text, encoding="utf-8")
     print(f"exported {len(EXPORTED)} schemas and redline-articles.json to {target}")
 
 

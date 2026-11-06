@@ -1,0 +1,66 @@
+{
+  "$comment": "由 rescue_contract.action_policy 导出；没有登记的工具按 C 级处理",
+  "levels": {
+    "A": "只读，自动",
+    "B": "内部提示，自动",
+    "C": "对外动作：守卫校验 + 人工批准"
+  },
+  "policies": [
+    {
+      "tool": "publish_warning",
+      "level": "C",
+      "name": "发布预警等级",
+      "confirmer": "通风部门负责人",
+      "approval_timeout_min": 10,
+      "escalate_to": "值班长"
+    },
+    {
+      "tool": "escalate_emergency",
+      "level": "C",
+      "name": "升级为应急响应",
+      "confirmer": "总工程师或矿长",
+      "approval_timeout_min": 15,
+      "escalate_to": "矿长"
+    },
+    {
+      "tool": "notify_evacuation",
+      "level": "C",
+      "name": "发布补充撤人名单",
+      "confirmer": "调度员",
+      "approval_timeout_min": 5,
+      "escalate_to": "值班长"
+    },
+    {
+      "tool": "issue_dispatch_order",
+      "level": "C",
+      "name": "下发物资调度单",
+      "confirmer": "指挥部指定负责人",
+      "approval_timeout_min": 15,
+      "escalate_to": "总指挥"
+    },
+    {
+      "tool": "issue_sealing_plan",
+      "level": "C",
+      "name": "下发封闭方案",
+      "confirmer": "总指挥 + 救护队带队指挥员",
+      "approval_timeout_min": 30,
+      "escalate_to": "总指挥"
+    },
+    {
+      "tool": "precheck_plan",
+      "level": "A",
+      "name": "方案红线自查",
+      "confirmer": null,
+      "approval_timeout_min": null,
+      "escalate_to": null
+    },
+    {
+      "tool": "query_last_issued",
+      "level": "A",
+      "name": "查询最近一次下发",
+      "confirmer": null,
+      "approval_timeout_min": null,
+      "escalate_to": null
+    }
+  ]
+}

@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { type ApprovalConfig, askVerdict, classify, DEFAULT_CONFIRMERS, type FetchLike, precheck } from '../src/approval/policy.ts'
+import { loadPolicies } from '../src/approval/index.ts'
+import { type ActionPolicy, type ApprovalConfig, askVerdict, classify, type FetchLike, levelOf, precheck } from '../src/approval/policy.ts'
 
+// 用契约导出的真实分级表（data/action-policy.json），测试和线上用同一份
+const policies = loadPolicies()
 const config: ApprovalConfig = {
   gatedServer: 'actions',
-  exemptPrefixes: ['check_'],
+  policies,
   precheckUrl: 'http://precheck.test/redlines/check',
   precheckTimeoutMs: 200,
-  confirmers: DEFAULT_CONFIRMERS,
 }
 
 const signal = new AbortController().signal
@@ -25,20 +27,42 @@ function fakeFetch(respond: (body: { tool: string }) => { status?: number; json:
   return { fetch, calls }
 }
 
-describe('classify', () => {
-  it('只拦 actions 服务的指令类工具', () => {
+describe('classify（动作分级：C 级弹确认，A、B 级不弹，未登记按 C 级）', () => {
+  it('只拦 guard 里 C 级的对外动作', () => {
     assert.deepEqual(classify('mcp__actions__issue_sealing_plan', config), { gated: true, rawName: 'issue_sealing_plan' })
-    assert.deepEqual(classify('mcp__actions__check_plan_redlines', config), { gated: false })
     assert.deepEqual(classify('mcp__fire_model__assess_warning_level', config), { gated: false })
     assert.deepEqual(classify('subagent', config), { gated: false })
+  })
+  it('A 级只读工具不弹确认（不再靠名字前缀）', () => {
+    assert.deepEqual(classify('mcp__actions__precheck_plan', config), { gated: false })
+    assert.deepEqual(classify('mcp__actions__query_last_issued', config), { gated: false })
+  })
+  it('没有登记的工具按 C 级处理（fail closed），哪怕名字像只读', () => {
+    assert.deepEqual(classify('mcp__actions__query_something_new', config), { gated: true, rawName: 'query_something_new' })
+    assert.deepEqual(classify('mcp__actions__precheck_new_thing', config), { gated: true, rawName: 'precheck_new_thing' })
+    assert.equal(levelOf('brand_new_action', policies), 'C')
+  })
+  it('B 级（内部提示）不弹确认', () => {
+    const withB: ActionPolicy[] = [...policies, { tool: 'notify_duty_officer', level: 'B', name: '值班提示' }]
+    assert.deepEqual(classify('mcp__actions__notify_duty_officer', { gatedServer: 'actions', policies: withB }), { gated: false })
+  })
+  it('五个对外动作都是 C 级，每个都有确认人和批准超时', () => {
+    const c = policies.filter((p) => p.level === 'C')
+    assert.deepEqual(c.map((p) => p.tool).sort(), ['escalate_emergency', 'issue_dispatch_order', 'issue_sealing_plan', 'notify_evacuation', 'publish_warning'])
+    for (const p of c) {
+      assert.ok(p.confirmer, `${p.tool} 缺确认人`)
+      assert.ok((p.approval_timeout_min ?? 0) > 0, `${p.tool} 缺批准超时`)
+      assert.ok(p.escalate_to, `${p.tool} 缺超时升级对象`)
+    }
   })
 })
 
 describe('askVerdict', () => {
   it('提示中写明确认人', () => {
-    const v = askVerdict('issue_firefighting_plan', config)
+    const v = askVerdict('escalate_emergency', config)
     assert.equal(v.kind, 'ask')
-    assert.match(v.kind === 'ask' ? v.reason : '', /总工程师/)
+    assert.match(v.kind === 'ask' ? v.reason : '', /总工程师或矿长/)
+    assert.match(v.kind === 'ask' ? v.reason : '', /升级为应急响应/)
   })
   it('未配置的工具也要求确认', () => {
     const v = askVerdict('some_new_action', config)
@@ -123,9 +147,5 @@ describe('ApprovalSummary 生成确认提示', () => {
     assert.match(v.reason, /✓ 预警等级：与计算结果一致（红色）/)
     assert.match(v.reason, /请确认人把关：与计算结果不一致/)
     assert.doesNotMatch(v.reason, /secret/)
-  })
-
-  it('只读自查工具 precheck_plan 默认不拦', () => {
-    assert.deepEqual(classify('mcp__actions__precheck_plan', { gatedServer: 'actions', exemptPrefixes: ['precheck_'] }), { gated: false })
   })
 })

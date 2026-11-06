@@ -293,3 +293,20 @@ def test_query_last_issued_only_sees_issued_plans(world):
     out = world.call("query_last_issued", {"panel": "1201"}).structured_content
     assert out["found"] and out["issued_at"] == "2026-11-04T20:00:00" and out["plan_id"] == "SP-1"
     assert world.call("query_last_issued", {"panel": "1202"}).structured_content["found"] is False
+
+
+# ── 动作分级：guard 的工具与分级表一致 ──
+
+
+def test_every_guard_tool_is_in_the_action_policy(world):
+    """每个工具都登记了分级、登记的工具都存在；C 级是对外动作，A 级是只读（不写台账、不碰矿井）。"""
+    from rescue_contract.action_policy import POLICIES, ActionLevel
+
+    assert {p.tool for p in POLICIES} == EXPECTED_TOOLS
+    assert {p.tool for p in POLICIES if p.level == ActionLevel.A} == {"precheck_plan", "query_last_issued"}
+
+
+def test_read_only_tools_do_not_touch_the_mine_or_the_ledger(world, sample_plan):
+    world.call("query_last_issued", {"panel": "1201"})
+    world.call("precheck_plan", {"tool": "issue_sealing_plan", "plan": sample_plan})
+    assert world.rows() == [] and world.holder.engine.action_log == [] and world.holder.notices == [] and world.holder.dispatches == []

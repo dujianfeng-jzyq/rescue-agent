@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
+from .action_policy import ACTION_NAMES
 from .models import (
     ApprovalCheck,
     ApprovalSummary,
@@ -192,15 +193,6 @@ def plan_from_record(
     return plan, [], [str(x) for x in r.get("human_items") or []], checks
 
 
-ACTION_NAMES = {
-    "publish_warning": "发布预警等级",
-    "escalate_emergency": "升级为应急响应",
-    "notify_evacuation": "发布补充撤人名单",
-    "issue_dispatch_order": "下发物资调度单",
-    "issue_sealing_plan": "下发封闭方案",
-}
-
-
 def _summary(
     tool: str, arguments: dict[str, Any], problems: list[str], notes: list[str], checks: list[ApprovalCheck], action: str | None = None
 ) -> dict[str, Any]:
@@ -248,6 +240,7 @@ def precheck(tool: str, arguments: dict[str, Any], now: datetime | None, records
 
 
 __all__ = [
+    "ACTION_NAMES",
     "CONTEXT_MAX_AGE",
     "PLAN_TOOLS",
     "RECORD_SOURCES",

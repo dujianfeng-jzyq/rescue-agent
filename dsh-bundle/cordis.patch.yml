@@ -57,22 +57,13 @@
       name: '@rescue/dsh-bundle/approval'
       config:
         gatedServer: actions
-        exemptPrefixes: [precheck_, query_]   # 只读工具（precheck_plan 自查、query_last_issued 台账查询；固定流程内部也调）不弹确认；审计仍记录
+        # 哪些工具弹确认由动作分级表决定（data/action-policy.json，契约 rescue_contract.action_policy 导出）：C 级弹确认，A、B 级不弹；未登记按 C 级
         precheckUrl: !!js "process.env.RESCUE_REDLINE_CHECK_URL ?? 'http://127.0.0.1:8106/redlines/check'"
         precheckTimeoutMs: 5000
         token: !!js "process.env.RESCUE_MCP_ACTIONS_TOKEN || process.env.RESCUE_MCP_TOKEN"   # actions 的令牌（预检接口）
-        confirmers:
-          publish_warning: 通风部门负责人
-          issue_firefighting_plan: 总工程师
-          escalate_emergency: 总工程师或矿长
-          notify_evacuation: 调度员
-          issue_dispatch_order: 指挥部指定负责人
-          issue_sealing_plan: 总指挥 + 救护队带队指挥员
-          approve_unsealing: 总指挥
 
     - id: rescue-audit
       name: '@rescue/dsh-bundle/audit'
       config:
         path: !!js "process.env.RESCUE_AUDIT_LOG ?? (process.env.RESCUE_HOME ?? process.cwd()) + '/var/audit/tool-actions.jsonl'"
         gatedServer: actions
-        exemptPrefixes: []

@@ -5,7 +5,7 @@
 - 方案（为什么这样做）：`docs/implementation-plan.md`（主版本；同名 PDF 是第一版的带图快照）
 - **第三版设计（草稿，`v3` 分支）**：`docs/design-v3.md`（rescue-agent + rescue-mine、常驻监听与事件、专家型智能体）
 - **第二版设计（实施中，`v2` 分支）**：`docs/design-v2.md`，决策见 `docs/decisions/0007-skills-plugins-fixed-flows.md`
-- **rescue-mine 接口说明（代码生成，`make interface-doc`）**：`docs/rescue-mine-interface.md`
+- **rescue-mine 接口说明（代码生成，`make interface-doc`）**：`docs/rescue-mine-interface.md`；第三版 rescue-mine/guard/动作分级的决策：`docs/decisions/0008-guard-and-rescue-mine.md`
 - 架构（怎么连起来）：`docs/architecture.md`（第二版；第 8 节是过渡期）；设计决策：`docs/decisions/`
 - 真实 DSH 上的验证记录（含已知问题）：`docs/validation-checklist.md`
 - 第一版的工作流与智能体分工（P4 后停用）：`docs/workflow-design.md`，决策见 ADR 0006
@@ -23,7 +23,7 @@ make check                    # 提交前：lint + 测试 + patch 离线校验 +
 make up / make down / make smoke   # 启停 MCP 服务（mine_data、actions）并冒烟
 make eval                     # 确定性基线评测（不经过大模型，运行 fire-assessment 的技能脚本）
 make eval-agent ARGS="--url '<DSH 地址带 token>' --model deepseek-official/deepseek-flash --repeat 3"   # 智能体端到端评测（需先 make dev-eval）
-make dev-eval                 # 同 make dev，但指令台账、研判快照、值守事件和审计写到 var/eval/（评测用例会放行指令）
+make dev-eval                 # 同 make dev，但指令台账、记录、值守事件和审计写到 var/eval/（评测用例会放行指令）
 make schema                   # 契约模型改动后重新导出 JSON Schema（CI 会检查）
 python3 scripts/sim.py state|reset <场景>|advance <小时>|apply <处置>   # 模拟控制台
 make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API_KEY）
@@ -42,19 +42,19 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 
 - `skills/<技能名>/`：专家经验和算法的唯一来源。SKILL.md（流程）、`scripts/`（纯函数，`--input-file`/`--output-file`，不访问网络和凭据）、`templates/`、`references/`（参数，标注占位值）、`tests/cases/`（自检样例，CI 运行）。
 - `dsh-bundle/src/evidence/`（证据插件：采集、`runScript`、记录、`check_mine`）、`src/fire-loop/`（固定流程）、`src/knowledge/`（知识库插件、条文索引）、`src/approval`（红线预检 + 人工确认）、`src/audit`；`presets/commander.patch.yml`（唯一主预设）、`cordis.patch.yml`。插件只做编排，不写领域判据。对 DSH 类型的引用只放在 `src/adapter/dsh.ts`。
-- 记录（`Record`，契约 0.9.0）：只有 DSH 进程（证据插件）能写，bash 沙箱和 actions 只读；指令引用 `record_id`。
+- 记录（`Record`，契约 0.9.0）：只有 DSH 进程（证据插件）能写，bash 沙箱和 guard（actions）只读；指令引用 `record_id`。
 - `mcp/contract/`：数据契约（pydantic）、红线引擎 `redlines.py`、方案校验 `validation.py`、`MineData` 客户端、一致性测试、技能自检（`rescue_contract.skills`）、模板与规范化 JSON。**契约是各工作线之间的边界**，改 `models.py` 要谨慎并 `make schema`。
-- `mcp/mine-data-sim`（模拟矿井，含演示控制台）、`mcp/actions`（指令出口与台账）：各自 `src/rescue_<名>/server.py` 里 `build_server()`，用 `rescue_contract.serving.serve` 启动（streamable-http，端口 8101、8106）。
+- `mcp/mine-data-sim`（模拟矿井，rescue-mine 接口的一个实现，含演示控制台）、`mcp/actions`（第三版起是 **guard 守卫服务**：对外动作的唯一通道，校验后经 rescue-mine 执行并写台账；服务名、端口、工具名没变）：各自 `src/rescue_<名>/server.py` 里 `build_server()`，用 `rescue_contract.serving.serve` 启动（streamable-http，端口 8101、8106）。
 - `scenarios/*.yaml`：标准场景 = 演示脚本 = 评测集 = 回归集。
 - `eval/baseline.py` + `expectations.yaml`：确定性回归基线（运行技能脚本）。
 - `eval/agent/`：智能体端到端评测。`cases.yaml` 用例（`approvals` 指定人工确认时放行哪些指令，其余拒绝），`run.py` 经 DSH 网页端（Playwright）提问并点确认，`grade.py` 读 `.dsh-home/sessions` 会话日志判定（可 `grade.py <会话 id>` 离线判定、`run.py --regrade` 按新规则重判）。
-- 第一版的 Python 服务（ventnet、fire-model、dispatch、kb、workflow）已于 2026-11-04 从工作树删除，见 `docs/architecture.md` 第 8 节；契约里的研判快照和 `grade.py` 的第一版兼容留待第三版清理。
+- 第一版的 Python 服务（ventnet、fire-model、dispatch、kb、workflow）已于 2026-11-04 从工作树删除，见 `docs/architecture.md` 第 8 节；契约里的研判快照已在第三版 P2 删除，`grade.py` 的其余第一版兼容留待第三版 P5 清理。
 
 
 ## 必须遵守的约定
 
 1. **数值只来自代码计算**。“代码”指 MCP 服务和技能脚本（第二版起以技能脚本为准）。Agent 提示词和 SKILL.md 的正文里不写阈值、不让模型估算；新的判断逻辑写进技能脚本（或迁移完成前的 MCP 服务）并加自检样例或测试。计数、合计、差值、汇总结论也算：评测发现 Agent 会自己数人数、相减算升温、汇总多个测点的结论，这些都要由工具给出（如 `threatened_personnel` 的 count、`gas_trend` 的 change、`evaluate_effect_panel` 的 counts/overall）。智能体在沙箱里自己运行脚本的结果只作参考，不能被指令引用。
-2. **只有 `rescue-commander` 挂载 actions**；其他预设只读（第二版只有这一个预设，固定流程的阶段子 Agent 用 `tools.guard` 限制为只能提交结果）。`scripts/check_patches.py` 会检查。指令必须引用研判快照（`snapshot_id`，第二版改为记录 `record_id`），现场条件、预警等级按快照或记录核对（`rescue_contract/validation.py`），不能由模型填写。
+2. **只有 `rescue-commander` 挂载 actions（guard）**；其他预设只读（第二版只有这一个预设，固定流程的阶段子 Agent 用 `tools.guard` 限制为只能提交结果）。`scripts/check_patches.py` 会检查。指令必须引用记录（`record_id`；第一版的 `snapshot_id` 已在第三版 P2 删除），预警等级、升级结论、封闭方案按记录核对（`rescue_contract/validation.py`），不能由模型填写。**哪些指令要弹人工确认由动作分级表决定**（`rescue_contract/action_policy.py`，导出为 `dsh-bundle/data/action-policy.json`；改表后 `make schema`）：C 级（对外动作）弹确认，A、B 级不弹，**没有登记的工具按 C 级**。guard 之外没有任何途径写矿井：写入类工具要写入令牌，只有 guard 持有。
 3. **红线规则只在 `rescue_contract/redlines.py` 实现一次**（第二版不迁入技能）。新增规则：改规则表 + `contract/tests/test_redlines.py` + `skills/compliance/red-line-rules/SKILL.md`（有同步测试；第二版是 `plan-compliance` 技能）。知识库插件需要的条号由规则表导出，不在 TS 里再写一遍。未知值按不通过处理（fail closed）。
 4. **智能体看不到模拟器真值**。`/sim/state` 的 truth、读数设置、倍速只给控制台和评测；不要通过 MCP 工具或证据插件暴露。DSH 不持有 `/sim` 控制令牌。
 5. **mine-data 的工具集合就是真实矿井适配器要实现的接口（rescue-mine，第三版）**。接口表在 `rescue_contract/interface.py`（工具、分组、读写、可选功能），增删工具要改它、同步 `rescue_contract/conformance.py`，并 `make interface-doc`；采集清单（技能的 `references/collect.yaml`）只能用这些工具，且按角色取数（`select: {role, source, panel}`），不写测点编号。写入类工具另认写入令牌（`RESCUE_MCP_MINE_ACT_TOKEN`）。
@@ -105,4 +105,5 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 ## 第三版进度（`v3` 分支）
 
 - P0（2026-11-05）：V1、V2 通过（验证清单 #24，验证代码在 `spike/v3-wake` 分支，不合入）：插件扫描事件目录，用 `ctx.sessionController.create/resolveAgent` + `agent.followup` 在没有任何网页端连接时唤醒值班会话，冷会话、热会话、从零新建三条路径都成立，退路不启用。注意：消息来源 `kind` 不能是 `plugin`（用 `rescue-sentinel`）；投递是至少一次，事件要带编号让智能体去重；值班会话要用 `workspaceId` 放进默认工作区并命名（未验证）。下一步 P1（rescue-mine 接口）。
-- P1（2026-11-05，进行中的 `v3` 分支）：rescue-mine 接口。契约 0.10.0：`SensorPoint` 加 `panel`、`role`（`SensorRole` 占位词表），新增 `MineCapabilities`、`MineDescription`、`MineAlarm`、`EquipmentStatus`、`NoticeRequest`/`DispatchRequest`/`TreatmentRequest`、`MineReceipt`；接口表 `rescue_contract/interface.py`（接口版本 1.0.0，与数据契约版本分开）。mine-sim 新增 8 个工具：`get_capabilities`、`describe_mine`、`get_alarms`、`get_equipment_status`、`send_notice`、`dispatch_order`、`submit_treatment`、`get_action_status`（幂等 key；调度模拟异步回执，执行中 30 个矿井分钟后完成，占位值）。写入类工具认写入令牌（中间件按 JSON-RPC 的工具名区分，批量请求里夹带写入调用同样被拒；写入令牌也能读）。conformance 按接口表检查（工具集合与 `get_capabilities` 声明一致、拓扑与角色一致、报警设备回执），写入类检查默认关闭。采集清单改按角色取数，Python 和 TS 两端同一规则（`ids` 被拒绝，`panel: true` 按测点的 `panel` 字段匹配），技能自检校验角色在词表里。`docs/rescue-mine-interface.md` 由代码生成。验收：`make check` 通过（Python 330、TS 117），基线评测 6/6 且各等级首次到达小时数与改动前逐项相同，技能自检 56/56。服务名仍是 `mine_data`（端口 8101、`RESCUE_MCP_MINE_DATA_URL` 不变），没有改名以免牵动部署；actions 目前仍经 `/sim/interventions` 转发处置，P2 改为 guard 调 `submit_treatment`。
+- P1（2026-11-05，进行中的 `v3` 分支）：rescue-mine 接口。契约 0.10.0：`SensorPoint` 加 `panel`、`role`（`SensorRole` 占位词表），新增 `MineCapabilities`、`MineDescription`、`MineAlarm`、`EquipmentStatus`、`NoticeRequest`/`DispatchRequest`/`TreatmentRequest`、`MineReceipt`；接口表 `rescue_contract/interface.py`（接口版本 1.0.0，与数据契约版本分开）。mine-sim 新增 8 个工具：`get_capabilities`、`describe_mine`、`get_alarms`、`get_equipment_status`、`send_notice`、`dispatch_order`、`submit_treatment`、`get_action_status`（幂等 key；调度模拟异步回执，执行中 30 个矿井分钟后完成，占位值）。写入类工具认写入令牌（中间件按 JSON-RPC 的工具名区分，批量请求里夹带写入调用同样被拒；写入令牌也能读）。conformance 按接口表检查（工具集合与 `get_capabilities` 声明一致、拓扑与角色一致、报警设备回执），写入类检查默认关闭。采集清单改按角色取数，Python 和 TS 两端同一规则（`ids` 被拒绝，`panel: true` 按测点的 `panel` 字段匹配），技能自检校验角色在词表里。`docs/rescue-mine-interface.md` 由代码生成。验收：`make check` 通过（Python 330、TS 117），基线评测 6/6 且各等级首次到达小时数与改动前逐项相同，技能自检 56/56。服务名仍是 `mine_data`（端口 8101、`RESCUE_MCP_MINE_DATA_URL` 不变），没有改名以免牵动部署；actions 在 P1 时仍经 `/sim/interventions` 转发处置，P2 已改为 guard 调 `submit_treatment`。
+- P2（2026-11-05）：守卫拆分（ADR 0008）。guard（`mcp/actions`）校验通过后调用 rescue-mine 的 `send_notice`（预警、升级、撤人通知）、`dispatch_order`（调度单）、`submit_treatment`（方案按步骤逐条、撤人涉及的巷道）；不再调 `/sim/interventions`，不再持有模拟器控制令牌（docker 里 actions 改持 `RESCUE_MCP_MINE_ACT_TOKEN`，`scripts/demo.sh` 给旧的 `var/demo/tokens.env` 补这一行）。台账每条带 `record_ids`、`origin`（取自记录）、`mine_receipts`、`incident_id`（P3 起填）；矿井中途失败记 `failed` 和已执行的回执，失败的不算已下发；幂等键由指令内容生成，重复提交矿井只执行一次；矿井拒绝执行的步骤（如监测）列在 `mine_not_executed`。撤人名单、调度单在预检阶段按矿井的人员定位、网络、物资台账核对（调度不超库存）。契约 0.11.0：删除 `Snapshot`、`SnapshotKind`、`HumanInput`、各指令的 `snapshot_id`；`WarningNotice`、`Escalation` 的 `record_id` 必填；`TreatmentRequest.panel` 可选。**删除 `issue_firefighting_plan`、`approve_unsealing`**（只能按第一版草案快照核对，没有第二版流程）：启封审批和防灭火方案下发要随新流程按记录重做（演示故事线第 7 步需要）。`issue_sealing_plan` 只收 `record_id`；`precheck_plan` 去掉 `redlines_only`（现在只查类型和红线）。动作分级表 `action_policy.py` 含确认人、批准超时、超时升级对象（占位值，P3 的监听器执行超时升级）；审批插件按它放行，不再按名字前缀；审计插件记录 guard 的全部调用。评测 `snapshot_referenced` 改名 `record_referenced`。验收：`make check` 通过（Python 335、TS 120），基线评测 6/6 且数字与改动前相同，技能自检 56/56，三道防线集成测试（审批插件的真实 TS 代码对真实 guard 预检，再绕过审批直接调 guard）8 个通过；端到端（`make dev-eval`，deepseek-flash，各 1 次）`s4-sealing-plan`、`s4-warning-rejected` 全部通过，台账里有矿井回执（约 9 万 token、51–57 秒）。**未做**：批准人按角色限定（需要 DSH 的用户身份）；超时升级（P3）；复盘时间线把台账回执和 rescue-mine 的后续状态对上（P5）；`grade.py` 的第一版兼容（P5）。

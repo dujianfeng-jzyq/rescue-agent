@@ -9,7 +9,6 @@ import { dirname } from 'node:path'
 
 import type { Context } from '../adapter/dsh.ts'
 import { Schema } from '../adapter/dsh.ts'
-import { classify } from '../approval/policy.ts'
 import { toLine, toRecord } from './record.ts'
 
 export const name = 'rescue-audit'
@@ -17,21 +16,20 @@ export const inject = ['tools']
 
 export interface Config {
   path: string
+  /** 记录这个 MCP 服务（guard）的全部工具调用：A 级只读和 C 级对外动作都记，不按分级过滤 */
   gatedServer: string
-  exemptPrefixes: string[]
 }
 
 export const Config: Schema<Config> = Schema.object({
   path: Schema.string().default('var/audit/tool-actions.jsonl'),
   gatedServer: Schema.string().default('actions'),
-  exemptPrefixes: Schema.array(Schema.string()).default([]),
 })
 
 export function apply(ctx: Context, config: Config) {
   let ready: Promise<unknown> = mkdir(dirname(config.path), { recursive: true })
 
   ctx.on('tools/result', (exec, result) => {
-    if (!classify(exec.name, config).gated) return
+    if (!exec.name.startsWith(`mcp__${config.gatedServer}__`)) return
     const record = toRecord({
       callId: String(exec.callId),
       name: exec.name,
