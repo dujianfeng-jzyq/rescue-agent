@@ -4,6 +4,7 @@ status: placeholder
 reviewed_by: null
 
 window_h: 24               # 趋势窗口（小时）
+max_stale_h: 2              # 最新可用读数比证据时刻早超过这么久，该测点按“无法判定”处理（小时；束管采样周期长，占位）
 min_sealed_h: 300          # 封闭后至少这么久才讨论启封（小时）
 max_o2_pct: 2.0            # 密闭内氧浓度上限（%，取最不利测点，即最大值）
 max_co_ppm: 24             # 密闭内 CO 上限（ppm，取最大值）

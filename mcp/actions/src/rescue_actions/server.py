@@ -178,14 +178,18 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
             journal(log_entry(tool, "rejected", payload, record_ids, at=await mine_now(), problems=problems))
             raise ToolError("指令未发布。\n" + "\n".join(problems))
 
-    async def deliver(tool: str, payload: BaseModel, record_ids: list[str], calls: list[Any], note: str | None = None) -> ActionReceipt:
+    async def deliver(tool: str, payload: BaseModel, record_ids: list[str], calls: list[Any], note: str | None = None, ordered: bool = False) -> ActionReceipt:
         """校验通过后交给矿井执行：calls 是按顺序执行的无参协程工厂，每个返回 MineReceipt。
-        任一步失败（矿井接口不通、参数被矿井拒绝）就停止，台账记 failed 和已执行的回执，并如实告诉智能体已执行到哪一步。"""
+        任一步失败（矿井接口不通、参数被矿井拒绝）就停止，台账记 failed 和已执行的回执，并如实告诉智能体已执行到哪一步。
+        ordered=True（步骤有先后依赖，如启封必须先断电、撤人）时，矿井返回 rejected/failed 回执的步骤也算失败：不再执行后面的步骤。"""
         action_id = f"A-{uuid.uuid4().hex[:10]}"
         done: list[MineReceipt] = []
         try:
             for call in calls:
-                done.append(await call())
+                r = await call()
+                done.append(r)
+                if ordered and r.status in (ActionStatus.REJECTED, ActionStatus.FAILED):
+                    raise RuntimeError(f"步骤“{r.kind.value}”矿井未执行（{r.detail or r.status.value}），后续步骤依赖它，已停止")
         except Exception as exc:  # noqa: BLE001  矿井接口的任何失败都按未完成处理
             at = await mine_now()
             journal(
@@ -322,7 +326,8 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
                 idempotency_key=idempotency_key(tool, ref, f"-{step.order}"),
             )  # fmt: skip
             calls.append(lambda req=req: md.submit_treatment(req))
-        return await deliver(tool, plan, [record_id], calls, "；".join(notes) or None)
+        # 启封方案的步骤顺序是安全要求（先检查、断电、撤人再启封）：前置步骤矿井没执行就不能继续
+        return await deliver(tool, plan, [record_id], calls, "；".join(notes) or None, ordered=(tool == "approve_unsealing"))
 
     @server.tool()
     async def issue_sealing_plan(record_id: str) -> ActionReceipt:

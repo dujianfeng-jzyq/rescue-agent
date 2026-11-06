@@ -214,8 +214,16 @@ class Sentinel:
         return out
 
     async def tick(self) -> list[dict[str, Any]]:
-        """返回本次产生的告警条目（可能为空）。矿井时钟读不到时抛错，由调用方记心跳。"""
-        now = str((await self.call("get_clock", {}))["now"])[:19]
+        """返回本次产生的告警条目（可能为空）。矿井时钟读不到时抛错，由调用方记心跳。
+        批准超时按真实时间算、与矿井无关，而矿井接口故障时人工确认最需要升级：取不到矿井时钟也先查它（条目时间用最后一次已知的
+        矿井时间，没有就用本机时间），写进事件库后再把取时钟的错抛出去。"""
+        try:
+            now = str((await self.call("get_clock", {}))["now"])[:19]
+        except Exception:
+            fallback = self.state["last_check"] or datetime.fromtimestamp(self.wall()).isoformat(timespec="seconds")
+            self._approvals(fallback, self.wall())  # 告警条目已进事件库，唤醒插件会投递；这里不返回，错误照常上抛
+            self._save()
+            raise
         out: list[dict[str, Any]] = []
         last = self.state["last_check"]
         if last is None or (_mine_dt(now) - _mine_dt(last)).total_seconds() >= self.cfg["interval_min"] * 60:

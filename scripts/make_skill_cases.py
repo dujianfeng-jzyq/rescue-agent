@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import copy
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from rescue_contract.collect import collect_from, parse_collect_spec
@@ -396,7 +397,20 @@ def unseal_inputs() -> dict[tuple[str, str, str], dict]:
         for r in hot["groups"][g]["latest"] + hot["groups"][g]["readings"]:
             if r["measurand"] == "TEMP" and r["ts"] >= hot["as_of"][:13]:
                 r["value"] = 45.0
+    # 最不利测点失效：BT-1201-G3 的数据全部去掉，另外两个测点正常——不能因此判满足（fail closed）
+    one_tube_down = copy.deepcopy(ready)
+    tg = one_tube_down["groups"]["tubes"]
+    tg["latest"] = [r for r in tg["latest"] if r["sensor_id"] != "BT-1201-G3"]
+    tg["readings"] = [r for r in tg["readings"] if r["sensor_id"] != "BT-1201-G3"]
+    # 最新读数过旧：BT-1201-G3 只留 4 小时前及更早的读数
+    stale_tube = copy.deepcopy(ready)
+    cut = (datetime.fromisoformat(ready["as_of"]) - timedelta(hours=4)).isoformat()
+    sg = stale_tube["groups"]["tubes"]
+    sg["latest"] = [r for r in sg["latest"] if r["sensor_id"] != "BT-1201-G3"]
+    sg["readings"] = [r for r in sg["readings"] if r["sensor_id"] != "BT-1201-G3" or r["ts"] <= cut]
     return {
+        (UP, "unsealing_plan", "s5-336h-one-tube-down"): {"evidence": one_tube_down},
+        (UP, "unsealing_plan", "s5-336h-stale-tube"): {"evidence": stale_tube},
         (UP, "unsealing_plan", "s5-336h-ready"): {"evidence": ready},
         (UP, "unsealing_plan", "s5-240h-sealed-too-short"): {"evidence": early},
         (UP, "unsealing_plan", "s5-336h-no-tube-data"): {"evidence": no_tubes},

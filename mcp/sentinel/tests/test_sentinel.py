@@ -261,3 +261,33 @@ async def test_approval_timeout_escalates_once(tmp_path, monkeypatch):
     v = f.store.get(iid)
     assert [(a["approval_key"], a["escalated"]) for a in v["pending_approvals"]] == [("c2", True)]
     assert base > 0
+
+
+@arun
+async def test_approval_timeout_escalates_even_when_mine_clock_is_down(tmp_path, monkeypatch):
+    """矿井接口故障（取不到时钟）时，人工确认的批准超时仍要升级：超时按真实时间算，与矿井无关。"""
+    from datetime import datetime
+
+    f = Fake(tmp_path, monkeypatch)
+    await f.step(result("blue", "latent", reasons=["x"], escalated=True))
+    (inc,) = f.store.list()
+    iid = inc["incident_id"]
+    f.store.append(iid, f.mine_now(), "note", "approval", {"type": "approval_pending", "approval_key": "c1", "tool": "publish_warning", "confirmer": "通风部门负责人", "timeout_min": 10, "escalate_to": "值班长"})
+    asked = datetime.fromisoformat(f.store.entries(iid)[-1]["wall"]).timestamp()
+    real_call = f.call
+
+    async def down(tool, args):
+        if tool == "get_clock":
+            raise ConnectionError("矿井接口不通")
+        return await real_call(tool, args)
+
+    f.s.call = down  # type: ignore[method-assign]
+    f.s.wall = lambda: asked + 11 * 60  # type: ignore[method-assign]
+    with pytest.raises(ConnectionError):
+        await f.s.tick()
+    v = f.store.get(iid)
+    assert [(a["approval_key"], a["escalated"]) for a in v["pending_approvals"]] == [("c1", True)]
+    assert [x["data"]["cause"] for x in f.store.entries(iid) if x["kind"] == "alert"][-1] == "approval_timeout"
+    with pytest.raises(ConnectionError):
+        await f.s.tick()  # 再来一次不重复升级
+    assert [x["data"]["cause"] for x in f.store.entries(iid) if x["kind"] == "alert"].count("approval_timeout") == 1

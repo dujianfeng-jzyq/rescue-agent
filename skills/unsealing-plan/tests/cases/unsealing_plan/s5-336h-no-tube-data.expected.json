@@ -35,7 +35,7 @@
     "limit": 2.0,
     "ok": false,
     "judged": false,
-    "text": "氧浓度：无法判定（没有可用数据）；限值 ≤ 2.0 %",
+    "text": "氧浓度：无法判定（测点 BT-1201-G1、BT-1201-G2、BT-1201-G3 没有可用的最新数据）；限值 ≤ 2.0 %",
     "sensor_id": null
    },
    {
@@ -45,7 +45,7 @@
     "limit": 24,
     "ok": false,
     "judged": false,
-    "text": "CO 浓度：无法判定（没有可用数据）；限值 ≤ 24 ppm",
+    "text": "CO 浓度：无法判定（测点 BT-1201-G1、BT-1201-G2、BT-1201-G3 没有可用的最新数据）；限值 ≤ 24 ppm",
     "sensor_id": null
    },
    {
@@ -55,7 +55,7 @@
     "limit": 0.1,
     "ok": false,
     "judged": false,
-    "text": "CO 上升速率：无法判定（没有可用数据）；限值 ≤ 0.1 ppm/h",
+    "text": "CO 上升速率：无法判定（测点 BT-1201-G1、BT-1201-G2、BT-1201-G3 没有可用的最新数据）；限值 ≤ 0.1 ppm/h",
     "sensor_id": null
    },
    {
@@ -65,7 +65,7 @@
     "limit": 0.0,
     "ok": false,
     "judged": false,
-    "text": "乙烯：无法判定（没有可用数据）；限值 ≤ 0.0 ppm",
+    "text": "乙烯：无法判定（测点 BT-1201-G1、BT-1201-G2、BT-1201-G3 没有可用的最新数据）；限值 ≤ 0.0 ppm",
     "sensor_id": null
    },
    {

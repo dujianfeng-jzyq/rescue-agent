@@ -355,16 +355,28 @@ def _unseal_content(mutate=None, ready=True):
     return sample
 
 
-def test_approve_unsealing_runs_the_fixed_steps_on_the_mine(world_s5):
+def test_approve_unsealing_runs_the_fixed_steps_on_the_mine(world_s5, monkeypatch):
+    from rescue_mine_data_sim import server as sim_server
+
+    # 模拟矿井缺省不能执行检查、断电；这里让它能执行，验证全部步骤按顺序下发
+    monkeypatch.setattr(sim_server, "SIM_TREATMENTS", sim_server.SIM_TREATMENTS | {sim_server.StepType.MONITOR, sim_server.StepType.POWER_CUTOFF})
     rid = world_s5.put("unsealing-plan", "unsealing_plan", _unseal_content())
     r = world_s5.call("approve_unsealing", {"record_id": rid})
     assert not r.is_error, r.content[0].text
     receipt = r.structured_content
-    assert receipt["status"] == "issued" and len(receipt["mine_receipts"]) == 5
-    assert any(a.type == "unseal" for a in world_s5.holder.engine.action_log)
-    # 检查、断电、观测模拟矿井不执行，如实列出
-    assert len(receipt["mine_not_executed"]) == 3
+    assert receipt["status"] == "issued" and len(receipt["mine_receipts"]) == 5 and receipt["mine_not_executed"] == []
+    assert [a.type for a in world_s5.holder.engine.action_log if a.type in ("evacuate", "unseal")] == ["evacuate", "unseal"]
     assert world_s5.rows()[-1]["tool"] == "approve_unsealing" and world_s5.rows()[-1]["record_ids"] == [rid]
+
+
+def test_approve_unsealing_stops_when_a_prior_step_is_not_executed(world_s5):
+    """模拟矿井缺省不执行检查、断电：前置步骤被拒绝，启封不能照常下发（RL-164 要求先检查、断电、撤人）。"""
+    rid = world_s5.put("unsealing-plan", "unsealing_plan", _unseal_content())
+    r = world_s5.call("approve_unsealing", {"record_id": rid})
+    assert r.is_error and "已停止" in r.content[0].text
+    assert not any(a.type in ("unseal", "evacuate") for a in world_s5.holder.engine.action_log)  # 第一步就被拒，后面一步都没执行
+    row = world_s5.rows()[-1]
+    assert row["tool"] == "approve_unsealing" and row["status"] == "failed" and len(row["mine_receipts"]) == 1
 
 
 def test_approve_unsealing_refuses_when_not_ready(world_s5):
