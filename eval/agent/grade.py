@@ -28,6 +28,8 @@
                             与被拒调用同一步并行发出的不算：模型发出时还没看到拒绝）
 - facts_reported: true      总指挥协调的最后回复里写明了某次固定流程结果里的关键事实（facts.py：等级、阶段、分区、步骤数、
                             满足项数、记录编号等），且没有相反说法；不比较措辞。替代 report_pasted（逐行比对要点）
+- rubric: <清单名>          评测员按 rubrics/<清单名>.yaml 对最后回复作封闭式问答，逐题和期望答案比对；答案要带逐字引文
+                            （judge.py；需要 DEEPSEEK_API_KEY，模型缺省 deepseek-flash）
 - report_pasted: true       （旧）总指挥协调的最后回复里原样包含本次运行中某个 workflow 工具返回的 report_markdown
                             （逐行去掉首尾空白、忽略空行后比较）
 - watch_asked: true         持续检测的后台任务结束（job/settled）后，智能体用 ask_user_question 问过操作员
@@ -697,6 +699,12 @@ def grade(root: Session, checks: dict) -> dict:
             "detail": {"runs": len(runs), "passed": good, **({"closest": min((c for _, c in runs), key=lambda c: len(c["missing"]) + len(c["contradicted"]))} if runs and not good else {})},
         }
 
+    if checks.get("rubric"):
+        # C 类：评测员按清单（rubrics/<名>.yaml）对最后回复作封闭式问答，和期望答案逐题比对（judge.py）
+        import judge
+
+        results["rubric"] = judge.judge(root, judge.load_rubric(checks["rubric"]))
+
     if checks.get("record_referenced"):
         # 固定流程产生的记录编号
         produced = {v for t, r in wf if t in ("run_fire_assessment", "draft_sealing_plan", "assess_unsealing") for v in (r.get("record_ids") or {}).values() if isinstance(v, str)}
@@ -827,6 +835,12 @@ def print_report(r: dict) -> None:
         if c["ok"]:
             continue
         d = c["detail"]
+        if name == "rubric":
+            if d.get("error"):
+                print(f"      {d['error']}")
+            for m in d.get("mismatches", []):
+                print(f"      {m['id']}: 期望 {m['expect']}，评测员答 {m['got']!r}" + (f"（{m['problem']}）" if m["problem"] else "") + (f" 引文：{m['quote']}" if m["quote"] else ""))
+            continue
         if isinstance(d, dict):
             for who, items in d.items():
                 if not isinstance(items, list):

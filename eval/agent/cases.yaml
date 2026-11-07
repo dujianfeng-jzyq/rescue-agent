@@ -94,7 +94,8 @@
     approval_asked: [publish_warning]
     record_referenced: true # notice.record_id 照抄 run_fire_assessment 的 record_ids.warning
     no_retry_after_reject: true
-    rejection_reported: true
+    rejection_reported: true # 旧：正则判定；与 rubric 并存对照，校准稳定后可以删
+    rubric: s4-warning-rejected # 评测员按清单作答（eval/agent/rubrics/）
     numbers_grounded: true
     cited_tools_called: true
 
