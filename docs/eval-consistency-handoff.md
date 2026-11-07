@@ -65,7 +65,9 @@ expect_decisions:
 - 其余失败与对外决策无关：`s4-escalate-1201` 的 `no_wait_polling`（已知）、`s4-warning-rejected` 的 `no_retry_after_reject` 1 次（被拒后又提交 `escalate_emergency`，智能体行为，期望里它是 optional）、`s4-watch-wake-assess` 的 `numbers_grounded` 1 次——**判定环境的问题**：上一个用例（approval-timeout）留下的未关闭事件被该用例的智能体读到，运行器现已在每个用例开始前清理。
 - `v3-dispatch-order` 平均约 113 万 token（智能体反复查库存和测算），通过但偏贵，已记为观察项。
 - 期望是占位：撤人通知和预警在红色时的必要性仍待专家（见下面“需要回答的问题”）；`v3-dispatch-order` 的期望只要求提交调度单。
-- 未做：`kb_search` 检索类决策用例、`open_incident` / 状态“已稳定” / 何时可关闭的用例、`recommended_level` 枚举化（需用户决定）。
+- 补充（同日）：新增 `v3-kb-search`（检索类）、`v3-open-incident`、`v3-incident-stable`、`v3-incident-close`、`v3-incident-close-blocked`（有未完成跟踪计划时不得关闭），各 3 次：`expect_decisions` 15/15。全部通过 `kb-search`、`open-incident`、`close-blocked` 3/3，`incident-stable` 2/3，`incident-close` 1/3；后两个失败的都是 `numbers_grounded`：智能体把空列表写成“待确认告警 0 条、跟踪计划 0 个”（自己数的 0，不来自工具），按约定算智能体的问题，也可能是启发式对空列表过严，**未处理**，不影响决策判定。至此功能清单里的每一项都有带 `expect_decisions` 的用例（共 28 个）。
+- **向人提问的三种情形**：批准（对外动作用例）、缺信息（`v3-ask-lab-sample`，3/3 都提问）、事实冲突（`v3-ask-conflict`）。冲突用例首版期望“必须提问”，真跑 0/3：智能体指出化验单与监测不一致、以多点束管监测为准、不提交指令，这符合技能“无法用其他数据验证才问”的条件。**期望是我猜错了，不是智能体的问题**，已更正为“指出不一致、不采信化验单、对外动作为空、回复里点明不一致”。更正后**重新真跑** 3 次，3/3（调整期望，不是智能体变好）。
+- **决定（2026-11-07，按“有问题可自行决定”）**：① `notify_evacuation` 红色时保持 optional——必要性是专家规则，没有依据就不强制；② `v3-wake-repeat-dup`（1/3）记为**已知的智能体问题**，不改人设或技能来换通过率（原则 3），用例保留作回归基线；③ “冲突无法验证时必须提问”在模拟矿井里构造不出，不测；④ `recommended_level` 暂不改契约枚举（守卫按记录核对，字段不参与放行，期望里不约束；以后收紧需 `make schema`）。这四条是决定，不是待办。
 
 ## 待办（按优先级）
 
