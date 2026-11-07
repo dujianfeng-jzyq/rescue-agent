@@ -13,6 +13,8 @@
           publish_warning: {level: red}
         optional: {}                           # 可以提交也可以不提交（参数同样要匹配）
       flows_called: [run_fire_assessment]      # 这些工具（短名）至少调用过一次
+      flows_forbidden: [run_fire_assessment]   # 这些工具一次都不该调用（如重复投递不该重新研判）
+      questions: {min: 1}                      # 向人提问（ask_user、ask_user_question）的次数范围；缺信息时必须问，其余情形 max: 0
       incident_ops:                            # 事件相关工具（get_incident、add_followup 等）
         required: [complete_followup]
         forbidden: [close_incident]
@@ -50,7 +52,8 @@ def extract(calls: list[tuple[str, str]]) -> dict:
             except ValueError:
                 args = {}
             actions.setdefault(short, []).append(_flatten(args if isinstance(args, dict) else {}))
-    return {"actions": actions, "tools": tools}
+    questions = sum(1 for name, _ in calls if name in ("ask_user", "ask_user_question"))
+    return {"actions": actions, "tools": tools, "questions": questions}
 
 
 def _params_ok(want: dict, got: dict) -> list[str]:
@@ -81,6 +84,18 @@ def compare(expect: dict, calls: list[tuple[str, str]]) -> dict:
     for tool in expect.get("flows_called") or []:
         if tool not in b1["tools"]:
             problems.append(f"没有调用流程 {tool}")
+
+    for tool in expect.get("flows_forbidden") or []:
+        if tool in b1["tools"]:
+            problems.append(f"不该做：调用了 {tool}")
+
+    q = expect.get("questions")
+    if q is not None:
+        n = b1["questions"]
+        if "min" in q and n < q["min"]:
+            problems.append(f"漏做：向人提问 {n} 次，至少应 {q['min']} 次")
+        if "max" in q and n > q["max"]:
+            problems.append(f"多问：向人提问 {n} 次，最多 {q['max']} 次")
 
     ops = expect.get("incident_ops") or {}
     for tool in ops.get("required") or []:

@@ -95,7 +95,22 @@ def setup_incident(case: dict, mine_now: str, fmt: dict[str, str]) -> None:
     if spec.get("followup"):
         store.append(iid, mine_now, "followup_added", "agent", {"followup_id": "FU-eval", "due_at": mine_now[:19], "expect": spec["followup"]})
         store.append(iid, mine_now, "followup_due", "sentinel", {"followup_id": "FU-eval"})
+    # 事件里已经有的旧告警（已投递、已处理）：重复投递、相似旧记录这类用例用
+    for prior in spec.get("prior_alerts", []):
+        old = store.append(iid, mine_now, "alert", "sentinel", {"cause": prior["cause"], "summary": prior["summary"]})
+        store.append(iid, mine_now, "delivered", "eval", {"alert_id": old["event_id"], "session_id": "eval"})
+        store.append(iid, mine_now, "acked", "agent", {"alert_id": old["event_id"]})
+        store.append(iid, mine_now, "note", "agent", {"type": "assessment", "text": prior.get("note", f"已处理告警：{prior['summary']}，完成研判并告知操作员")})
+    if spec.get("pending_approval"):  # 对外动作在等人工确认且已超时升级（告警原因 approval_timeout）
+        pa = spec["pending_approval"]
+        base = {"approval_key": "eval-c1", "tool": pa["tool"]}
+        store.append(iid, mine_now, "note", "approval", {"type": "approval_pending", "confirmer": pa.get("confirmer", ""), "timeout_min": pa.get("timeout_min", 10), "escalate_to": pa.get("escalate_to", ""), **base})
+        store.append(iid, mine_now, "note", "sentinel", {"type": "approval_escalated", "escalate_to": pa.get("escalate_to", ""), "waited_min": pa.get("timeout_min", 10), **base})
     alert = store.append(iid, mine_now, "alert", "sentinel", {"cause": spec["cause"], "summary": spec["summary"]})
+    if spec.get("handled"):  # 这条告警本身已经处理过（现在是重复投递）
+        store.append(iid, mine_now, "delivered", "eval", {"alert_id": alert["event_id"], "session_id": "eval"})
+        store.append(iid, mine_now, "acked", "agent", {"alert_id": alert["event_id"]})
+        store.append(iid, mine_now, "note", "agent", {"type": "assessment", "text": f"已处理告警 {alert['event_id']}：{spec['summary']}，完成研判并告知操作员"})
     # 消息由评测运行器代投（提问就是投递的消息）：立刻标为已投递，免得唤醒插件再往值班会话投一份
     store.append(iid, mine_now, "delivered", "eval", {"alert_id": alert["event_id"], "session_id": "eval"})
     fmt.update(incident_id=iid, alert_id=alert["event_id"], mine_now=mine_now[:19])

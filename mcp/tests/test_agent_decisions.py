@@ -106,6 +106,19 @@ def test_cases_yaml_blocks_are_well_formed():
     assert {i for i, _ in blocks} >= {"v3-wake-anomaly", "s4-watch-wake-assess", "v3-followup-due"}
     for cid, b in blocks:
         assert b["status"] == "placeholder", cid  # 在专家审定前必须标占位
-        assert set(b) <= {"status", "derived_from", "external_actions", "flows_called", "incident_ops"}, cid
+        assert set(b) <= {"status", "derived_from", "external_actions", "flows_called", "flows_forbidden", "questions", "incident_ops"}, cid
         ext = b.get("external_actions") or {}
         assert not (set(ext.get("required") or {}) & set(ext.get("optional") or {})), cid
+
+
+def test_flows_forbidden():
+    assert not run(GOOD, {"flows_forbidden": ["run_fire_assessment"]})["ok"]
+    assert run([call("get_incident")], {"flows_forbidden": ["run_fire_assessment"]})["ok"]
+
+
+def test_questions_range():
+    ask = [("ask_user_question", "{}")]
+    assert run(ask, {"questions": {"min": 1}})["ok"]
+    assert not run([call("get_incident")], {"questions": {"min": 1}})["ok"]  # 缺信息却没问
+    assert not run(ask + ask, {"questions": {"max": 1}})["ok"]  # 多问
+    assert run([call("get_incident")], {"questions": {"max": 0}})["ok"]
