@@ -79,9 +79,16 @@ def setup_incident(case: dict, mine_now: str, fmt: dict[str, str]) -> None:
     """用例要求时在事件库（RESCUE_INCIDENT_DIR，make dev-eval 指向 var/eval/incidents）里建一个事件和一条告警，模拟监听器已经发现异常；
     提问模板里的 {incident_id}、{alert_id}、{mine_now} 由这里填。事件库里该工作面已有的未关闭事件先关掉，免得上一次的残留混进来。"""
     spec = case.get("incident")
-    if not spec:
-        return
     from rescue_contract.incidents import IncidentStore
+
+    if not spec:
+        # 没有事件的用例也要清掉上一个用例留下的未关闭事件（它们的待确认、跟踪计划会被智能体读到，2026-11-07 污染过 s4-watch-wake-assess）
+        os.environ.setdefault("RESCUE_INCIDENT_DIR", str(ROOT / "var" / "eval" / "incidents"))
+        store = IncidentStore()
+        for v in store.list():
+            if v["status"] != "closed":
+                store.append(v["incident_id"], mine_now, "status", "eval", {"status": "closed", "reason": "评测开始前清理"})
+        return
 
     # 与 make dev-eval 写的目录一致；缺省的 var/incidents 是演示和复盘用的，运行器不能往里写，
     # 也不能让 DSH 读不到它建的事件（2026-11-06 启动时漏设环境变量，智能体找不到事件）
