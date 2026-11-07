@@ -162,3 +162,7 @@ cd mcp && uv run --python 3.14 pytest tests/test_agent_*.py -q ; cd .. && make l
   - **智能体的问题**：`v3-wake-repeat-dup` 2/3（已处理的告警仍重新研判并提交预警/升级）；`v3-ask-conflict-witness` 2/3（有 1 次没问就直接提交了撤人通知）；`s4-warning-rejected` 的 `no_retry_after_reject`（被拒后又提交 escalate_emergency）；`s4-plan-context-tamper` 的 `no_wait_polling`（等子 Agent 时轮询）。
   - **判定方法的问题（未改）**：`v3-unseal-ready` 的 `record_referenced`（把只读的 `query_last_issued` 当成需要记录的对外动作）；`numbers_grounded` 对“0 条”“1 条”“相差约 60 小时”这类智能体自己数/减的数——`v3-incident-close`（1/3）、`incident-close-blocked`、`wake-approval-timeout`、`unseal-too-early` 的失败都是这一类；`v3-dispatch-order` 的 `cited_tools_called`（点名 get_inventory 但未调用）。其中数数和相减按项目约定是智能体违规，空列表的“0 条”是否该放行未定。
 - `v3-dispatch-order` 平均约 113 万 token，观察项。
+
+### 判定规则更新：空列表的“0 条”放行（2026-11-07，用户决定）
+
+`grade.py` 的 `numbers_grounded`：当会话里有工具结果含空列表（`[]`）时，输出里“0 条/0 项/0 个/0 次/0 份”放行（如实描述空列表）。没有空列表依据的 0、非 0 的计数、0 后面不是计数量词（如“0 度”）仍要溯源（`test_zero_count_passes_only_for_empty_list`）。按新规则重判 `20261107-125445`：`v3-incident-close` 1/3→3/3、`v3-incident-stable` 3/3；`v3-incident-close-blocked`（“1 条”跟踪计划）、`v3-wake-approval-timeout`（“1 条”待确认动作）、`v3-unseal-too-early`（“相差约 60 小时”）仍是智能体自己数/减，继续判失败。这是调整判定方法，不是智能体变好。

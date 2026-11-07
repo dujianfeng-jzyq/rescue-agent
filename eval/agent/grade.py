@@ -399,6 +399,10 @@ def cn_numbers(text: str) -> set[str]:
     return out
 
 
+_EMPTY_LIST = re.compile(r"\[\s*\]")
+_ZERO_COUNT = re.compile(r"\s*[条项个次份]")
+
+
 def check_numbers(s: Session) -> dict[str, list[dict]]:
     """{"none": [...], "approx": [...], "derived": [...]}，每项含数值和上下文。none 判失败，其余只是提醒。"""
     pool: set[str] = set()
@@ -408,6 +412,8 @@ def check_numbers(s: Session) -> dict[str, list[dict]]:
         pool.update(cn_numbers(text))
         articles.update(_ARTICLE.findall(text))
     out: dict[str, list[dict]] = {"none": [], "approx": [], "derived": []}
+    # 工具结果里有空列表时，输出里“0 条/0 项/0 个”是对空列表的如实描述，放行（2026-11-07 决定；非 0 的计数仍要溯源）
+    has_empty = any(_EMPTY_LIST.search(t) for _, t in s.tool_results())
     for text in s.outputs():
         # 条号列表里可能带前导零（RL-057 的写法“057·053/164”）：按数值比较
         lists = [m.span() for m in _NUM_LIST.finditer(text) if {str(int(x)) for x in _NUM.findall(m.group(0))} <= articles]
@@ -416,6 +422,8 @@ def check_numbers(s: Session) -> dict[str, list[dict]]:
             if tok in sections:
                 continue
             if str(int(float(tok))) in articles and (_BARE_ARTICLE.match(text, pos + len(tok)) or any(a <= pos < b for a, b in lists)):
+                continue
+            if has_empty and tok == "0" and _ZERO_COUNT.match(text, pos + 1):
                 continue
             time_unit = bool(_TIME_UNIT.match(text, pos + len(tok)))
             level = match_level(tok, pool, time_unit)

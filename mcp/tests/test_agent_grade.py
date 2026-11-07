@@ -40,7 +40,7 @@ def _write(base: Path, sid: str, events: list[dict], preset: str, parent: str | 
 
 @pytest.fixture
 def tree(tmp_path):
-    def build(sub_report: str, sub_calls=(("c2", "mcp__fire_model__assess_warning_level", {"panel": "1201"}),), root_calls=(), sub_prompt="研判 1201"):
+    def build(sub_report: str, sub_calls=(("c2", "mcp__fire_model__assess_warning_level", {"panel": "1201"}),), root_calls=(), sub_prompt="研判 1201", sub_result=None):
         turn = [{"type": "turn/start"}]
         end = [{"type": "turn/end"}]
         root = [
@@ -52,7 +52,7 @@ def tree(tmp_path):
             *end,
         ]
         sub = [*turn, _user(sub_prompt), *_assistant("", list(sub_calls))]
-        sub += [_result(cid, '{"level": "none", "indicators": {"上隅角CO(ppm)": 9.353, "格雷哈姆系数": 0.021}, "depth_m": 20.0}') for cid, _, _ in sub_calls]
+        sub += [_result(cid, sub_result or '{"level": "none", "indicators": {"上隅角CO(ppm)": 9.353, "格雷哈姆系数": 0.021}, "depth_m": 20.0}') for cid, _, _ in sub_calls]
         sub += [*_assistant(sub_report), *end]
         _write(tmp_path, ROOT_ID, root, "rescue-commander")
         _write(tmp_path, SUB_ID, sub, "rescue-assessment", ROOT_ID)
@@ -510,3 +510,17 @@ def test_decision_checks_fail(tmp_path):
     r = grade.grade(root, {"no_questions": True, "incident_read": True, "followup_added": True, "tools_not_called": ["issue_sealing_plan"], "final_mentions": ["降级"]})
     assert not any(r["checks"][k]["ok"] for k in ("no_questions", "incident_read", "followup_added", "tools_not_called", "final_mentions"))
     assert grade.grade(root, {"no_questions": 1})["checks"]["no_questions"]["ok"]
+
+
+@pytest.mark.parametrize(
+    ("report", "result", "grounded"),
+    [
+        ("待确认告警 0 条，跟踪计划 0 项", '{"pending_alerts": [], "followups": []}', True),  # 工具结果有空列表：如实描述
+        ("待确认告警 0 条", '{"level": "none"}', False),  # 材料里没有空列表：0 仍要溯源
+        ("共 5 条，另有 0 个", '{"followups": []}', False),  # 5 没有依据；放行只针对 0
+        ("温度 0 度", '{"followups": []}', False),  # 0 后面不是计数量词
+    ],
+)
+def test_zero_count_passes_only_for_empty_list(tree, report, result, grounded):
+    r = grade.grade(tree(report, sub_result=result), ALL)
+    assert r["checks"]["numbers_grounded"]["ok"] is grounded, r["checks"]
