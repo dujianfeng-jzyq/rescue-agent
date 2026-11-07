@@ -121,6 +121,12 @@ HAND = {
         "questions": {"max": 0},
         "incident_ops": _NO_CLOSE,
     },
+    "v3-ask-conflict": {
+        "derived_from": {"hand_written": "技能“只有三种情况可以向人提问”第 3 条只在冲突“无法用其他数据验证”时才问；此处束管多点监测可以验证，应指出化验单与监测不一致、不采信化验单、不提交指令（2026-11-07 首版期望要求必须提问，真跑 0/3 后更正：那是期望的猜测错了，不是智能体的问题）", "scenario": "s4-escalation", "at_h": 55},
+        "external_actions": _NONE,
+        "flows_called": ["run_fire_assessment"],
+        "incident_ops": _NO_CLOSE,
+    },
     "v3-kb-search": {
         "derived_from": {"hand_written": "提问只要检索条文：调用 kb_search 或 kb_get_articles，不研判、不提交对外动作"},
         "external_actions": _NONE,

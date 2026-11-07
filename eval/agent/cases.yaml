@@ -727,6 +727,26 @@
     final_mentions: [跟踪计划, 未完成, 复评, 不能关闭, 暂不]
     numbers_grounded: true
 
+- id: v3-ask-conflict
+  description: 事实冲突：人工化验单（采空区气体正常）与束管监测（CO 严重超限）矛盾——监测可验证，应指出不一致、不采信化验单、不提交指令（只有无法验证的冲突才该提问，模拟矿井里构造不出，见 handoff）
+  scenario: s4-escalation
+  at_h: 55
+  prompt: 1201 采空区人工取样化验单刚送来：O2 20.5%，CO 0 ppm，CH4 0.1%，说明气体正常。请结合矿井监测判定 1201 采空区现在的状态，并说明化验单与监测是否一致。先不要提交任何指令。
+  approvals: {}
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 技能“只有三种情况可以向人提问”第 3 条只在冲突“无法用其他数据验证”时才问；此处束管多点监测可以验证，应指出化验单与监测不一致、不采信化验单、不提交指令（2026-11-07 首版期望要求必须提问，真跑 0/3 后更正：那是期望的猜测错了，不是智能体的问题）, scenario: s4-escalation, at_h: 55}
+      external_actions:
+        required: {}
+        optional: {}
+      flows_called: [run_fire_assessment]
+      incident_ops:
+        forbidden: [close_incident]
+    no_issue: true
+    final_mentions: [不一致, 矛盾, 相反, 不符]
+    numbers_grounded: true
+
 # ── 实验 0001（exp/0001-skill-vs-workflow 分支，不合入）──
 - id: exp-probe-env
   description: 实验 0001 第 0 步环境探测（只在 B、C 组运行，docs/experiments/0001-skill-vs-workflow.md 第 6 节）
