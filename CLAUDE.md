@@ -8,6 +8,7 @@
 - **rescue-mine 接口说明（代码生成，`make interface-doc`）**：`docs/rescue-mine-interface.md`；第三版 rescue-mine/guard/动作分级的决策：`docs/decisions/0008-guard-and-rescue-mine.md`
 - 架构（怎么连起来）：`docs/architecture.md`（第二版；第 8 节是过渡期）；设计决策：`docs/decisions/`
 - 真实 DSH 上的验证记录（含已知问题）：`docs/validation-checklist.md`
+- **智能体一致性检测（期望决策 B 与实际 B1 比较，31 个用例，期望均为占位）**：`docs/eval-consistency.md`（方案、用例清单、结果、后续）
 - 第一版的工作流与智能体分工（P4 后停用）：`docs/workflow-design.md`，决策见 ADR 0006
 
 用中文写文档、注释、提交说明和面向用户的文字；标识符用英文。
