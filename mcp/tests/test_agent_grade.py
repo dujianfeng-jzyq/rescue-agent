@@ -116,10 +116,24 @@ def test_ranges_are_not_dates():
 
 @pytest.mark.parametrize(
     ("token", "level"),
-    [("9.353", "exact"), ("9.35", "exact"), ("9.4", "exact"), ("20", "exact"), ("9", "approx"), ("9.3", "none"), ("8", "none"), ("1.0", "none")],
+    [("9.353", "exact"), ("9.35", "exact"), ("9.4", "exact"), ("20", "exact"), ("9", "approx"), ("9.3", "none"), ("8", "none")],
 )
 def test_match_level(token, level):
     assert grade.match_level(token, {"9.353", "20.0", "0.021"}) == level
+
+
+@pytest.mark.parametrize(
+    "token,level",
+    [("9", "derived"), ("23.5", "derived"), ("240", "derived"), ("9.98", "derived"), ("245", "none"), ("241.5", "none"), ("30", "none")],
+)
+def test_match_level_unit_conversion(token, level):
+    # 239.5 小时：9 天 23.5 小时、9.98 天；10（提问里的“十天”）×24 = 240。加减得到的数仍是 none
+    assert grade.match_level(token, {"239.5", "10", "0.5", "24"}, time_unit=True) == level
+    assert grade.match_level(token, {"239.5", "10", "0.5", "24"}) != "derived"  # 后面不是时间单位：不认
+
+
+def test_chinese_duration_in_prompt_is_material():
+    assert grade.cn_numbers("封闭已满十天，三小时后，二十天") == {"10", "3", "20"}
 
 
 def test_grounded_report_passes(tree):

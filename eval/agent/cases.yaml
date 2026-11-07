@@ -11,7 +11,7 @@
     explanation_generated: true
     no_wait_polling: true # 等子 Agent 结果时不轮询（不委派的用例自然通过，用于防回退）
     tools_called: [assess_panel] # 标准研判走 workflow 研判快照（docs/workflow-design.md W1），不再委派 rescue-assessment
-    report_pasted: true
+    facts_reported: true
     no_actions: true
     numbers_grounded: true
     cited_tools_called: true
@@ -28,7 +28,7 @@
   checks:
     no_wait_polling: true # 等子 Agent 结果时不轮询（不委派的用例自然通过，用于防回退）
     tools_called: [review_effect] # 效果评估走 workflow（docs/workflow-design.md W2）
-    report_pasted: true
+    facts_reported: true
     no_actions: true
     numbers_grounded: true
     cited_tools_called: true
@@ -43,7 +43,7 @@
     explanation_generated: true
     no_wait_polling: true # 等子 Agent 结果时不轮询（不委派的用例自然通过，用于防回退）
     tools_called: [recommend_escalation] # 升级建议走 workflow（W3），条文来自本地留存
-    report_pasted: true
+    facts_reported: true
     no_actions: true
     numbers_grounded: true
     cited_tools_called: true
@@ -60,7 +60,7 @@
     no_wait_polling: true # 等子 Agent 结果时不轮询（不委派的用例自然通过，用于防回退）
     no_actions: true
     tools_called: [assess_panel] # 研判快照含全部束管测点的爆炸三角形（取最不利）和风险图
-    report_pasted: true
+    facts_reported: true
     explosion_reported: true
     chart_shown: true
     numbers_grounded: true
@@ -76,7 +76,7 @@
     no_wait_polling: true # 等子 Agent 结果时不轮询（不委派的用例自然通过，用于防回退）
     # 第二版（P3）：固定流程 draft_sealing_plan 内部完成方案编写和合规审核，不再委派 rescue-plan、rescue-compliance（原 delegates_to 去掉）
     tools_called: [draft_plan] # 第二版认 draft_sealing_plan；现场条件和必备步骤由代码生成
-    report_pasted: true # 方案文本 + 审核意见原样贴出
+    facts_reported: true # 方案文本 + 审核意见原样贴出
     approval_asked: [issue_sealing_plan]
     actions_issued: [issue_sealing_plan]
     record_referenced: true
@@ -121,7 +121,7 @@
     tools_called: [check_mine, run_fire_assessment]
     no_questions: true # 第三版 P4：发现异常后直接研判，不再问“要不要研判”
     explanation_generated: true
-    report_pasted: true
+    facts_reported: true
     no_issue: true # 第三版 P4：智能体可以主动提交预警/升级（评测里一律拒绝），但不能有指令真正下发
     numbers_grounded: true
     cited_tools_called: true
@@ -145,7 +145,7 @@
     no_questions: true
     no_issue: true
     explanation_generated: true
-    report_pasted: true
+    facts_reported: true
     stage_reported: true
     numbers_grounded: true
     cited_tools_called: true
@@ -170,7 +170,7 @@
     tools_called: [review_effect]
     no_questions: true
     no_issue: true
-    report_pasted: true
+    facts_reported: true
     effect_reported: true
     numbers_grounded: true
     cited_tools_called: true
@@ -205,7 +205,7 @@
     tools_called: [review_timeline]
     no_questions: true
     no_issue: true
-    report_pasted: true
+    facts_reported: true
     numbers_grounded: true
     cited_tools_called: true
 
@@ -217,7 +217,7 @@
   approvals: {approve_unsealing: allow}
   checks:
     tools_called: [assess_unsealing]
-    report_pasted: true
+    facts_reported: true
     approval_asked: [approve_unsealing]
     actions_issued: [approve_unsealing]
     record_referenced: true
@@ -233,7 +233,7 @@
   approvals: {}
   checks:
     tools_called: [assess_unsealing]
-    report_pasted: true
+    facts_reported: true
     tools_not_called: [approve_unsealing]
     no_issue: true
     no_questions: true

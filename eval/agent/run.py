@@ -83,6 +83,9 @@ def setup_incident(case: dict, mine_now: str, fmt: dict[str, str]) -> None:
         return
     from rescue_contract.incidents import IncidentStore
 
+    # 与 make dev-eval 写的目录一致；缺省的 var/incidents 是演示和复盘用的，运行器不能往里写，
+    # 也不能让 DSH 读不到它建的事件（2026-11-06 启动时漏设环境变量，智能体找不到事件）
+    os.environ.setdefault("RESCUE_INCIDENT_DIR", str(ROOT / "var" / "eval" / "incidents"))
     store = IncidentStore()
     panel = spec.get("panel", "1201")
     for v in store.list():
