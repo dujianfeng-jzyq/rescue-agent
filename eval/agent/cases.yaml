@@ -376,7 +376,7 @@
     numbers_grounded: true
     cited_tools_called: true
 
-# ── 一致性检测补全（docs/eval-consistency-handoff.md）：每个功能至少一个带 expect_decisions 的用例，期望都是占位 ──
+# ── 一致性检测补全（docs/eval-consistency.md）：每个功能至少一个带 expect_decisions 的用例，期望都是占位 ──
 - id: v3-wake-accelerating
   description: 加速恶化场景（s3）第 57 小时升红色：与 s4 同样直接研判，升级建议一致，对外动作按研判结果
   scenario: s3-accelerating
