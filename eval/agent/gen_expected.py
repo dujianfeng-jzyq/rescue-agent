@@ -127,6 +127,18 @@ HAND = {
         "flows_called": ["run_fire_assessment"],
         "incident_ops": _NO_CLOSE,
     },
+    "v3-ask-conflict-sensors": {
+        "derived_from": {"hand_written": "读数设置构造的传感器冲突：数据质量检查剔除矿井侧的疑似干扰测点，冲突由代码仲裁（2026-11-07 实测 3/3 不问、不提交）；期望：不提交对外动作，照常研判", "scenario": "s1-normal", "at_h": 24},
+        "external_actions": _NONE,
+        "flows_called": ["run_fire_assessment"],
+        "incident_ops": _NO_CLOSE,
+    },
+    "v3-ask-conflict-witness": {
+        "derived_from": {"hand_written": "技能“只有三种情况可以向人提问”第 2、3 条：现场目击与监测矛盾，目击无法用监测验证 → 向人确认；对外动作可以作为谨慎处置提交（optional），但不能不问", "scenario": "s1-normal", "at_h": 24},
+        "external_actions": {"required": {}, "optional": {"publish_warning": {}, "escalate_emergency": {}, "notify_evacuation": {}}},
+        "questions": {"min": 1},
+        "incident_ops": _NO_CLOSE,
+    },
     "v3-kb-search": {
         "derived_from": {"hand_written": "提问只要检索条文：调用 kb_search 或 kb_get_articles，不研判、不提交对外动作"},
         "external_actions": _NONE,
@@ -211,6 +223,7 @@ def expected(msc, case: dict) -> dict:
         optional["notify_evacuation"] = {}  # 红色且有受威胁人员时主动提交撤人通知看起来合理；是否必须待专家定
     elif a["level"] != "none":
         optional["publish_warning"] = {"level": a["level"]}
+        optional["notify_evacuation"] = {}  # 橙色起有受威胁人员时智能体会提交撤人通知（v3-wake-mine-alarm 2/3）；撤人门槛待专家，不当作多做
     return {
         "status": "placeholder",
         "derived_from": derived,

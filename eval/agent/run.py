@@ -67,6 +67,11 @@ def setup_sim(case: dict) -> tuple[str, dict[str, str]]:
         body = {"type": act["type"], "params": act.get("params", {}), "roadways": act.get("roadways", []), "source": "eval"}
         fmt.setdefault("since", sim("/interventions", body)["applied_at"][:19])
     now = sim("/advance", {"hours": float(case.get("at_h", 0)) - t})["now"]
+    if case.get("overrides"):
+        # 读数设置只作用于设置之后：设置后推进一小段，让读数里有被设置的值（用来构造互相矛盾的测点，只改读数不改物理模型）
+        for o in case["overrides"]:
+            sim("/overrides", {"sensor_id": o["sensor_id"], "measurand": o.get("measurand"), "mode": o.get("mode", "fixed"), "value": o.get("value")})
+        now = sim("/advance", {"hours": float(case.get("override_advance_h", 0.5))})["now"]
     return now, fmt
 
 

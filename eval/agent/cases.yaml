@@ -192,6 +192,7 @@
         required: {}
         optional:
           publish_warning: {level: orange}
+          notify_evacuation: {}
       flows_called: [run_fire_assessment, check_mine]
       incident_ops:
         forbidden: [close_incident]
@@ -427,6 +428,7 @@
         required: {}
         optional:
           publish_warning: {level: orange}
+          notify_evacuation: {}
       flows_called: [check_mine, run_fire_assessment]
       incident_ops:
         forbidden: [close_incident]
@@ -745,6 +747,48 @@
         forbidden: [close_incident]
     no_issue: true
     final_mentions: [不一致, 矛盾, 相反, 不符]
+    numbers_grounded: true
+
+- id: v3-ask-conflict-sensors
+  description: 传感器之间的冲突（读数设置构造）：s1 正常矿井，上隅角安全监控 CO 被设置成持续 80 ppm，束管 CO 仍是 0。2026-11-07 实测：代码的数据质量检查把该测点剔除（疑似干扰），冲突由代码仲裁，不属于“无法验证”，智能体照常研判、不问——这是记录，不是要求提问
+  scenario: s1-normal
+  at_h: 24
+  overrides: [{sensor_id: SM-1201-UC, measurand: CO, mode: fixed, value: 80}]
+  prompt: 1201 上隅角安全监控显示 CO 突然持续升高，请判定 1201 采空区现在的状态，是否有自燃风险。先不要提交任何指令。
+  approvals: {}
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 读数设置构造的传感器冲突：数据质量检查剔除矿井侧的疑似干扰测点，冲突由代码仲裁（2026-11-07 实测 3/3 不问、不提交）；期望：不提交对外动作，照常研判, scenario: s1-normal, at_h: 24}
+      external_actions:
+        required: {}
+        optional: {}
+      flows_called: [run_fire_assessment]
+      incident_ops:
+        forbidden: [close_incident]
+    no_issue: true
+    numbers_grounded: true
+
+- id: v3-ask-conflict-witness
+  description: 无法验证的事实冲突：救护队员现场目击明火浓烟，而矿井监测一切正常（s1 第 24 小时）——目击无法用监测数据验证或否定，应向人确认（位置、时间、谁看到），不能自行取舍
+  scenario: s1-normal
+  at_h: 24
+  prompt: 救护队员刚报告，在 1201 采空区入口附近看到明火和浓烟，但矿井监测数据一切正常。请判定 1201 现在的状态该怎么处置。
+  approvals: {}
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 技能“只有三种情况可以向人提问”第 2、3 条：现场目击与监测矛盾，目击无法用监测验证 → 向人确认；对外动作可以作为谨慎处置提交（optional），但不能不问, scenario: s1-normal, at_h: 24}
+      external_actions:
+        required: {}
+        optional:
+          publish_warning: {}
+          escalate_emergency: {}
+          notify_evacuation: {}
+      questions: {min: 1}
+      incident_ops:
+        forbidden: [close_incident]
+    no_issue: true
     numbers_grounded: true
 
 # ── 实验 0001（exp/0001-skill-vs-workflow 分支，不合入）──

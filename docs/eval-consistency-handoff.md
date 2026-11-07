@@ -65,9 +65,9 @@ expect_decisions:
 - 其余失败与对外决策无关：`s4-escalate-1201` 的 `no_wait_polling`（已知）、`s4-warning-rejected` 的 `no_retry_after_reject` 1 次（被拒后又提交 `escalate_emergency`，智能体行为，期望里它是 optional）、`s4-watch-wake-assess` 的 `numbers_grounded` 1 次——**判定环境的问题**：上一个用例（approval-timeout）留下的未关闭事件被该用例的智能体读到，运行器现已在每个用例开始前清理。
 - `v3-dispatch-order` 平均约 113 万 token（智能体反复查库存和测算），通过但偏贵，已记为观察项。
 - 期望是占位：撤人通知和预警在红色时的必要性仍待专家（见下面“需要回答的问题”）；`v3-dispatch-order` 的期望只要求提交调度单。
-- 补充（同日）：新增 `v3-kb-search`（检索类）、`v3-open-incident`、`v3-incident-stable`、`v3-incident-close`、`v3-incident-close-blocked`（有未完成跟踪计划时不得关闭），各 3 次：`expect_decisions` 15/15。全部通过 `kb-search`、`open-incident`、`close-blocked` 3/3，`incident-stable` 2/3，`incident-close` 1/3；后两个失败的都是 `numbers_grounded`：智能体把空列表写成“待确认告警 0 条、跟踪计划 0 个”（自己数的 0，不来自工具），按约定算智能体的问题，也可能是启发式对空列表过严，**未处理**，不影响决策判定。至此功能清单里的每一项都有带 `expect_decisions` 的用例（共 28 个）。
+- 补充（同日）：新增 `v3-kb-search`（检索类）、`v3-open-incident`、`v3-incident-stable`、`v3-incident-close`、`v3-incident-close-blocked`（有未完成跟踪计划时不得关闭），各 3 次：`expect_decisions` 15/15。全部通过 `kb-search`、`open-incident`、`close-blocked` 3/3，`incident-stable` 2/3，`incident-close` 1/3；后两个失败的都是 `numbers_grounded`：智能体把空列表写成“待确认告警 0 条、跟踪计划 0 个”（自己数的 0，不来自工具），按约定算智能体的问题，也可能是启发式对空列表过严，**未处理**，不影响决策判定。至此功能清单里的每一项都有带 `expect_decisions` 的用例（共 31 个）。
 - **向人提问的三种情形**：批准（对外动作用例）、缺信息（`v3-ask-lab-sample`，3/3 都提问）、事实冲突（`v3-ask-conflict`）。冲突用例首版期望“必须提问”，真跑 0/3：智能体指出化验单与监测不一致、以多点束管监测为准、不提交指令，这符合技能“无法用其他数据验证才问”的条件。**期望是我猜错了，不是智能体的问题**，已更正为“指出不一致、不采信化验单、对外动作为空、回复里点明不一致”。更正后**重新真跑** 3 次，3/3（调整期望，不是智能体变好）。
-- **决定（2026-11-07，按“有问题可自行决定”）**：① `notify_evacuation` 红色时保持 optional——必要性是专家规则，没有依据就不强制；② `v3-wake-repeat-dup`（1/3）记为**已知的智能体问题**，不改人设或技能来换通过率（原则 3），用例保留作回归基线；③ “冲突无法验证时必须提问”在模拟矿井里构造不出，不测；④ `recommended_level` 暂不改契约枚举（守卫按记录核对，字段不参与放行，期望里不约束；以后收紧需 `make schema`）。这四条是决定，不是待办。
+- **决定（2026-11-07，按“有问题可自行决定”）**：① `notify_evacuation` 红色时保持 optional——必要性是专家规则，没有依据就不强制；② `v3-wake-repeat-dup`（1/3）记为**已知的智能体问题**，不改人设或技能来换通过率（原则 3），用例保留作回归基线；③ “冲突无法验证时必须提问”：先前说“模拟矿井构造不出”没有试过，是错的。试了读数设置（`v3-ask-conflict-sensors`：上隅角 CO 设成 80 ppm、束管仍为 0）：代码的数据质量检查把该测点剔除，冲突由代码仲裁，智能体 3/3 不问是对的，该用例只作记录；真正无法验证的冲突是现场目击与监测矛盾，已加 `v3-ask-conflict-witness`（要求提问）；④ `recommended_level` 暂不改契约枚举（守卫按记录核对，字段不参与放行，期望里不约束；以后收紧需 `make schema`）。这四条是决定，不是待办。
 
 ## 待办（按优先级）
 
@@ -152,3 +152,13 @@ cd mcp && uv run --python 3.14 pytest tests/test_agent_*.py -q ; cd .. && make l
 2. 每个用例真跑 3 次以上，结果记录在提交说明里，失败逐个归因（判定方法的问题 / 智能体的问题 / 期望的猜测）。
 3. 新检查有合成反例的单元测试；`make check` 通过。
 4. 在 `eval-facts` 分支上分批提交；**不推送、不合入，除非用户说**。
+
+
+## 2026-11-07 修复运行器后的完整重跑（31 个用例各 3 次，deepseek-flash，`var/eval/agent/20261107-125445`）
+
+- `expect_decisions` 93 次里 89 次一致（重判后 91/93，见下）。全部检查都通过的用例：`s2-assess`、`s2-effect`、`s4-escalate`、`s4-explosion`、`s4-sealing-plan`、`s4-watch-wake-assess`、`v3-wake-anomaly`、`followup-due`、`degraded`、`review-timeline`、`wake-accelerating`、`wake-sensor-fault`、`wake-repeat-new`、`ask-lab-sample`、`notify-evacuation`、`kb-search`、`open-incident`、`incident-stable`、`ask-conflict`、`ask-conflict-sensors` 均 3/3。
+- 失败逐个归因：
+  - **期望的猜测（已改）**：`v3-wake-mine-alarm` 1/3→3/3：橙色时智能体提交了撤人通知，期望把撤人只放在红色 optional。撤人门槛待专家，改成橙/黄/蓝也 optional（重判得 3/3，这是调整期望，不是智能体变好）。
+  - **智能体的问题**：`v3-wake-repeat-dup` 2/3（已处理的告警仍重新研判并提交预警/升级）；`v3-ask-conflict-witness` 2/3（有 1 次没问就直接提交了撤人通知）；`s4-warning-rejected` 的 `no_retry_after_reject`（被拒后又提交 escalate_emergency）；`s4-plan-context-tamper` 的 `no_wait_polling`（等子 Agent 时轮询）。
+  - **判定方法的问题（未改）**：`v3-unseal-ready` 的 `record_referenced`（把只读的 `query_last_issued` 当成需要记录的对外动作）；`numbers_grounded` 对“0 条”“1 条”“相差约 60 小时”这类智能体自己数/减的数——`v3-incident-close`（1/3）、`incident-close-blocked`、`wake-approval-timeout`、`unseal-too-early` 的失败都是这一类；`v3-dispatch-order` 的 `cited_tools_called`（点名 get_inventory 但未调用）。其中数数和相减按项目约定是智能体违规，空列表的“0 条”是否该放行未定。
+- `v3-dispatch-order` 平均约 113 万 token，观察项。
