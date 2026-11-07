@@ -28,6 +28,7 @@
                             与被拒调用同一步并行发出的不算：模型发出时还没看到拒绝）
 - facts_reported: true      总指挥协调的最后回复里写明了某次固定流程结果里的关键事实（facts.py：等级、阶段、分区、步骤数、
                             满足项数、记录编号等），且没有相反说法；不比较措辞。替代 report_pasted（逐行比对要点）
+- expect_decisions: {...}   期望的决策（对外动作及参数、流程、事件操作）与会话里实际的比较；对外动作是封闭集合（decisions.py）
 - rubric: <清单名>          评测员按 rubrics/<清单名>.yaml 对最后回复作封闭式问答，逐题和期望答案比对；答案要带逐字引文
                             （judge.py；需要 DEEPSEEK_API_KEY，模型缺省 deepseek-flash）
 - report_pasted: true       （旧）总指挥协调的最后回复里原样包含本次运行中某个 workflow 工具返回的 report_markdown
@@ -64,6 +65,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import decisions  # noqa: E402  决策检查（期望的决策 B 与实际的 B1）
 import facts  # noqa: E402  固定流程的关键事实（B 类检查）
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -698,6 +700,11 @@ def grade(root: Session, checks: dict) -> dict:
             "ok": bool(good),
             "detail": {"runs": len(runs), "passed": good, **({"closest": min((c for _, c in runs), key=lambda c: len(c["missing"]) + len(c["contradicted"]))} if runs and not good else {})},
         }
+
+    if checks.get("expect_decisions"):
+        # D 类：期望的决策写在用例里，和会话里实际提交的对外动作、调用的流程和事件操作比较（decisions.py）
+        r = decisions.compare(checks["expect_decisions"], [c for s in sessions for c in s.calls()])
+        results["expect_decisions"] = {"ok": r["ok"], "detail": {"problems": r["problems"], "actual": r["actual"]}}
 
     if checks.get("rubric"):
         # C 类：评测员按清单（rubrics/<名>.yaml）对最后回复作封闭式问答，和期望答案逐题比对（judge.py）

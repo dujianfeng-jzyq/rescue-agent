@@ -119,6 +119,16 @@
   prompt: 持续检测矿井动态，有异常的时候告诉我
   advance_h: 12 # 第一轮结束后推进到第 30 小时（等级、阶段升高），等后台任务结束、唤醒
   checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {scenario: s4-escalation, at_h: 30, level: orange, stage: accelerating, recommend_escalation: false, realtime_alarms: 0}
+      external_actions:
+        required: {}
+        optional:
+          publish_warning: {level: orange}
+      flows_called: [run_fire_assessment, check_mine]
+      incident_ops:
+        forbidden: [close_incident]
     tools_called: [check_mine, run_fire_assessment]
     no_questions: true # 第三版 P4：发现异常后直接研判，不再问“要不要研判”
     explanation_generated: true
@@ -141,6 +151,18 @@
     （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
   approvals: {} # 对外动作的确认一律拒绝
   checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {scenario: s4-escalation, at_h: 55, level: red, stage: accelerating, recommend_escalation: true, realtime_alarms: 0}
+      external_actions:
+        required:
+          escalate_emergency: {}
+          publish_warning: {level: red}
+        optional:
+          notify_evacuation: {}
+      flows_called: [run_fire_assessment]
+      incident_ops:
+        forbidden: [close_incident]
     incident_read: true
     tools_called: [run_fire_assessment]
     no_questions: true
@@ -167,6 +189,13 @@
     （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
   approvals: {}
   checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {scenario: s2-slow-oxidation, effect: continuing}
+      flows_called: [review_effect]
+      incident_ops:
+        required: [complete_followup, add_followup]
+        forbidden: [close_incident]
     incident_read: true
     tools_called: [review_effect]
     no_questions: true
