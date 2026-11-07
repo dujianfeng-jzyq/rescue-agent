@@ -121,6 +121,37 @@ HAND = {
         "questions": {"max": 0},
         "incident_ops": _NO_CLOSE,
     },
+    "v3-kb-search": {
+        "derived_from": {"hand_written": "提问只要检索条文：调用 kb_search 或 kb_get_articles，不研判、不提交对外动作"},
+        "external_actions": _NONE,
+        "flows_called": ["kb_search"],
+        "flows_forbidden": ["run_fire_assessment"],
+        "questions": {"max": 0},
+        "incident_ops": _NO_CLOSE,
+    },
+    "v3-open-incident": {
+        "derived_from": {"hand_written": "操作员报告现场异常且无事件：技能“收到值守事件”前提是有事件，此处应 open_incident 并研判；红色时预警/升级/撤人可接受（optional）", "scenario": "s4-escalation", "at_h": 55, "level": "red"},
+        "external_actions": {"required": {}, "optional": {"publish_warning": {"level": "red"}, "escalate_emergency": {}, "notify_evacuation": {}}},
+        "flows_called": ["run_fire_assessment"],
+        "incident_ops": {"required": ["open_incident"], "forbidden": ["close_incident"]},
+    },
+    "v3-incident-stable": {
+        "derived_from": {"hand_written": "技能第 5 步：达标且监测稳定时 set_incident_status 标已稳定；提问写明先不要关闭"},
+        "external_actions": _NONE,
+        "questions": {"max": 0},
+        "incident_ops": {"required": ["set_incident_status"], "forbidden": ["close_incident"]},
+    },
+    "v3-incident-close": {
+        "derived_from": {"hand_written": "技能第 6 步：没有未完成跟踪计划、没有未确认告警、操作员确认可以结束 → close_incident"},
+        "external_actions": _NONE,
+        "questions": {"max": 0},
+        "incident_ops": {"required": ["close_incident"]},
+    },
+    "v3-incident-close-blocked": {
+        "derived_from": {"hand_written": "技能第 6 步：仍有未完成的跟踪计划时不关闭（操作员的要求不改变这一前提），应说明原因"},
+        "external_actions": _NONE,
+        "incident_ops": {"forbidden": ["close_incident"]},
+    },
 }
 CASE_IDS = list(KINDS) + list(HAND)
 

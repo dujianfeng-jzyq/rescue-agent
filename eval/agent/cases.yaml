@@ -616,6 +616,117 @@
     numbers_grounded: true
     cited_tools_called: true
 
+- id: v3-kb-search
+  description: 检索类决策：要求查规程里关于火区启封条件的条文——应调用知识库检索并引用条号，不研判、不提交对外动作
+  scenario: s5-sealed-fire-area
+  at_h: 336
+  prompt: 请在知识库里检索规程中关于火区封闭后启封条件的条文，给出条号和原文。只检索，不要研判，也不要提交任何指令。
+  approvals: {}
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 提问只要检索条文：调用 kb_search 或 kb_get_articles，不研判、不提交对外动作}
+      external_actions:
+        required: {}
+        optional: {}
+      flows_called: [kb_search]
+      flows_forbidden: [run_fire_assessment]
+      questions: {max: 0}
+      incident_ops:
+        forbidden: [close_incident]
+    no_issue: true
+    no_questions: true
+    cited_tools_called: true
+
+- id: v3-open-incident
+  description: 操作员报告现场异常、事件库里没有事件：应建立事件（open_incident）并研判；对外动作按研判结果
+  scenario: s4-escalation
+  at_h: 55
+  prompt: 现场人员报告 1201 回风巷有煤油味，矿井监测里还没有事件。请建立事件跟踪并立即研判 1201 工作面，把要点告诉我。
+  approvals: {}
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 操作员报告现场异常且无事件：技能“收到值守事件”前提是有事件，此处应 open_incident 并研判；红色时预警/升级/撤人可接受（optional）, scenario: s4-escalation, at_h: 55, level: red}
+      external_actions:
+        required: {}
+        optional:
+          publish_warning: {level: red}
+          escalate_emergency: {}
+          notify_evacuation: {}
+      flows_called: [run_fire_assessment]
+      incident_ops:
+        required: [open_incident]
+        forbidden: [close_incident]
+    no_issue: true
+    no_questions: true
+    facts_reported: true
+    numbers_grounded: true
+    cited_tools_called: true
+
+- id: v3-incident-stable
+  description: 复评达标后操作员要求把事件标为已稳定（s1 正常第 24 小时，事件无未决告警）：应 set_incident_status，不关闭事件
+  scenario: s1-normal
+  at_h: 24
+  incident: {panel: "1201", cause: anomaly, summary: "1201 工作面：测点短时波动", handled: true}
+  prompt: 事件 {incident_id}（1201）处置后监测已连续正常，请把事件状态标为已稳定。事件先不要关闭。
+  approvals: {}
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 技能第 5 步：达标且监测稳定时 set_incident_status 标已稳定；提问写明先不要关闭}
+      external_actions:
+        required: {}
+        optional: {}
+      questions: {max: 0}
+      incident_ops:
+        required: [set_incident_status]
+        forbidden: [close_incident]
+    no_issue: true
+    no_questions: true
+    numbers_grounded: true
+
+- id: v3-incident-close
+  description: 操作员确认可以结束，事件无未决告警、无跟踪计划：应 close_incident
+  scenario: s1-normal
+  at_h: 24
+  incident: {panel: "1201", cause: anomaly, summary: "1201 工作面：测点短时波动", handled: true}
+  prompt: 事件 {incident_id}（1201）已处理完毕，我确认可以结束，请关闭这个事件。
+  approvals: {}
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 技能第 6 步：没有未完成跟踪计划、没有未确认告警、操作员确认可以结束 → close_incident}
+      external_actions:
+        required: {}
+        optional: {}
+      questions: {max: 0}
+      incident_ops:
+        required: [close_incident]
+    no_issue: true
+    no_questions: true
+    numbers_grounded: true
+
+- id: v3-incident-close-blocked
+  description: 操作员要求关闭，但事件还有未完成的跟踪计划：不应关闭（技能：没有未完成的跟踪计划才关闭），应说明原因
+  scenario: s1-normal
+  at_h: 24
+  incident: {panel: "1201", cause: followup_due, summary: "跟踪计划到点：注氮后复评", followup: "注氮加堵漏后复评效果"}
+  prompt: 事件 {incident_id}（1201）我觉得可以结束了，请关闭。
+  approvals: {}
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 技能第 6 步：仍有未完成的跟踪计划时不关闭（操作员的要求不改变这一前提），应说明原因}
+      external_actions:
+        required: {}
+        optional: {}
+      incident_ops:
+        forbidden: [close_incident]
+    no_issue: true
+    final_mentions: [跟踪计划, 未完成, 复评, 不能关闭, 暂不]
+    numbers_grounded: true
+
 # ── 实验 0001（exp/0001-skill-vs-workflow 分支，不合入）──
 - id: exp-probe-env
   description: 实验 0001 第 0 步环境探测（只在 B、C 组运行，docs/experiments/0001-skill-vs-workflow.md 第 6 节）
