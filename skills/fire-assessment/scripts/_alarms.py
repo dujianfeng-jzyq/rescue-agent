@@ -66,3 +66,17 @@ def check_reignition(ev: dict[str, Any], cfg: dict[str, Any], warnings: list[str
 
 def check_all(ev: dict[str, Any], cfg: dict[str, Any], warnings: list[str]) -> list[dict[str, Any]]:
     return check_methane(ev, cfg["methane"]) + check_reignition(ev, cfg["reignition"], warnings)
+
+
+def reseal_indicated(ev: dict[str, Any], alarms: list[dict[str, Any]]) -> bool:
+    """启封后复燃，需要重新封闭：火区台账里本工作面有状态为已启封的火区，且有第164条复燃报警。
+
+    只看台账状态和报警，不看别的。没有火区台账、火区仍封闭（或已重新封闭）时为 False（fail closed：
+    不替没有台账的矿井下“重新封闭”的结论）。已封闭火区里 CO 上升的复燃报警仍照常报，由智能体研判，不触发本结论。
+    TODO(专家): 是否还要结合启封后的时长、氧浓度等，按本矿火区管理经验确定。
+    """
+    areas = ev.get("fire_areas")
+    if not areas:
+        return False
+    unsealed = any(a.get("panel") == ev["panel"] and a.get("status") == "unsealed" for a in areas)
+    return unsealed and any(a["rule_id"] == "RL-164" for a in alarms)

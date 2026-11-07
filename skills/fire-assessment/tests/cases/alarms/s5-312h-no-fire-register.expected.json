@@ -1,0 +1,44 @@
+{
+ "algorithm_version": "alarms/1.0.0",
+ "params": {
+  "methane": {
+   "limit_pct": 2.0,
+   "window_h": 1
+  },
+  "reignition": {
+   "window_h": 12,
+   "co_rate_ppm_h": 0.8,
+   "co_growth_ratio": 1.3
+  },
+  "status": "placeholder"
+ },
+ "warnings": [
+  "证据里没有火区台账，复燃征兆按所有束管测点检查（可能多报）"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-15T08:00:00",
+  "alarms": [
+   {
+    "rule_id": "RL-164",
+    "article": "第164条",
+    "sensor_id": "BT-1201-G1",
+    "message": "1201采空区束管1号 CO 近12小时以 4.1 ppm/h 上升，可能复燃，应立即重新封闭火区并撤人"
+   },
+   {
+    "rule_id": "RL-164",
+    "article": "第164条",
+    "sensor_id": "BT-1201-G2",
+    "message": "1201采空区束管2号 CO 近12小时以 4.3 ppm/h 上升，可能复燃，应立即重新封闭火区并撤人"
+   },
+   {
+    "rule_id": "RL-164",
+    "article": "第164条",
+    "sensor_id": "BT-1201-G3",
+    "message": "1201采空区束管3号 CO 近12小时以 1.2 ppm/h 上升，可能复燃，应立即重新封闭火区并撤人"
+   }
+  ],
+  "count": 3,
+  "reseal_indicated": false
+ }
+}

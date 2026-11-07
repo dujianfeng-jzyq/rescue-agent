@@ -3,6 +3,9 @@
 
 - 预警等级：{{warning.result.level_name}}；自燃发展阶段：{{stage.result.stage_name}}
 - 实时报警：{{^alarms.result.alarms}}无{{/alarms.result.alarms}}{{#alarms.result.alarms}}[{{article}}] {{sensor_id}} {{/alarms.result.alarms}}
+{{#alarms.result.reseal_indicated}}
+- 启封后复燃：火区已启封且出现复燃征兆，应重新封闭
+{{/alarms.result.reseal_indicated}}
 - 爆炸危险性：{{explosion.result.overall_name}}
 {{#worst}}
 - 最不利测点：{{sensor_id}}，{{zone}} 区 {{zone_name}}

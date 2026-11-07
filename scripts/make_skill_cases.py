@@ -87,6 +87,10 @@ def build_inputs() -> dict[tuple[str, str, str], dict]:
     w = {k: run(FA, "warning", {"evidence": ev}) for k, ev in (("s4-60", s4_60), ("s1-24", s1_24), ("s5-312", s5_312))}
     st = {k: run(FA, "stage", {"warning": v}) for k, v in w.items()}
     al = {k: run(FA, "alarms", {"evidence": ev}) for k, ev in (("s4-60", s4_60), ("s1-24", s1_24), ("s5-312", s5_312))}
+    resealed = copy.deepcopy(s5_312)  # 同一份证据，火区台账改成已封闭：CO 上升仍报警，但不触发“重新封闭”
+    for a in resealed["fire_areas"]:
+        a["status"], a["unsealed_at"] = "sealed", None
+    no_register = {k: v for k, v in s5_312.items() if k != "fire_areas"}  # 没有火区台账：不下“重新封闭”的结论
     intense = copy.deepcopy(w["s4-60"])
     intense["result"]["values"]["c2h2_ppm"] = 0.2
     return {
@@ -96,6 +100,8 @@ def build_inputs() -> dict[tuple[str, str, str], dict]:
         (FA, "stage", "s1-normal-24h-no-sign"): {"warning": w["s1-24"]},
         (FA, "stage", "intense-c2h2"): {"warning": intense},
         (FA, "alarms", "s5-unsealed-312h-reignition"): {"evidence": s5_312},
+        (FA, "alarms", "s5-sealed-312h-co-rising-not-reseal"): {"evidence": resealed},
+        (FA, "alarms", "s5-312h-no-fire-register"): {"evidence": no_register},
         (FA, "alarms", "methane-over-limit-rising"): {"evidence": methane_evidence(s1_24)},
         (FA, "trend", "s4-escalation-60h"): {"evidence": s4_60, "warning": w["s4-60"]},
         (FA, "personnel", "s4-escalation-60h-red"): {"evidence": s4_60, "warning": w["s4-60"]},
@@ -283,6 +289,10 @@ def build_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
                 "explanation_summary": "红色预警、加速氧化，建议升级为应急响应",
                 "chart_markdown": chart,
             })  # fmt: skip
+            for tpl in ("brief", "report"):  # 只检查模板的“重新封闭”分支：数据同 s4，仅把标志置真
+                d = copy.deepcopy(out[(FA, tpl, label)])
+                d["alarms"]["result"]["reseal_indicated"] = True
+                out[(FA, tpl, "reseal-flag-true")] = d
         check = run(FA, "check", {"evidence": ev})
         out[(FA, "check", label)] = report_data({"check": fake_record("check", check, 0)})
         if esc_key:

@@ -222,6 +222,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       as_of: evidence.as_of,
       warning: { level: w.level, level_name: w.level_name, stage: st.stage, stage_name: st.stage_name },
       alarms: al.alarms,
+      reseal_indicated: al.reseal_indicated,
       explosion: {
         overall: x.overall,
         overall_name: x.overall_name,

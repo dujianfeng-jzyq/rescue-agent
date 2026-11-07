@@ -24,6 +24,7 @@
     "message": "1201上隅角 甲烷 2.50% 超过 2.0% 且在上升，人员应立即撤到安全地点"
    }
   ],
-  "count": 1
+  "count": 1,
+  "reseal_indicated": false
  }
 }

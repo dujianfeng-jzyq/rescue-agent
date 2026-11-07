@@ -61,7 +61,7 @@ version: 0.1.0
 | 脚本 | 输入 | 说明 |
 | --- | --- | --- |
 | `check.py` | 证据（`collect.yaml` 的 check），可选基线 | 风险检测 |
-| `alarms.py` | 证据 | 实时红线报警 |
+| `alarms.py` | 证据 | 实时红线报警；`reseal_indicated`：火区已启封且有复燃报警，应重新封闭（台账里的状态加报警，由代码判定） |
 | `warning.py` | 证据 | 预警等级、指标、来源测点、数据质量 |
 | `stage.py` | warning 的结果 | 自燃发展阶段 |
 | `trend.py` | 证据、warning 的结果 | 触发指标来源测点的趋势 |

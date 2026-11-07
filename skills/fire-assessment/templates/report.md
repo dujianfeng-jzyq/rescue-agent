@@ -12,6 +12,10 @@
 
 实时报警：{{^alarms.result.alarms}}无{{/alarms.result.alarms}}
 
+{{#alarms.result.reseal_indicated}}
+启封后复燃：火区已启封且出现复燃征兆，应重新封闭。
+
+{{/alarms.result.reseal_indicated}}
 {{#alarms.result.alarms}}
 - [{{article}}] {{sensor_id}}：{{message}}
 {{/alarms.result.alarms}}
