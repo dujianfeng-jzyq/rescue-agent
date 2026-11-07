@@ -376,6 +376,45 @@
     numbers_grounded: true
     cited_tools_called: true
 
+- id: v3-reignition-reseal
+  description: 启封后复燃（s5 第 240 小时提前启封，第 312 小时 CO 持续上升）：监听器唤醒后直接研判，reseal_indicated 为真则起草重新封闭方案并提交（放行），不先问人、不再提交启封
+  scenario: s5-sealed-fire-area
+  apply:
+    - {at_h: 240, type: unseal} # 提前启封；火区台账变为已启封
+  at_h: 312
+  incident: {panel: "1201", cause: anomaly, summary: "1201 工作面：出现新的实时报警（第164条）"}
+  prompt: |-
+    【值守事件 {incident_id}】1201（火情，监测中）。以下告警由监听器发现，不经模型：
+    - 告警 {alert_id}（矿井时间 {mine_now}）：1201 工作面：出现新的实时报警（第164条，采空区束管 CO 持续上升）
+    请立即对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。不要先问操作员“要不要研判”。
+    （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
+  approvals: {issue_sealing_plan: allow} # 重新封闭方案放行，其余对外动作一律拒绝
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 火区已启封且有 RL-164 复燃报警（alarms 的 reseal_indicated 为真）：流程规定直接重新封闭；升级、预警、撤人通知可接受（optional）；不应再提交启封审批}
+      external_actions:
+        required:
+          issue_sealing_plan: {}
+        optional:
+          publish_warning: {}
+          escalate_emergency: {}
+          notify_evacuation: {}
+      flows_called: [run_fire_assessment, draft_sealing_plan]
+      questions: {max: 0}
+      incident_ops:
+        forbidden: [close_incident]
+    incident_read: true
+    tools_called: [run_fire_assessment, draft_sealing_plan]
+    tools_not_called: [approve_unsealing]
+    approval_asked: [issue_sealing_plan]
+    actions_issued: [issue_sealing_plan]
+    record_referenced: true
+    no_questions: true
+    facts_reported: true
+    numbers_grounded: true
+    cited_tools_called: true
+
 # ── 一致性检测补全（docs/eval-consistency.md）：每个功能至少一个带 expect_decisions 的用例，期望都是占位 ──
 - id: v3-wake-accelerating
   description: 加速恶化场景（s3）第 57 小时升红色：与 s4 同样直接研判，升级建议一致，对外动作按研判结果

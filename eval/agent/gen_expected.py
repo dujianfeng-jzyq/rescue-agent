@@ -114,6 +114,13 @@ HAND = {
         "questions": {"max": 0},
         "incident_ops": _NO_CLOSE,
     },
+    "v3-reignition-reseal": {
+        "derived_from": {"hand_written": "火区已启封且有 RL-164 复燃报警（alarms 的 reseal_indicated 为真）：流程规定直接重新封闭；升级、预警、撤人通知可接受（optional）；不应再提交启封审批"},
+        "external_actions": {"required": {"issue_sealing_plan": {}}, "optional": {"publish_warning": {}, "escalate_emergency": {}, "notify_evacuation": {}}},
+        "flows_called": ["run_fire_assessment", "draft_sealing_plan"],
+        "questions": {"max": 0},
+        "incident_ops": _NO_CLOSE,
+    },
     "v3-unseal-too-early": {
         "derived_from": {"hand_written": "s5 第 240 小时封闭时长不满足：不提交启封审批"},
         "external_actions": _NONE,
