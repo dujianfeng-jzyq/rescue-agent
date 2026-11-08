@@ -1,0 +1,65 @@
+# 防灭火处置方案的结构（开发占位，待防灭火专业和通风部门审定）。
+# 与封闭方案（sealing-plan）的区别：不封闭火区，不安排人员进入灾区，没有撤人和密闭步骤；撤人按预案和升级流程另行处理。
+#
+# 必备步骤的类型和相对顺序固定（红线规则逐项检查，guard 下发时按记录核对）；
+# 可选步骤由“方案编写”阶段从清单里选，按 after 插在指定步骤之后（同一位置按本清单的顺序）。
+status: placeholder
+reviewed_by: null
+
+kind: firefighting
+title: 采空区防灭火处置方案
+plan_id_prefix: FP
+
+# 方案现场条件：灾区甲烷取本工作面巷道安全监控测点（非束管）最近 window_h 小时最新可用值的最大值，
+# 任一测点速率超过 rising_rate_pct_h 为“继续上升”（第75条）。与封闭方案相同。TODO(专家): 确认窗口和速率
+methane_window_h: 1
+methane_rising_rate_pct_h: 0.05
+
+# 堵漏步骤作用的巷道类型
+leak_sealing_roadway_kind: return
+
+required_steps:
+  - key: monitor
+    type: monitor
+    description: 处置前观测采空区束管、上隅角和回风巷的气体与温度，作为处置效果的对照；处置期间按指挥部确定的频次加密观测
+  - key: inert_injection
+    type: inert_injection
+    description: 向采空区注入惰性气体，降低氧浓度、抑制煤氧化（注氮流量由代码按漏风量和目标氧浓度估算，未给出时不写数值）
+
+optional_steps:
+  - key: leak_sealing
+    type: leak_sealing
+    after: monitor
+    roadways: leak
+    label: 回风侧堵漏，减少向采空区漏风
+    description: 回风侧堵漏，减少向采空区漏风
+  - key: inhibitor_spray
+    type: inhibitor_spray
+    after: inert_injection
+    label: 向采空区浮煤喷洒阻化剂
+    description: 向采空区浮煤喷洒阻化剂，抑制煤氧化
+  - key: pressure_balancing
+    type: pressure_balancing
+    after: inert_injection
+    label: 调节风压，减少向采空区漏风
+    description: 调节风压，减少向采空区漏风（保持通风系统稳定，不得反风或风流短路，第98条）
+  - key: grouting
+    type: grouting
+    after: inert_injection
+    label: 向采空区注浆
+    description: 向采空区注浆，覆盖浮煤、充填裂隙
+  - key: monitor_after
+    type: monitor
+    after: inert_injection
+    label: 处置后加密束管取样，观测火区气体变化
+    description: 处置后按本矿自然发火预测预报制度加密束管取样，观测气体变化，效果由复评判定（频次由指挥部确定）
+
+# 方案依据（条文原文由知识库的条文索引给出）
+basis:
+  document: 矿山救援规程
+  articles: [第98条]   # 第85条讲封闭火区，不作为不封闭方案的依据；注惰步骤的对照条文由 plan-compliance 的 step_articles 给出。TODO(专家): 确认依据条文
+
+# “方案编写”阶段的限制
+limits:
+  max_note_chars: 60
+  max_summary_chars: 100

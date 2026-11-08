@@ -1,0 +1,36 @@
+# 采集清单：draft_firefighting_plan 的证据（skills/README.md“采集清单”）。只能用 mine_data 的工具（CLAUDE.md 约定 5）。
+#
+# 测点组与 sealing-plan 的 plan 清单相同（流程在同一份证据上运行 explosion_triangle 和本技能的脚本），
+# 但不取火区台账（不涉及封闭时间）和人员定位（不安排撤人），取通风网络（堵漏巷道、注浆量）和物资台账（注氮产能、注浆干料与库存比较）。
+# TODO(专家): 测点和必需项待评审。
+status: placeholder
+reviewed_by: null
+
+kinds:
+  plan:
+    sensors:
+      - name: tubes               # 采空区束管：爆炸三角形（爆炸危险性、氧浓度）、预警等级
+        select: {role: goaf_gas_tube, panel: true}
+        window_h: 24
+        required: true
+      - name: upper_corner        # 上隅角
+        select: {role: upper_corner, panel: true}
+        window_h: 24
+        required: true
+      - name: return              # 回风巷
+        select: {role: return_airway, panel: true}
+        window_h: 24
+        required: true
+      - name: intake              # 进风巷（辅助）
+        select: {role: intake_airway, panel: true}
+        window_h: 24
+      - name: goaf_temperature    # 采空区测温（爆炸三角形的温度）
+        select: {role: goaf_temperature, panel: true}
+        window_h: 24
+      - name: methane             # 巷道甲烷：方案现场条件的甲烷浓度和是否上升（取本工作面的测点）
+        select: {source: safety_monitor}
+        require_measurands: [CH4]
+        measurands: [CH4]
+        window_h: 1
+    network: true                 # 堵漏巷道、注浆量
+    inventory: true               # 材料、制氮产能与库存比较

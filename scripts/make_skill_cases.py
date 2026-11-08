@@ -30,6 +30,7 @@ FA, XT, ESC = "fire-assessment", "explosion-triangle", "emergency-escalation"
 SP, PC, ER = "sealing-plan", "plan-compliance", "effect-review"
 IR = "incident-review"
 UP = "unsealing-plan"
+FP = "firefighting-plan"
 
 
 def evidence(scenario: str, hours: float, kind: str = "assessment", unseal_at: float | None = None, skill: str = FA) -> dict:
@@ -233,6 +234,59 @@ def sealing_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
         data = inputs[(PC, "review", case)]
         rev = run(PC, "review", data)
         out[(PC, "review", case)] = report_data({"review": fake_record("review", rev, 0)}, {"articles": index_articles(data["scope"]["result"]["articles"])})
+    return out
+
+
+# 防灭火方案：“方案编写”阶段的选择是模型给的，样例里写死（没有密闭巷道）
+FIRE_FULL = {
+    "optional_steps": ["leak_sealing", "grouting", "monitor_after"],
+    "step_notes": [{"key": "inert_injection", "note": "注氮口位置按现场确定"}, {"key": "monitor", "note": ""}],
+    "summary": "先注惰降氧，辅以堵漏和注浆，不封闭火区",
+}
+FIRE_MINIMAL = {"optional_steps": [], "step_notes": [], "summary": ""}
+
+
+def firefighting_review_choice(scope: dict, fail: str | None = None) -> dict:
+    items = [{"id": it["id"], "conclusion": "fail" if it["id"] == fail else "pass", "articles": ["第98条"] if it["id"] == "ventilation" else [], "note": "改为不涉及反风" if it["id"] == fail else ""} for it in scope["result"]["items"]]
+    return {"items": items, "summary": "按必备步骤注惰并监测"}
+
+
+def firefighting_inputs() -> dict[tuple[str, str, str], dict]:
+    s3 = evidence("s3-accelerating", 39, "plan", skill=FP)  # 橙色
+    s1 = evidence("s1-normal", 24, "plan", skill=FP)
+    pre = {k: {"evidence": ev, "explosion": run(XT, "explosion_triangle", {"evidence": ev})} for k, ev in (("s3", s3), ("s1", s1))}
+    sk_full = {**pre["s3"], "options": {"leak_m3_min": 30, "target_o2_pct": 5}}
+    sk_plain = {**pre["s3"], "options": {}}
+    sk_s1 = {**pre["s1"], "options": {}}
+    out = {
+        (FP, "skeleton", "s3-accelerating-39h-inert-rate"): sk_full,
+        (FP, "skeleton", "s3-accelerating-39h"): sk_plain,
+        (FP, "skeleton", "s1-normal-24h"): sk_s1,
+    }
+    full = {"skeleton": run(FP, "skeleton", sk_full), "evidence": s3, "options": {"selection": FIRE_FULL}}
+    minimal = {"skeleton": run(FP, "skeleton", sk_plain), "evidence": s3, "options": {"selection": FIRE_MINIMAL}}
+    out[(FP, "compose", "s3-accelerating-39h-full")] = full
+    out[(FP, "compose", "s3-accelerating-39h-minimal")] = minimal
+    plan = run(FP, "compose", full)
+    out[(PC, "scope", "firefighting-s3-39h-full")] = {"plan": plan}
+    scope = run(PC, "scope", {"plan": plan})
+    out[(PC, "review", "firefighting-pass")] = {"plan": plan, "scope": scope, "options": {"redline": REDLINE_OK, "review": firefighting_review_choice(scope), "round": 1}}
+    out[(PC, "review", "firefighting-item-fail")] = {"plan": plan, "scope": scope, "options": {"redline": REDLINE_OK, "review": firefighting_review_choice(scope, fail="ventilation"), "round": 1}}
+    return out
+
+
+def firefighting_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
+    out = {}
+    for case in ("s3-accelerating-39h-full", "s3-accelerating-39h-minimal"):
+        plan = run(FP, "compose", inputs[(FP, "compose", case)])
+        refs = plan["result"]["plan"]["basis"]
+        out[(FP, "plan", case)] = report_data({"compose": fake_record("compose", plan, 0)}, {"articles": index_articles([{"document": b["document"], "article": b["article"]} for b in refs])})
+    plan = run(FP, "compose", inputs[(FP, "compose", "s3-accelerating-39h-full")])
+    steps = "；".join(f"{x['order']}. {x['type_name']}" for x in plan["result"]["steps_view"])
+    out[(FP, "brief", "s3-accelerating-39h-full-pass")] = report_data({"compose": fake_record("compose", plan, 0)}, {"steps_text": steps, "redline_text": "通过", "verdict_text": "合规审核通过（1 轮）", "human_count": None, "review_id": "RS-20261104T200000-case01"})  # fmt: skip
+    data = inputs[(PC, "review", "firefighting-pass")]
+    rev = run(PC, "review", data)
+    out[(PC, "review", "firefighting-pass")] = report_data({"review": fake_record("review", rev, 0)}, {"articles": index_articles(data["scope"]["result"]["articles"])})
     return out
 
 
@@ -456,7 +510,7 @@ def main() -> int:
     ap.add_argument("--expected", action="store_true", help="只按现有输入重写期望")
     args = ap.parse_args()
     if args.expected:
-        for skill in (FA, XT, ESC, SP, PC, ER, IR, UP):
+        for skill in (FA, XT, ESC, SP, PC, ER, IR, UP, FP):
             for inp in sorted((SKILLS / skill / "tests" / "cases").glob("*/*.input.json")):
                 write_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/{inp.parent.name}/{inp.name}")
@@ -464,8 +518,8 @@ def main() -> int:
                 write_template_expected(skill, inp.parent.name, inp.name.removesuffix(".input.json"), json.loads(inp.read_text(encoding="utf-8")))
                 print(f"期望  {skill}/templates/{inp.parent.name}/{inp.name}")
         return 0
-    inputs = {**build_inputs(), **sealing_inputs(), **effect_inputs(), **incident_inputs(), **unseal_inputs()}
-    for (skill, template, case), data in {**build_template_inputs(inputs), **sealing_template_inputs(inputs), **effect_template_inputs(inputs), **incident_template_inputs(inputs), **unseal_template_inputs(inputs)}.items():
+    inputs = {**build_inputs(), **sealing_inputs(), **effect_inputs(), **incident_inputs(), **unseal_inputs(), **firefighting_inputs()}
+    for (skill, template, case), data in {**build_template_inputs(inputs), **sealing_template_inputs(inputs), **effect_template_inputs(inputs), **incident_template_inputs(inputs), **unseal_template_inputs(inputs), **firefighting_template_inputs(inputs)}.items():
         write_template_case(skill, template, case, data)
         print(f"模板  {skill}/{template}/{case}")
     for (skill, script, case), data in inputs.items():

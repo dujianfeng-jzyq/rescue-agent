@@ -1,0 +1,15 @@
+# 物资用量估算参数。与 sealing-plan 的 materials.yaml 中注浆、注氮两节相同（防灭火方案没有密闭材料）。全部是开发占位值，不代表本矿取值。
+# TODO(专家): 由救护队和防灭火专业按本矿密闭设计、注浆工艺和材料规格确定。
+status: placeholder
+reviewed_by: null
+
+grout:
+  # 注浆量 = 采空区长 × 宽 × 采高 × 注浆系数；干料体积 = 浆液体积 ÷ (水土比 + 1)；干料质量 = 干料体积 × 堆积密度
+  mining_height_m: 3.0
+  coefficient: 0.05
+  water_soil_ratio: 5
+  bulk_density_t_m3: 1.5
+
+inert:
+  # 注氮稀释估算：O₂_target = O₂_current × Q_leak / (Q_leak + η·Q_N₂)；η 为注入氮气进入漏风流的比例
+  penetration: 0.9

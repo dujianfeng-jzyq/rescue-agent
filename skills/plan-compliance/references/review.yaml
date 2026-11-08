@@ -30,6 +30,21 @@ items:
   - id: evacuation
     label: 撤人：写明撤人按预案立即执行，不等待本方案
 
+# 按方案类型覆盖 always 和 items（没有列出的类型用上面的，即封闭方案）。防灭火方案不封闭火区、不安排人员进入灾区，
+# 所以没有封闭顺序、现场侦察、撤人这几项，改查“没有安排进入灾区”。
+kinds:
+  firefighting:
+    always: [第46条]
+    items:
+      - id: basis
+        label: 依据：方案依据的条文与措施对得上
+      - id: context
+        label: 现场条件：缺失的条件已列为待补充，没有被当成已满足
+      - id: no_entry
+        label: 不进入灾区：方案没有安排人员进入灾区作业，也没有替救护队制定行动细节
+      - id: ventilation
+        label: 通风稳定：均压、堵漏等措施没有造成反风、风流短路或停主要通风机（第98条）
+
 conclusions:
   pass: 通过
   fail: 不通过

@@ -18,7 +18,9 @@ def run(data, _args):
     plan = p["plan"]
     cfg = load_reference("review.yaml")
     doc = cfg["document"]
-    wanted = set(cfg["always"])
+    by_kind = (cfg.get("kinds") or {}).get(plan.get("kind"), {})
+    always, items = by_kind.get("always", cfg["always"]), by_kind.get("items", cfg["items"])
+    wanted = set(always)
     for s in plan["steps"]:
         wanted.update(cfg["step_articles"].get(s["type"], []))
     wanted.update(b["article"] for b in plan["basis"] if b["document"] == doc and b.get("article"))
@@ -28,11 +30,13 @@ def run(data, _args):
         "as_of": p["as_of"],
         "plan_id": plan["plan_id"],
         "articles": articles,
-        "items": cfg["items"],
+        "items": items,
         "conclusions": [{"id": k, "label": v} for k, v in cfg["conclusions"].items()],
         "limits": cfg["limits"],
     }
     params = {k: cfg[k] for k in ("document", "step_articles", "always")}
+    if cfg.get("kinds"):
+        params["kinds"] = cfg["kinds"]
     return result, params, []
 
 

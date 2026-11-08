@@ -1,0 +1,164 @@
+{
+ "algorithm_version": "review/1.0.0",
+ "params": {
+  "verdict_rule": "红线预检不通过或任一审核项不通过即为不通过"
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-03T23:00:00",
+  "plan_id": "FP-1201-202611032300",
+  "round": 1,
+  "verdict": "fail",
+  "verdict_name": "不通过",
+  "redline": {
+   "ok": true,
+   "problems": [],
+   "notes": []
+  },
+  "items": [
+   {
+    "id": "basis",
+    "label": "依据：方案依据的条文与措施对得上",
+    "conclusion": "pass",
+    "conclusion_name": "通过",
+    "articles": [],
+    "articles_text": "",
+    "note": ""
+   },
+   {
+    "id": "context",
+    "label": "现场条件：缺失的条件已列为待补充，没有被当成已满足",
+    "conclusion": "pass",
+    "conclusion_name": "通过",
+    "articles": [],
+    "articles_text": "",
+    "note": ""
+   },
+   {
+    "id": "no_entry",
+    "label": "不进入灾区：方案没有安排人员进入灾区作业，也没有替救护队制定行动细节",
+    "conclusion": "pass",
+    "conclusion_name": "通过",
+    "articles": [],
+    "articles_text": "",
+    "note": ""
+   },
+   {
+    "id": "ventilation",
+    "label": "通风稳定：均压、堵漏等措施没有造成反风、风流短路或停主要通风机（第98条）",
+    "conclusion": "fail",
+    "conclusion_name": "不通过",
+    "articles": [
+     "第98条"
+    ],
+    "articles_text": "第98条",
+    "note": "改为不涉及反风"
+   }
+  ],
+  "failed_items": [
+   {
+    "id": "ventilation",
+    "label": "通风稳定：均压、堵漏等措施没有造成反风、风流短路或停主要通风机（第98条）",
+    "conclusion": "fail",
+    "conclusion_name": "不通过",
+    "articles": [
+     "第98条"
+    ],
+    "articles_text": "第98条",
+    "note": "改为不涉及反风"
+   }
+  ],
+  "failed_count": 1,
+  "needs_human_count": 0,
+  "human_items": [],
+  "has_human_items": false,
+  "summary": "按必备步骤注惰并监测",
+  "plan": {
+   "plan_id": "FP-1201-202611032300",
+   "kind": "firefighting",
+   "title": "1201 采空区防灭火处置方案",
+   "context": {
+    "fire_type": "goaf_spontaneous_combustion",
+    "as_of": "2026-11-03T23:00:00",
+    "methane_pct": 0.665,
+    "methane_rising": false,
+    "o2_pct": 9.335,
+    "area_temperature_c": null,
+    "visibility_m": null,
+    "explosion_risk": "not_explosive",
+    "fire_source_confirmed": null,
+    "water_supply_sufficient": null,
+    "return_airway_clear": null,
+    "sealed_at": null
+   },
+   "steps": [
+    {
+     "order": 1,
+     "type": "monitor",
+     "description": "处置前观测采空区束管、上隅角和回风巷的气体与温度，作为处置效果的对照；处置期间按指挥部确定的频次加密观测",
+     "roadways": [],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    },
+    {
+     "order": 2,
+     "type": "leak_sealing",
+     "description": "回风侧堵漏，减少向采空区漏风",
+     "roadways": [
+      "R-1201-RET"
+     ],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    },
+    {
+     "order": 3,
+     "type": "inert_injection",
+     "description": "向采空区注入惰性气体，降低氧浓度、抑制煤氧化（注氮流量由代码按漏风量和目标氧浓度估算，未给出时不写数值）。补充：注氮口位置按现场确定",
+     "roadways": [],
+     "team_size": null,
+     "standby_team": null,
+     "params": {
+      "gas": "N2",
+      "rate_m3_h": 1734
+     }
+    },
+    {
+     "order": 4,
+     "type": "grouting",
+     "description": "向采空区注浆，覆盖浮煤、充填裂隙",
+     "roadways": [],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    },
+    {
+     "order": 5,
+     "type": "monitor",
+     "description": "处置后按本矿自然发火预测预报制度加密束管取样，观测气体变化，效果由复评判定（频次由指挥部确定）",
+     "roadways": [],
+     "team_size": null,
+     "standby_team": null,
+     "params": {}
+    }
+   ],
+   "basis": [
+    {
+     "document": "矿山救援规程",
+     "article": "第85条",
+     "source": "index",
+     "note": null
+    },
+    {
+     "document": "矿山救援规程",
+     "article": "第98条",
+     "source": "index",
+     "note": null
+    }
+   ],
+   "panel": "1201"
+  }
+ }
+}

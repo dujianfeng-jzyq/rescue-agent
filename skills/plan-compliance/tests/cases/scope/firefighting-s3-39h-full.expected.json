@@ -1,0 +1,109 @@
+{
+ "algorithm_version": "scope/1.0.0",
+ "params": {
+  "document": "矿山救援规程",
+  "step_articles": {
+   "evacuate": [
+    "第75条"
+   ],
+   "inert_injection": [
+    "第85条"
+   ],
+   "temporary_seal": [
+    "第84条",
+    "第86条"
+   ],
+   "permanent_seal": [
+    "第84条"
+   ],
+   "monitor": [
+    "第85条"
+   ]
+  },
+  "always": [
+   "第46条",
+   "第87条"
+  ],
+  "kinds": {
+   "firefighting": {
+    "always": [
+     "第46条"
+    ],
+    "items": [
+     {
+      "id": "basis",
+      "label": "依据：方案依据的条文与措施对得上"
+     },
+     {
+      "id": "context",
+      "label": "现场条件：缺失的条件已列为待补充，没有被当成已满足"
+     },
+     {
+      "id": "no_entry",
+      "label": "不进入灾区：方案没有安排人员进入灾区作业，也没有替救护队制定行动细节"
+     },
+     {
+      "id": "ventilation",
+      "label": "通风稳定：均压、堵漏等措施没有造成反风、风流短路或停主要通风机（第98条）"
+     }
+    ]
+   }
+  }
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-03T23:00:00",
+  "plan_id": "FP-1201-202611032300",
+  "articles": [
+   {
+    "document": "矿山救援规程",
+    "article": "第46条"
+   },
+   {
+    "document": "矿山救援规程",
+    "article": "第85条"
+   },
+   {
+    "document": "矿山救援规程",
+    "article": "第98条"
+   }
+  ],
+  "items": [
+   {
+    "id": "basis",
+    "label": "依据：方案依据的条文与措施对得上"
+   },
+   {
+    "id": "context",
+    "label": "现场条件：缺失的条件已列为待补充，没有被当成已满足"
+   },
+   {
+    "id": "no_entry",
+    "label": "不进入灾区：方案没有安排人员进入灾区作业，也没有替救护队制定行动细节"
+   },
+   {
+    "id": "ventilation",
+    "label": "通风稳定：均压、堵漏等措施没有造成反风、风流短路或停主要通风机（第98条）"
+   }
+  ],
+  "conclusions": [
+   {
+    "id": "pass",
+    "label": "通过"
+   },
+   {
+    "id": "fail",
+    "label": "不通过"
+   },
+   {
+    "id": "needs_human",
+    "label": "需人工决策"
+   }
+  ],
+  "limits": {
+   "max_note_chars": 60,
+   "max_summary_chars": 100
+  }
+ }
+}
