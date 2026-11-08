@@ -208,6 +208,17 @@ async def test_restart_does_not_repeat_alert(tmp_path, monkeypatch):
 
 
 @arun
+async def test_clock_going_back_resets_baseline(tmp_path, monkeypatch):
+    f = Fake(tmp_path, monkeypatch)
+    await f.step(result(), minutes=600)
+    assert len(await f.step(result("red", "accelerating", reasons=["x"], escalated=True), minutes=60)) == 1
+    # 模拟矿井重置：时钟回到更早的时刻，旧基线（红色）不能继续压住新历史里的黄色
+    f.now_min = 100
+    got = await f.step(result("yellow", "accelerating", reasons=["x"], escalated=True), minutes=0)
+    assert [a["data"]["cause"] for a in got] == ["anomaly"]
+
+
+@arun
 async def test_followup_due(tmp_path, monkeypatch):
     f = Fake(tmp_path, monkeypatch)
     await f.step(result("blue", "latent", reasons=["x"], escalated=True))

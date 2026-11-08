@@ -226,6 +226,9 @@ class Sentinel:
             raise
         out: list[dict[str, Any]] = []
         last = self.state["last_check"]
+        if last is not None and _mine_dt(now) < _mine_dt(last):
+            # 矿井时钟倒退 = 模拟矿井被重置（演示/评测）：旧基线和已见报警属于上一段历史，丢掉，否则新历史里的异常会被当成“不比基线更糟”
+            self.state["panels"], self.state["seen_alarms"], last = {}, [], None
         if last is None or (_mine_dt(now) - _mine_dt(last)).total_seconds() >= self.cfg["interval_min"] * 60:
             self.state["last_check"] = now
             alerted: set[str] = set()

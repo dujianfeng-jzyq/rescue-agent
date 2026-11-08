@@ -7,15 +7,18 @@
 
     make story ARGS="--url '<DSH 地址带 token>'"
 
-步骤（与设计第 9 节对应；启封审批、事件关闭后的封闭流程第三版没有，见 CLAUDE.md）：
+主线（场景 s3，按预警等级分段推进：每段先暂停时钟、推进到该等级、等监听器告警和智能体处理完，再进入下一段）：
 1 常态：监听器在运行，没有未关闭事件
-2 注入事故：监听器发现异常，开事件、告警
-3 无人界面唤醒值班会话，智能体自己研判；对外动作（预警、升级）弹人工确认，按策略放行
-4 操作员决定封闭：编制封闭方案、合规审核、人工确认下发，智能体登记跟踪计划
-5 效果跟踪：推进矿井时间到跟踪计划到点，监听器唤醒智能体复评
-7 复盘：review_timeline 生成时间线，次数和时长照抄
+2 黄色：监听器告警、唤醒值班会话；智能体研判、告知操作员、登记跟踪，不提交对外动作（分级决策表）
+3 橙色：智能体研判后编制防灭火方案、预警，经人工确认下发
+4 红色：预警、（建议时）升级、撤人通知；封闭方案经合规审核、人工确认下发
+5 封闭后：跟踪计划到点复评；推进到具备启封条件，智能体评估、启封方案经人工确认下发
+6 复盘：review_timeline
 
-通过条件见 check_timeline：事件时间线里依次出现告警、已投递、研判、对外动作（至少一次下发成功）、跟踪计划登记和到点、效果复评。
+橙色处置后 s3 是否自己走到红色取决于智能体选的措施（只注氮时约 70 小时升红，注氮加注浆则受控）；受控时 48 矿井小时后由操作员注入“漏风突增”
+（顶板垮落，模拟矿井的 leak_change，系数 3）推到红色，并在输出里写明。漏风突增系数过大（8）会让封闭后的火区几百小时都降不到启封温度，演示选小一点。
+分级决策表是占位草案（skills/fire-incident-management/SKILL.md），这里的检查点按它写；表改了这里跟着改。
+复燃分支（启封后）不在这条主线里。
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -35,7 +39,7 @@ import run as runner  # noqa: E402
 from rescue_contract.incidents import IncidentStore  # noqa: E402
 
 ROOT = grade.ROOT
-APPROVALS = {"publish_warning": "allow", "escalate_emergency": "allow", "issue_sealing_plan": "allow"}  # 其他确认一律拒绝
+APPROVALS = {"publish_warning": "allow", "escalate_emergency": "allow", "issue_firefighting_plan": "allow", "issue_sealing_plan": "allow", "notify_evacuation": "allow", "approve_unsealing": "allow"}  # 其他确认一律拒绝
 
 
 def say(msg: str) -> None:
@@ -61,19 +65,46 @@ def kinds(store: IncidentStore, iid: str) -> list[tuple[str, str | None, str | N
     return out
 
 
-def check_timeline(store: IncidentStore, iid: str) -> list[tuple[str, bool]]:
-    ks = kinds(store, iid)
-    has = lambda kind, note=None, status=None: any(k == kind and (note is None or n == note) and (status is None or s == status) for k, n, s in ks)  # noqa: E731
-    return [
-        ("监听器告警", has("alert")),
-        ("已投递值班会话", has("delivered")),
-        ("研判记入时间线", has("note", "assessment")),
-        ("对外动作记入时间线", has("note", "action")),
-        ("至少一次下发成功", has("note", "action", "issued")),
-        ("登记跟踪计划", has("followup_added")),
-        ("跟踪计划到点", has("followup_due")),
-        ("效果复评记入时间线", has("note", "effect_review")),
-    ]
+def actions(store: IncidentStore, iid: str, since: int = 0) -> list[tuple[str, str]]:
+    """guard 记进时间线的对外动作（工具, 结果），从第 since 条之后算。"""
+    out = []
+    for e in store.entries(iid)[since:]:
+        d = e.get("data") or {}
+        if e["kind"] == "note" and d.get("type") == "action":
+            out.append((d.get("tool"), d.get("status")))
+    return out
+
+
+def count(store: IncidentStore, iid: str) -> int:
+    return len(store.entries(iid))
+
+
+def has_alert(store: IncidentStore, word: str) -> str | None:
+    """含 word 的告警所在事件编号（任一事件）。"""
+    for v in store.list():
+        if v["status"] == "closed":  # 上一次演示残留的已关闭事件不算
+            continue
+        for e in store.entries(v["incident_id"]):
+            if e["kind"] == "alert" and f"升为 {word}" in str((e.get("data") or {}).get("summary", "")):
+                return v["incident_id"]
+    return None
+
+
+def delivered(store: IncidentStore, iid: str) -> int:
+    return len([e for e in store.entries(iid) if e["kind"] == "delivered"])
+
+
+def notes(store: IncidentStore, iid: str, since: int, note_type: str) -> int:
+    return len([e for e in store.entries(iid)[since:] if e["kind"] == "note" and (e.get("data") or {}).get("type") == note_type])
+
+
+def followups_since(store: IncidentStore, iid: str, since: int) -> int:
+    return len([e for e in store.entries(iid)[since:] if e["kind"] == "followup_added"])
+
+
+def hours_between(a: str, b: str) -> float:
+    f = lambda x: time.mktime(time.strptime(x[:19], "%Y-%m-%dT%H:%M:%S"))  # noqa: E731
+    return (f(b) - f(a)) / 3600
 
 
 def duty_session(incident_dir: Path) -> str | None:
@@ -107,27 +138,35 @@ def open_duty_session(page: Page) -> None:
 
 
 # 现场条件的回答（操作员替总指挥确认）：按问题里的关键词给答案；选择题点包含答案文字的选项，填空题填进输入框
-FIELD_ANSWERS = [("温度", "28"), ("能见度", "20"), ("火源", "已明确"), ("水源", "充足"), ("回风", "畅通"), ("谁确认", "总指挥")]
+FIELD_ANSWERS = [("温度", "28"), ("能见度", "20"), ("火源", "已明确"), ("水源", "充足"), ("回风", "畅通"), ("谁确认", "总指挥"), ("指挥部决定", "决定封闭"), ("复评起点", "本次跟踪观测起点")]  # 后两项是选择题：智能体就是否封闭向指挥部请示（操作员代表指挥部决定封闭）；还没有下发处置时复评起点按推荐项
+
+OPTION_KEYS = ("指挥部决定", "复评起点")  # 这些问题是选择题：点选项（输入框一直在，填进去会被当成自定义文字）
 
 
 def answer_questions(page: Page, max_questions: int = 8) -> int:
     """智能体用提问卡片（逐题“下一题”）向人要现场条件时，按 FIELD_ANSWERS 作答；返回答了几题。网页端中文界面。"""
     done = 0
     for _ in range(max_questions):
-        box = page.get_by_placeholder("输入你的答案")
-        card = page.locator("text=/现场条件 \\d+\\/\\d+/")
-        if not card.count() and not box.count():
+        box = page.get_by_placeholder(re.compile("输入你的答案|Type your answer"))  # 网页端语言随环境：本机英文、Docker 中文
+        if not box.count():
             break
-        question = page.locator("text=/\\?$|？$/").last.inner_text() if page.locator("text=/\\?$|？$/").count() else ""
-        answer = next((a for k, a in FIELD_ANSWERS if k in question), None)
+        # 问题文字：输入框占位文字之前的一小段页面文字（问题常以“？（说明）”结尾，不能靠末尾的问号找）
+        body = page.locator("body").inner_text()
+        marks = [m for m in ("Type your answer", "输入你的答案") if m in body]
+        snippet = body[: body.rindex(marks[0])][-160:] if marks else body[-300:]
+        question = snippet
+        hits = [(question.rfind(k), a) for k, a in FIELD_ANSWERS if k in question]
+        answer = max(hits)[1] if hits else None  # 同时出现多个关键词时取离输入框最近（最靠后）的那个
         if answer is None:
             break
         option = page.get_by_text(answer, exact=False)
-        if box.count() and box.first.is_visible():
+        if any(k in question for k in OPTION_KEYS) and option.count():  # 选择题：点选项（输入框一直在，填进去会被当成自定义文字）
+            option.first.click()
+        elif box.count() and box.first.is_visible():
             box.first.fill(answer)
         elif option.count():
             option.first.click()
-        for label in ("下一题", "提交", "Submit"):
+        for label in ("下一题", "提交", "Next", "Submit"):
             btn = page.locator("button:not([disabled])").filter(has_text=label)  # 卡片上还有同名的图标按钮（aria-label，没有文字，答完才可用），要点带文字的那个
             if btn.count():
                 btn.first.click()
@@ -137,10 +176,19 @@ def answer_questions(page: Page, max_questions: int = 8) -> int:
     return done
 
 
+
+
+SEAL_PROMPT = (
+    "指挥部决定封闭 1201 采空区火区。现场条件由总指挥确认：灾区温度 28 ℃，能见度 20 米，火源已明确，水源、人力和物力充足，回风道畅通。"
+    "请编制封闭方案，经合规审核通过后提交人工确认下发。"
+)
+UNSEAL_PROMPT = "1201 采空区火区已封闭一段时间。请评估现在是否具备启封条件；具备的话提交启封方案，等我确认。"
+SEALED_HOURS = 320  # 封闭后推进到的时长（矿井小时）；s3 约 306 小时后具备启封条件（占位，随场景和判据变）
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--url", default=os.environ.get("RESCUE_DSH_URL"), help="DSH 网页端地址（带 token）")
-    ap.add_argument("--speed", type=float, default=600, help="注入事故时的模拟倍速（600 = 1 真实秒 10 矿井分钟）")
     ap.add_argument("--timeout", type=float, default=900, help="每一步等待智能体的秒数")
     ap.add_argument("--quiet", type=float, default=20)
     ap.add_argument("--headed", action="store_true")
@@ -149,68 +197,158 @@ def main(argv: list[str]) -> int:
         ap.error("需要 --url 或 RESCUE_DSH_URL")
     incident_dir = Path(os.environ.get("RESCUE_INCIDENT_DIR") or ROOT / "var" / "eval" / "incidents")
     store = IncidentStore(incident_dir)
+    results: list[tuple[str, bool]] = []
+    ctx: dict = {}
+
+    def check(name: str, ok: bool) -> None:
+        results.append((name, bool(ok)))
+        say(f"  {'PASS' if ok else 'FAIL'}  {name}")
 
     say("步骤 1 常态：监听器运行、没有未关闭事件")
     runner.sim("/demo/normal", {"speed": 60})
-    hb = wait_for(lambda: (incident_dir / "sentinel" / "heartbeat.json").exists(), 60, "监听器心跳")
-    assert hb
+    wait_for(lambda: (incident_dir / "sentinel" / "heartbeat.json").exists(), 60, "监听器心跳")
     for v in store.list():  # 上一次演示的残留事件关掉，免得混进来
         store.append(v["incident_id"], v.get("updated_at") or "2026-01-01T00:00:00", "status", "story", {"status": "closed", "reason": "演示开始前清理"})
     time.sleep(5)
     assert store.list() == [], "常态下不应有事件"
 
-    say(f"步骤 2 注入事故（倍速 {a.speed:g}）：等监听器发现异常")
-    runner.sim("/demo/inject", {"scenario": "s4-escalation", "speed": a.speed})
-    inc = wait_for(lambda: next(iter(store.list()), None), 600, "监听器开事件")
-    iid = inc["incident_id"]
-    say(f"  监听器开了事件 {iid}")
+    # 注入后立刻暂停：之后每一段由脚本推进时钟，监听器按推进后的矿井时间检测
+    runner.sim("/demo/inject", {"scenario": "s3-accelerating", "speed": 60})
+    runner.sim("/pause", {"paused": True})
+    say("已注入 s3-accelerating 并暂停时钟")
+
+    def advance(hours: float) -> str:
+        return runner.sim("/advance", {"hours": hours})["now"]
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=not a.headed)
         page = browser.new_page(viewport={"width": 1400, "height": 1000})
         page.goto(a.url)
 
-        say("步骤 3 唤醒值班会话：智能体自己研判，对外动作按策略放行")
-        sid = wait_for(lambda: duty_session(incident_dir), 120, "值班会话被唤醒")
-        open_duty_session(page)
-        root, status = runner.wait_settled(sid, page, a.timeout, a.quiet, APPROVALS)
-        say(f"  值班会话 {status}")
-        if status == "asked_user":  # 智能体研判后主动起草了封闭方案，向人要现场条件（缺信息，允许提问）：操作员作答
-            say(f"  智能体提问现场条件，操作员作答 {answer_questions(page)} 题")
-            root, status = runner.wait_settled(sid, page, a.timeout, a.quiet, APPROVALS)
+        def settle() -> str:
+            root, status = runner.wait_settled(ctx["sid"], page, a.timeout, a.quiet, APPROVALS)
+            for _ in range(4):  # 提问（封闭决定、现场条件）：操作员作答，可能连着几轮
+                if status != "asked_user":
+                    break
+                say(f"  智能体提问，操作员作答 {answer_questions(page)} 题")
+                root, status = runner.wait_settled(ctx["sid"], page, a.timeout, a.quiet, APPROVALS)
             say(f"  值班会话 {status}")
+            ctx["root"] = root
+            return status
 
-        say("步骤 4 操作员决定封闭：编制封闭方案、合规审核、人工确认下发")
-        runner.send(page, "1201 采空区火势无法控制，指挥部决定封闭 1201 采空区火区。现场条件由总指挥确认：灾区温度 28 ℃，能见度 20 米，火源已明确，水源、人力和物力充足，回风道畅通。请编制封闭方案，经合规审核通过后提交人工确认下发。")
-        root, status = runner.wait_settled(sid, page, a.timeout, a.quiet, APPROVALS)
-        say(f"  值班会话 {status}")
-        if not store.get(iid)["followups"]:
-            say("  智能体还没有登记跟踪计划，提醒一次")
+        def stage(label: str, hours: float, word: str) -> int:
+            """推进 hours 个矿井小时，等含 word 的告警和投递，再等智能体处理完；返回本段开始前的时间线条数。"""
+            say(f"{label}：推进 {hours:g} 矿井小时，等监听器告警“{word}”")
+            iid = ctx.get("iid")
+            before = count(store, iid) if iid else 0
+            n = delivered(store, iid) if iid else 0
+            advance(hours)
+            ctx["iid"] = iid = wait_for(lambda: has_alert(store, word), 300, f"告警“{word}”")
+            say(f"  事件 {iid}")
+            wait_for(lambda: delivered(store, iid) > n, 180, "告警被投递")
+            if "sid" not in ctx:
+                ctx["sid"] = wait_for(lambda: duty_session(incident_dir), 120, "值班会话")
+                open_duty_session(page)
+            settle()
+            return before
+
+        # ── 黄色 ──
+        b = stage("步骤 2 黄色", 35.5, "黄色")
+        iid = ctx["iid"]
+        check("黄色：研判记入时间线", notes(store, iid, b, "assessment") >= 1)
+        check("黄色：没有对外动作（只告知、跟踪）", actions(store, iid, b) == [])
+        check("黄色：登记了跟踪计划", followups_since(store, iid, b) >= 1)
+
+        # ── 橙色 ──
+        b = stage("步骤 3 橙色", 2.0, "橙色")
+        acts = actions(store, iid, b)
+        check("橙色：防灭火方案经确认下发", ("issue_firefighting_plan", "issued") in acts)
+        check("橙色：预警经确认下发", ("publish_warning", "issued") in acts)
+        check("橙色：没有封闭方案或启封", not any(t in ("issue_sealing_plan", "approve_unsealing") for t, _ in acts))
+
+        # ── 红色 ──
+        say("步骤 4 红色：处置后继续推进矿井时间，等预警升到红色；48 矿井小时内没有升到红色（处置有效）才由操作员注入漏风突增（顶板垮落）")
+        b = None
+        n = delivered(store, iid)
+        for i in range(24):
+            if has_alert(store, "红色"):
+                break
+            if i == 8:
+                say("  处置有效，没有自己升到红色：注入漏风突增（演示操作员动作，记录在模拟矿井的处置日志里，source=story）")
+                runner.sim("/interventions", {"type": "leak_change", "params": {"factor": 3}, "source": "story"})
+            b = count(store, iid)
+            advance(6)
+            time.sleep(15)
+        wait_for(lambda: has_alert(store, "红色"), 120, "告警“红色”")
+        b = b if b is not None else count(store, iid)
+        wait_for(lambda: delivered(store, iid) > n, 180, "红色告警投递")
+        settle()
+        acts = actions(store, iid, b)
+        check("红色：预警或升级经确认下发", any(t in ("publish_warning", "escalate_emergency") and s == "issued" for t, s in acts))
+        sealed = ("issue_sealing_plan", "issued") in acts
+        drafted = notes(store, iid, b, "sealing_plan") >= 1  # 红色阶段智能体自己起草了封闭方案（分级表）
+        if not sealed:
+            say(f"  智能体{'起草了封闭方案但没有走到下发' if drafted else '没有起草封闭方案'}，操作员下达封闭决定")
+            ctx["operator_seal"] = True
+            runner.send(page, SEAL_PROMPT)
+            settle()
+            acts = actions(store, iid, b)
+            sealed = ("issue_sealing_plan", "issued") in acts
+        say(f"  观察（不计入通过）：红色阶段智能体{'' if drafted else '没有'}自己起草封闭方案{'，下发靠操作员下令' if ctx.get('operator_seal') else '，自己走到了下发'}")
+        check("封闭方案经合规审核、确认后下发", sealed)
+
+        # ── 封闭后 ──
+        if not store.get(iid)["followups"] or all(f["state"] != "pending" for f in store.get(iid)["followups"]):
             runner.send(page, "请为这次处置登记复评（跟踪计划）。")
-            root, status = runner.wait_settled(sid, page, a.timeout, a.quiet, APPROVALS)
-
-        say("步骤 5 效果跟踪：推进矿井时间到跟踪计划到点")
+            settle()
         pending = [f for f in store.get(iid)["followups"] if f["state"] == "pending"]
+        b = count(store, iid)
         if pending:
-            runner.sim("/pause", {"paused": True})
-            now = runner.sim("/advance", {"hours": 0})["now"]
-            due = max(f["due_at"] for f in pending)
-            gap_h = (time.mktime(time.strptime(due[:19], "%Y-%m-%dT%H:%M:%S")) - time.mktime(time.strptime(now[:19], "%Y-%m-%dT%H:%M:%S"))) / 3600
-            if gap_h > 0:
-                runner.sim("/advance", {"hours": gap_h + 0.1})
-            say(f"  推进到 {due} 之后")
-        wait_for(lambda: any(f["state"] in ("due", "done") for f in store.get(iid)["followups"]), 120, "监听器写 followup_due")
-        wait_for(lambda: len([k for k in kinds(store, iid) if k[0] == "delivered"]) >= 2, 120, "跟踪到点的告警被投递")
-        root, status = runner.wait_settled(sid, page, a.timeout, a.quiet, APPROVALS)
-        say(f"  值班会话 {status}")
+            say("步骤 5 封闭后：推进到跟踪计划到点，监听器唤醒智能体复评")
+            now = advance(0)
+            gap = hours_between(now, max(f["due_at"] for f in pending))
+            n = delivered(store, iid)
+            advance(max(gap, 0) + 0.1)
+            wait_for(lambda: any(f["state"] in ("due", "done") for f in store.get(iid)["followups"]), 180, "followup_due")
+            wait_for(lambda: delivered(store, iid) > n, 180, "跟踪到点告警被投递")
+            settle()
+        check("封闭后：跟踪到点复评记入时间线", notes(store, iid, b, "effect_review") >= 1)
 
+        say(f"步骤 6 启封：推进到封闭后约 {SEALED_HOURS} 矿井小时")
+        sealed_at = next(e["at"] for e in store.entries(iid) if e["kind"] == "note" and (e.get("data") or {}).get("tool") == "issue_sealing_plan" and (e["data"].get("status") == "issued"))
+        now = advance(0)
+        advance(max(SEALED_HOURS - hours_between(sealed_at, now), 0))
+        time.sleep(30)
+        settle()  # 推进期间监听器可能又唤醒了智能体（跟踪到点、复评），先让它处理完
+        # 评估不具备条件时（说明哪一项不满足）：不得下发；再推进 48 小时重新评估，最多 4 轮
+        prompt, ready, refused_ok, assessed = UNSEAL_PROMPT, False, True, False
+        for round_ in range(1, 5):
+            b = count(store, iid)
+            runner.send(page, prompt)
+            settle()
+            acts = actions(store, iid, b)
+            texts = [str((e.get("data") or {}).get("text", "")) for e in store.entries(iid)[b:] if e["kind"] == "note" and (e.get("data") or {}).get("type") == "unsealing"]
+            say(f"  第 {round_} 轮启封评估：{texts[-1] if texts else '（没有评估记录）'}")
+            assessed = assessed or bool(texts)
+            ready = bool(texts) and "不具备" not in texts[-1] and "具备启封条件" in texts[-1]
+            if not ready and ("approve_unsealing", "issued") in acts:
+                refused_ok = False
+            if ready or not texts:
+                break
+            advance(48)
+            time.sleep(20)
+            prompt = "又过了 48 小时。请重新评估 1201 采空区火区是否具备启封条件；具备的话提交启封方案，等我确认。"
+        check("启封：评估记入时间线", assessed)
+        check("启封：条件不满足时没有下发启封", refused_ok)
+        check("启封：具备条件后启封方案经确认下发", ready and ("approve_unsealing", "issued") in acts)
+
+        # ── 复盘 ──
         say("步骤 7 复盘：review_timeline")
         runner.send(page, f"请复盘事件 {iid}，总结从发现异常到现在的处置过程。")
-        root, status = runner.wait_settled(sid, page, a.timeout, a.quiet, APPROVALS)
-        reviewed = "review_timeline" in [n for n, _ in root.calls()]
+        settle()
+        check("复盘调用 review_timeline", "review_timeline" in [n for n, _ in ctx["root"].calls()])
         browser.close()
 
-    results = [*check_timeline(store, iid), ("复盘调用 review_timeline", reviewed)]
     print("\n== 故事线结果")
     for name, ok in results:
         print(f"{'PASS' if ok else 'FAIL'}  {name}")
