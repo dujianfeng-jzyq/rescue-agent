@@ -146,32 +146,57 @@ OPTION_KEYS = ("指挥部决定", "复评起点")  # 这些问题是选择题：
 
 
 def answer_questions(page: Page, max_questions: int = 8) -> int:
+    """作答时页面操作出错（卡片重绘、按钮点不动）只记一笔、不让脚本崩：返回已答的题数。"""
+    try:
+        return _answer_questions(page, max_questions)
+    except Exception as exc:  # noqa: BLE001
+        say(f"  作答提问时出错（{type(exc).__name__}：{' '.join(str(exc).split())[:260]}），本轮放弃")
+        return 0
+
+
+def _answer_questions(page: Page, max_questions: int) -> int:
     """智能体用提问卡片（逐题“下一题”）向人要现场条件时，按 FIELD_ANSWERS 作答；返回答了几题。网页端中文界面。"""
     done = 0
     for _ in range(max_questions):
         box = page.get_by_placeholder(re.compile("输入你的答案|Type your answer"))  # 网页端语言随环境：本机英文、Docker 中文
         if not box.count():
             break
-        # 问题文字：输入框占位文字之前的一小段页面文字（问题常以“？（说明）”结尾，不能靠末尾的问号找）
-        body = page.locator("body").inner_text()
-        marks = [m for m in ("Type your answer", "输入你的答案") if m in body]
-        snippet = body[: body.rindex(marks[0])][-160:] if marks else body[-300:]
-        question = snippet
-        hits = [(question.rfind(k), a) for k, a in FIELD_ANSWERS if k in question]
+        # 问题文字：输入框所在的提问卡片（输入框所在的 section 卡片）的文字，不含已答过的旧卡片和聊天记录
+        card = box.first.locator("xpath=ancestor::section[contains(@class,'card')][1]")
+        question = card.inner_text(timeout=5000)
+        # 只认已知类型的提问卡片（卡片眉题 + 标题里有现场条件、确认人、封闭决定、复评起点等字样）；别的（如“缺信息：现场复核”）
+        # 的问题文字里常带“回风巷”“温度”等词，按关键词硬答会答错，一律跳过，让智能体按自己的判断继续
+        head = " ".join(card.locator("[class*=eyebrow], h2").all_inner_texts()) or question
+        known = bool(re.search("现场条件|确认人|灾区温度|能见度|火源|水源|回风道|封闭方向|复评起点", head))
+        hits = [(head.rfind(k), a) for k, a in FIELD_ANSWERS if k in head] if known else []
         answer = max(hits)[1] if hits else None  # 同时出现多个关键词时取离输入框最近（最靠后）的那个
+        if answer is None and known and "确认人" in head:  # 问现场条件确认人是谁（选项是各岗位）：总指挥确认
+            answer = "总指挥"
         if answer is None:
-            break
-        option = page.get_by_text(answer, exact=False)
-        if any(k in question for k in OPTION_KEYS) and option.count():  # 选择题：点选项（输入框一直在，填进去会被当成自定义文字）
-            option.first.click()
+            # 不认识的问题：记下问题文字（事后分析智能体问了什么），点“跳过”让智能体按自己的判断继续，免得脚本卡在提问卡片上
+            say(f"  未识别的提问（跳过）：{' '.join(question.split())[-120:]}")
+            try:
+                card.get_by_role("button", name=re.compile("^(Skip|跳过)$")).first.click(timeout=5000)
+            except Exception:  # noqa: BLE001  “跳过”点不动时关掉整张提问卡片（右上角“Dismiss all questions”）
+                try:
+                    card.get_by_role("button", name=re.compile("Dismiss|关闭|忽略")).first.click(timeout=5000)
+                except Exception:  # noqa: BLE001
+                    say("  提问卡片关不掉，放弃作答")
+                    break
+            done += 1
+            page.wait_for_timeout(1500)
+            continue
+        option = card.get_by_text(answer, exact=False)
+        if any(k in head for k in OPTION_KEYS):  # 选择题：点选项（输入框一直在，填进去会被当成自定义文字）；选项文字对不上就点第 1 项（推荐项）
+            (option if option.count() else card.get_by_text(re.compile(r"^1$"))).first.click(timeout=5000)
         elif box.count() and box.first.is_visible():
-            box.first.fill(answer)
+            box.first.fill(answer, timeout=5000)
         elif option.count():
-            option.first.click()
+            option.first.click(timeout=5000)
         for label in ("下一题", "提交", "Next", "Submit"):
             btn = page.locator("button:not([disabled])").filter(has_text=label)  # 卡片上还有同名的图标按钮（aria-label，没有文字，答完才可用），要点带文字的那个
             if btn.count():
-                btn.first.click()
+                btn.first.click(timeout=5000)
                 break
         done += 1
         page.wait_for_timeout(1500)
@@ -218,6 +243,18 @@ def main(argv: list[str]) -> int:
     runner.sim("/demo/inject", {"scenario": "s3-accelerating", "speed": 60})
     runner.sim("/pause", {"paused": True})
     say("已注入 s3-accelerating 并暂停时钟")
+
+    def tell(page: Page, prompt: str) -> None:
+        """对智能体说话。输入框被未处理的提问卡片或确认弹窗挡住时，先作答、点确认再发（最多 3 次）。"""
+        for attempt in range(3):
+            try:
+                runner.send(page, prompt)
+                return
+            except Exception:  # noqa: BLE001
+                say(f"  输入框不可用（第 {attempt + 1} 次），先处理待答的提问或确认")
+                answer_questions(page)
+                runner.wait_settled(ctx["sid"], page, 120, 10, APPROVALS)
+        runner.send(page, prompt)
 
     def advance(hours: float) -> str:
         return runner.sim("/advance", {"hours": hours})["now"]
@@ -292,7 +329,7 @@ def main(argv: list[str]) -> int:
         if not sealed:
             say(f"  智能体{'起草了封闭方案但没有走到下发' if drafted else '没有起草封闭方案'}，操作员下达封闭决定")
             ctx["operator_seal"] = True
-            runner.send(page, SEAL_PROMPT)
+            tell(page, SEAL_PROMPT)
             settle()
             acts = actions(store, iid, b)
             sealed = ("issue_sealing_plan", "issued") in acts
@@ -301,7 +338,7 @@ def main(argv: list[str]) -> int:
 
         # ── 封闭后 ──
         if not store.get(iid)["followups"] or all(f["state"] != "pending" for f in store.get(iid)["followups"]):
-            runner.send(page, "请为这次处置登记复评（跟踪计划）。")
+            tell(page, "请为这次处置登记复评（跟踪计划）。")
             settle()
         pending = [f for f in store.get(iid)["followups"] if f["state"] == "pending"]
         b = count(store, iid)
@@ -322,11 +359,11 @@ def main(argv: list[str]) -> int:
         advance(max(SEALED_HOURS - hours_between(sealed_at, now), 0))
         time.sleep(30)
         settle()  # 推进期间监听器可能又唤醒了智能体（跟踪到点、复评），先让它处理完
-        # 评估不具备条件时（说明哪一项不满足）：不得下发；再推进 48 小时重新评估，最多 4 轮
+        # 评估不具备条件时（说明哪一项不满足）：不得下发；再推进 48 小时重新评估，最多 6 轮
         prompt, ready, refused_ok, assessed = UNSEAL_PROMPT, False, True, False
-        for round_ in range(1, 5):
+        for round_ in range(1, 7):
             b = count(store, iid)
-            runner.send(page, prompt)
+            tell(page, prompt)
             settle()
             acts = actions(store, iid, b)
             texts = [str((e.get("data") or {}).get("text", "")) for e in store.entries(iid)[b:] if e["kind"] == "note" and (e.get("data") or {}).get("type") == "unsealing"]
@@ -346,13 +383,13 @@ def main(argv: list[str]) -> int:
 
         # ── 复盘 ──
         say("步骤 7 复盘：review_timeline")
-        runner.send(page, f"请复盘事件 {iid}，总结从发现异常到现在的处置过程。")
+        tell(page, f"请复盘事件 {iid}，总结从发现异常到现在的处置过程。")
         settle()
         check("复盘调用 review_timeline", "review_timeline" in [n for n, _ in ctx["root"].calls()])
 
         # ── 收尾 ──
         say("步骤 8 收尾：操作员确认处置结束，智能体关闭事件（有未完成的跟踪计划或未确认告警时先处理）")
-        runner.send(page, f"复盘看完了，事件 {iid} 的处置已经结束，没有其他事项。请收尾：完成还没做完的跟踪计划，确认没有未确认的告警后关闭事件。")
+        tell(page, f"复盘看完了，事件 {iid} 的处置已经结束，没有其他事项。请收尾：完成还没做完的跟踪计划，确认没有未确认的告警后关闭事件。")
         settle()
         check("收尾：事件关闭", store.get(iid)["status"] == "closed")
         browser.close()
