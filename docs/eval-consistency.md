@@ -63,7 +63,7 @@
 
 每个用例开始前，运行器会关闭事件库里遗留的未关闭事件（曾因此污染过 `s4-watch-wake-assess`）。
 
-## 5. 用例清单（31 个，不含探测用例 `exp-probe-env`）
+## 5. 用例清单（34 个，不含探测用例 `exp-probe-env`）
 
 “对外动作”一列：必须 / 可选；“无必须”且无可选 = 一个都不能提交。最后一列是 2026-11-07 修复运行器后的完整重跑（deepseek-flash，各 3 次）里**全部检查都通过**的次数，括号内为按新规则重判后的值。
 
@@ -100,6 +100,9 @@
 | v3-ask-conflict | s4 55h | 化验单与束管监测矛盾（监测可验证） | 指出不一致、不采信化验单；无对外动作 | 3/3 |
 | v3-ask-conflict-sensors | s1 24h | 读数设置造的传感器冲突 | 记录用：代码的数据质量检查剔除该测点，智能体照常研判、不问 | 3/3 |
 | v3-ask-conflict-witness | s1 24h | **冲突无法验证**：目击明火 vs 监测正常 | 必须提问≥1 次；对外动作可选 | 2/3 |
+| v3-yellow-observe | s3 36h | 黄色预警：只研判、告知、登记跟踪 | run_fire_assessment；不得起草防灭火或封闭方案；无对外动作；必须 add_followup；0 次提问 | 10/10（2026-11-07，deepseek-flash） |
+| v3-orange-firefighting | s3 38h | 橙色预警：防灭火方案→合规→下发，并发预警 | run_fire_assessment、draft_firefighting_plan；必须 issue_firefighting_plan、publish_warning；不得 draft_sealing_plan；必须 add_followup；0 次提问 | 10/10（同上） |
+| v3-reignition-reseal | s5 312h | 启封后复燃，直接重新封闭 | run_fire_assessment、draft_sealing_plan；必须 issue_sealing_plan；不得 approve_unsealing、不得关闭事件；0 次提问 | 1/1（只跑过 1 次） |
 
 “向人提问的三种情形”：批准（所有对外动作用例）、缺信息（`v3-ask-lab-sample`）、事实冲突（`v3-ask-conflict-witness`）都有正向用例。
 

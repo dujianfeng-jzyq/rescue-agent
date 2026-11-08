@@ -21,6 +21,7 @@ import { join } from 'node:path'
 
 import type { Context } from '../adapter/dsh.ts'
 import { defineTool, Schema } from '../adapter/dsh.ts'
+import { markdownToDocx } from '../evidence/docx.ts'
 import type RescueEvidence from '../evidence/index.ts'
 import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
@@ -177,11 +178,11 @@ export function apply(ctx: Context, config: Config) {
             getArticles: (document, articles) => knowledge.getArticles(document, articles).results,
           })
 
-          // 交付：报告写成 Markdown 文件，连同风险图用 present 交付
+          // 交付：报告写成 Word 文件，连同风险图用 present 交付
           const dir = join(workspace, 'records', session)
           await mkdir(dir, { recursive: true })
-          const reportPath = join(dir, `${out.card.record_ids[0]}.md`)
-          await writeFile(reportPath, `${out.report_markdown}\n`, 'utf8')
+          const reportPath = join(dir, `${out.card.record_ids[0]}.docx`)
+          await writeFile(reportPath, await markdownToDocx(out.report_markdown, `${args.panel} 工作面研判报告`))
           const files = [{ path: reportPath, description: `${args.panel} 工作面研判报告` }]
           const chart = out.result.explosion.chart_markdown as string | null
           if (chart) files.push({ path: chart.slice(chart.indexOf('](') + 2, -1), description: '爆炸三角形风险图（最不利测点）' })
@@ -271,8 +272,8 @@ export function apply(ctx: Context, config: Config) {
           })
           const dir = join(workspace, 'records', session)
           await mkdir(dir, { recursive: true })
-          const reportPath = join(dir, `${out.card.record_ids[0]}.md`)
-          await writeFile(reportPath, `${out.report_markdown}\n`, 'utf8')
+          const reportPath = join(dir, `${out.card.record_ids[0]}.docx`)
+          await writeFile(reportPath, await markdownToDocx(out.report_markdown, `${args.panel} ${flow.label}与合规审核意见`))
           const presented = await c.tools.execute({
             callId: `${exec.callId}:present`,
             rootCallId: exec.rootCallId,
@@ -344,13 +345,13 @@ export function apply(ctx: Context, config: Config) {
     draftFirefightingPlan,
   )
 
-  /** 把报告写成会话工作区里的 Markdown 文件，用 present 交付（网页端显示交付卡片、右侧预览） */
+  /** 把报告写成会话工作区里的 Word 文件（.docx），用 present 交付（网页端显示交付卡片、右侧预览） */
   async function deliver(exec: any, fileName: string, markdown: string, description: string) {
     const workspace: string = await c.workingDirectory.ensure(exec.agent, exec.signal)
     const dir = join(workspace, 'records', String(exec.agent.id))
     await mkdir(dir, { recursive: true })
     const path = join(dir, fileName)
-    await writeFile(path, `${markdown}\n`, 'utf8')
+    await writeFile(path, await markdownToDocx(markdown, description))
     const r = await c.tools.execute({ callId: `${exec.callId}:present`, rootCallId: exec.rootCallId, name: 'present', arguments: { files: [{ path, description }] }, agent: exec.agent, parent: exec.token, signal: exec.signal })
     return r.isError ? { ok: false, error: r.error?.message ?? '交付失败' } : { ok: true, files: [path], note: '报告文件已交付给用户，不要再调用 present' }
   }
@@ -398,7 +399,7 @@ export function apply(ctx: Context, config: Config) {
             lastIssued: async (panel) => ((await callJson(exec, config.lastIssuedTool, { panel }, 'last-issued')) ?? { found: false }) as LastIssued,
           })
           await logToIncident(String(args.panel), 'effect_review', out)
-          out.delivered = await deliver(exec, `${out.card.record_ids[0]}.md`, out.report_markdown, `${args.panel} 工作面处置效果复评报告`)
+          out.delivered = await deliver(exec, `${out.card.record_ids[0]}.docx`, out.report_markdown, `${args.panel} 工作面处置效果复评报告`)
           return toJson(out)
         } catch (err) {
           stopReason = 'failed'
@@ -442,7 +443,7 @@ export function apply(ctx: Context, config: Config) {
             signal: exec.signal,
             receipt: (mineReceiptId) => (c.rescueEvidence as RescueEvidence).mineData.call('get_action_status', { action_id: mineReceiptId }, exec.signal),
           })
-          out.delivered = await deliver(exec, `${out.card.record_ids[0]}.md`, out.report_markdown, `${out.result.incident_id} 事件复盘报告`)
+          out.delivered = await deliver(exec, `${out.card.record_ids[0]}.docx`, out.report_markdown, `${out.result.incident_id} 事件复盘报告`)
           return toJson(out)
         } catch (err) {
           stopReason = 'failed'
@@ -483,7 +484,7 @@ export function apply(ctx: Context, config: Config) {
             signal: exec.signal,
           })
           await logToIncident(String(args.panel), 'unsealing', out)
-          out.delivered = await deliver(exec, `${out.card.record_ids[0]}.md`, out.report_markdown, `${args.panel} 工作面启封评估报告`)
+          out.delivered = await deliver(exec, `${out.card.record_ids[0]}.docx`, out.report_markdown, `${args.panel} 工作面启封评估报告`)
           return toJson(out)
         } catch (err) {
           stopReason = 'failed'

@@ -50,6 +50,7 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
+    "docx": "9.5.1",
     "yaml": "2.9.1"
   }
 }
