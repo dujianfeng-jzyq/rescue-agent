@@ -125,6 +125,12 @@
 - **成本**：`v3-dispatch-order` 平均约 113 万 token（反复查库存和测算），通过但偏贵。
 - 已知局限：评测员只有 `s4-warning-rejected` 一个清单（校准样本 37 份，标注只有一人、坏回复手写）；`rejection_reported` 正则与评测员并存，未删。
 
+### 6.1 补充（2026-11-08，deepseek-flash）
+
+- **新用例**：`v3-yellow-observe`、`v3-orange-firefighting` 各重复 10 次，全部通过 10/10（明细在 `var/eval/agent/20261107-221609/results.jsonl`，`var/` 已清空）；`v3-reignition-reseal` 只跑过 1 次。
+- **`grade.py` 清理第一版兼容后**：对 40 个已有会话清理前后逐项判定相同；`s2-assess-1201`、`s2-effect-after-inerting`、`s4-escalate-1201`、`s4-explosion-risk`、`s4-sealing-plan` 各 1 次真实运行通过。用例的 `tools_called` 现在直接写第二版工具名。
+- **故事线整条走通**（`eval/agent/story.py`，场景 s3 按黄、橙、红分段推进，再到封闭、启封、复盘、收尾；检查点按分级决策表）：本机 14 项全过；Docker 演示环境一次 11/13（黄色漏登记跟踪计划、橙色漏下发防灭火方案，都是智能体行为；同样的两处在单次提问的决策评测里 10/10，稳定性留待演示后）。红色阶段智能体是否自己起草封闭方案每次不同，列为观察项。
+
 ## 7. 怎么跑
 
 ```bash

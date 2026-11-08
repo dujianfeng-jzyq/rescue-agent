@@ -36,14 +36,17 @@
 | --- | --- |
 | 技能、bash、文件、ask_user、todo、present | DSH 自带插件 |
 | 后台任务（`job_output`、`job_list`、`job_kill`） | DSH 自带 `dsh-jobs-local`、`dsh-tool-jobs` |
-| `check_mine`、`get_record`、`export_record`、`review_timeline` | 证据插件 `rescue-evidence` |
-| `run_fire_assessment`、`draft_sealing_plan`、`review_effect` | 固定流程插件（`dsh-bundle/src/fire-loop/`） |
+| `check_mine`、`get_record`、`export_record` | 证据插件 `rescue-evidence` |
+| `run_fire_assessment`、`draft_sealing_plan`、`draft_firefighting_plan`、`review_effect`、`assess_unsealing`、`review_timeline` | 固定流程插件（`dsh-bundle/src/fire-loop/`） |
+| `get_incident`、`open_incident`、`set_incident_status`、`add_followup`、`complete_followup`、`close_incident` | 事件插件（`dsh-bundle/src/incident/`） |
 | `kb_search`、`kb_get_articles`、`kb_list_datasets` | 知识库插件 `rescue-knowledge` |
-| 发布预警、下发方案、升级等指令；`precheck_plan` | actions MCP（唯一挂 actions 的预设） |
+| 发布预警、升级、撤人通知、下发封闭方案（`issue_sealing_plan`）、下发防灭火方案（`issue_firefighting_plan`）、启封审批（`approve_unsealing`）、调度单；`precheck_plan` | actions MCP（guard，唯一挂 actions 的预设） |
 
 不挂：mine_data（读数经证据插件，留有记录）、delegate、联网、知识库写入、DSH 自带的 workflow 工具（模型现写脚本）。
 
 固定流程的步骤由代码决定：采集证据 → 运行技能脚本 → 渲染报告 →（需要时）模型阶段 → 交付。模型阶段由插件用 `ctx.workflowEngine.start` 运行插件里固定的脚本，只能在给定清单里选择，说明文字里的数值必须能在本次记录里找到；用 `tools.guard` 限制阶段子 Agent 只能提交结构化结果。缺人工输入时流程结束并返回结构化问题（`HumanInputRequest`），由主预设用 `ask_user` 询问后重新运行。
+
+**交付格式**：固定流程把完整报告和方案作为文件交付，格式是 Word（`.docx`，`src/evidence/docx.ts` 把技能模板渲染出的 Markdown 转成 Word）；记录里的 content 和给模型的要点（`brief_markdown`）仍是 Markdown。风险图是 SVG，Word 里不嵌入，只写一行说明，图文件仍单独交付。
 
 ## 4. 风险检测
 

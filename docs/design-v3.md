@@ -106,6 +106,8 @@
 - 新增 `fire-incident-management` 技能（SKILL.md 为主）：专家处置的**流程知识**——异常确认、研判、处置选择、对外动作、效果跟踪、升级/封闭/启封的条件与顺序。其中的判据和阈值仍在 `references/` 和脚本里，SKILL.md 正文不写数值。
 - 参数按已有专业知识重新设计一遍（分级、阶段、效果、封闭必备步骤、升级条件、值守周期），标注占位，演示后专家审定。
 
+> **实施后的差异（2026-11-08）**：固定流程没有拆成 `assess_fire`、`assess_explosion`、`recommend_escalation`，仍是 `run_fire_assessment`（含爆炸风险和升级建议），拆分收益小、要重做测试，暂缓。新增了第三版设计里没有的**防灭火处置方案**：技能 `firefighting-plan`、固定流程 `draft_firefighting_plan`、guard 的 `issue_firefighting_plan(record_id)`（C 级，占位确认人和超时），以及技能 `fire-incident-management` 里按预警等级处理的**分级决策表**（占位，待专家审定）。报告和方案作为 Word 文件交付。批准人按角色限定仍未做（需要 DSH 用户身份）。
+
 ### 5.4 预设
 
 仍是单一预设 `rescue-commander`。人设改为**矿山应急救援专家**：先自己研判、自己选择处置，用证据说话；不向人请示可以自己判断的事。阶段子 Agent（研判说明、方案编写、合规审核）仍用 `tools.guard` 限制为只能提交结构化结果。
