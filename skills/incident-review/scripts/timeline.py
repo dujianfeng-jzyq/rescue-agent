@@ -13,7 +13,7 @@ from _skill import main
 VERSION = "timeline/1.0.0"
 STATUS_NAMES = {"monitoring": "监测中", "handling": "处置中", "stable": "已稳定", "closed": "已关闭"}
 CAUSE_NAMES = {"anomaly": "监测异常", "mine_alarm": "矿井报警", "followup_due": "跟踪计划到点", "degraded": "监听降级", "approval_timeout": "批准超时"}
-NOTE_NAMES = {"assessment": "研判", "effect_review": "效果复评", "sealing_plan": "封闭方案", "unsealing": "启封评估"}
+NOTE_NAMES = {"assessment": "研判", "effect_review": "效果复评", "sealing_plan": "封闭方案", "firefighting_plan": "防灭火方案", "unsealing": "启封评估"}
 MINE_STATUS = {"accepted": "已收到", "executing": "执行中", "completed": "已完成", "failed": "失败", "rejected": "矿井拒绝"}
 KIND_NAMES = {"notice": "通知", "dispatch": "调度", "treatment": "处置"}
 ACTION_STATUS = {"issued": "已下发", "rejected": "被拒绝", "failed": "执行失败"}
@@ -79,7 +79,7 @@ def run(data, _args):
         raise ValueError("事件的第一条应为 opened")
 
     rows, counts = [], dict.fromkeys(
-        ("alerts", "assessments", "effect_reviews", "sealing_plans", "actions_issued", "actions_rejected", "actions_failed", "followups_added", "followups_done", "delivery_failures", "approvals_asked", "approvals_escalated"), 0
+        ("alerts", "assessments", "effect_reviews", "sealing_plans", "firefighting_plans", "actions_issued", "actions_rejected", "actions_failed", "followups_added", "followups_done", "delivery_failures", "approvals_asked", "approvals_escalated"), 0
     )
     first: dict[str, str | None] = {"alert": None, "assessment": None, "action_issued": None, "action_any": None, "closed": None}
     status, handled, alerts = "monitoring", set(), []
@@ -116,6 +116,8 @@ def run(data, _args):
                 counts["effect_reviews"] += 1
             elif t == "sealing_plan":
                 counts["sealing_plans"] += 1
+            elif t == "firefighting_plan":
+                counts["firefighting_plans"] += 1
             elif t == "approval_pending":
                 counts["approvals_asked"] += 1
             elif t == "approval_escalated":
@@ -165,9 +167,10 @@ def run(data, _args):
         "rows": rows,
         "counts": counts,
         "counts_text": f"告警 {counts['alerts']} 条；研判 {counts['assessments']} 次；效果复评 {counts['effect_reviews']} 次；封闭方案 {counts['sealing_plans']} 次；"
-        f"对外动作 已下发 {counts['actions_issued']}、被拒绝 {counts['actions_rejected']}、执行失败 {counts['actions_failed']}；"
-        f"跟踪计划 登记 {counts['followups_added']}、完成 {counts['followups_done']}；"
-        f"人工确认 等待 {counts['approvals_asked']} 次、其中超时升级 {counts['approvals_escalated']} 次",
+        + (f"防灭火方案 {counts['firefighting_plans']} 次；" if counts["firefighting_plans"] else "")
+        + f"对外动作 已下发 {counts['actions_issued']}、被拒绝 {counts['actions_rejected']}、执行失败 {counts['actions_failed']}；"
+        + f"跟踪计划 登记 {counts['followups_added']}、完成 {counts['followups_done']}；"
+        + f"人工确认 等待 {counts['approvals_asked']} 次、其中超时升级 {counts['approvals_escalated']} 次",
         "durations": durations,
         "durations_text": text,
         "unhandled_alert_count": len(unhandled),

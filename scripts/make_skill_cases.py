@@ -425,6 +425,12 @@ def incident_inputs() -> dict[tuple[str, str, str], dict]:
         _entry(15, "2026-11-05T14:00:00", "status", "sentinel", {"status": "stable", "reason": "监测指标恢复正常"}),
         _entry(16, "2026-11-05T15:00:00", "status", "agent", {"status": "closed", "reason": "稳定"}),
     ]
+    # 橙色阶段：研判后下发防灭火方案（不封闭火区），计数里出现“防灭火方案”
+    firefighting = [
+        *base[:4],
+        _entry(31, "2026-11-05T08:30:00", "note", "flow", {"type": "firefighting_plan", "text": "防灭火处置方案已通过合规审核", "record_ids": ["RS-20261105T083000-cccccc"]}),
+        _entry(32, "2026-11-05T08:40:00", "note", "guard", {"type": "action", "tool": "issue_firefighting_plan", "status": "issued", "action_id": "A-4444444444", "record_ids": ["RS-20261105T083000-cccccc"], "problems": [], "mine_receipt_ids": []}),
+    ]
     # 含人工确认的等待、超时升级、结果，以及矿井回执（一条已完成、一条执行中、一条查不到）
     approvals = [
         _entry(21, "2026-11-05T08:19:00", "note", "approval", {"type": "approval_pending", "approval_key": "c1", "tool": "publish_warning", "confirmer": "通风部门负责人", "timeout_min": 10, "escalate_to": "值班长", "record_ids": []}),
@@ -445,6 +451,7 @@ def incident_inputs() -> dict[tuple[str, str, str], dict]:
     return {
         (IR, "timeline", "with-approvals-and-receipts"): ev(with_receipts, receipts=receipts),
         (IR, "timeline", "full-process-closed"): ev(full),
+        (IR, "timeline", "firefighting-plan-issued"): ev(firefighting),
         (IR, "timeline", "in-progress-unfinished"): ev(base),
         (IR, "timeline", "alert-only"): ev(base[:2]),
         (IR, "timeline", "approval-timeout-alert"): ev([*base[:2], _entry(3, "2026-11-05T08:40:00", "alert", "sentinel", {"cause": "approval_timeout", "summary": "publish_warning 等待人工确认已超过 10 分钟（已等 30 分钟，确认人：通风部门负责人），已提醒值班长"})]),

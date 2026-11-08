@@ -25,7 +25,7 @@ import type RescueEvidence from '../evidence/index.ts'
 import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
-import { draftSealingPlan, type HumanInput, type Redline, SEALING_FLOW } from './sealing.ts'
+import { draftFirefightingPlan, draftSealingPlan, FIREFIGHTING, type HumanInput, type PlanFlow, type Redline, SEALING } from './sealing.ts'
 import { IncidentStore } from '../incident/store.ts'
 import { noteOnIncident } from '../incident/timeline.ts'
 import { UNSEAL_FLOW, assessUnsealing } from './unsealing.ts'
@@ -211,12 +211,12 @@ export function apply(ctx: Context, config: Config) {
   )
 
   /** actions 的 precheck_plan：经 DSH 工具管道调用（调用方 Agent 必须挂了 actions） */
-  async function precheck(exec: any, plan: Record<string, unknown>, n: number): Promise<Redline> {
+  async function precheck(exec: any, plan: Record<string, unknown>, n: number, tool: string): Promise<Redline> {
     const r = await c.tools.execute({
       callId: `${exec.callId}:precheck:${n}`,
       rootCallId: exec.rootCallId,
       name: config.precheckTool,
-      arguments: { tool: 'issue_sealing_plan', plan },
+      arguments: { tool, plan },
       agent: exec.agent,
       parent: exec.token,
       signal: exec.signal,
@@ -231,36 +231,12 @@ export function apply(ctx: Context, config: Config) {
     return { ok: v.ok, problems: (v.problems ?? []).map(String), notes: (v.notes ?? []).map(String) }
   }
 
+  const registerPlanFlow = (flow: PlanFlow, description: string, parameters: any, draft: typeof draftSealingPlan) =>
   c.tools.register(
     defineTool({
-      name: SEALING_FLOW,
-      description:
-        '编制采空区火区封闭方案（固定流程，指挥部决定封闭时一律调它，不要自己拼步骤）：按固定步骤采集证据，由代码生成现场条件' +
-        '（甲烷、氧浓度、爆炸危险性、封闭时间、人工确认项）和必备步骤，“方案编写”阶段选可选步骤和密闭巷道，代码计算密闭材料、注浆量、注氮流量并与库存比较，' +
-        '经 actions 红线预检和“合规审核”阶段（只引用条文索引给出的条文），不通过时自动修改重审，轮数有上限。' +
-        '完整方案和审核意见已作为文件交付（网页端右侧预览）；回答时把 brief_markdown（方案要点）原样单独成段放进回答，不要改写、不要贴完整方案、不要另写分析；next_step 是给你的下一步说明，不用贴。' +
-        'result.verdict 为 pass 时，下发用 issue_sealing_plan，参数只给 record_id = result.issue_record_id（不要提交方案内容）；' +
-        '不通过时照实转告，不要绕过。返回 human_input_request 时用 ask_user 逐项询问（写明确认人），带着 human_inputs 重新调用。' +
-        '人工确认项（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）只能由人提供，不要替人填写。方案结构和参数为开发占位值。',
-      parameters: {
-        panel: { type: 'string', required: true, description: '工作面编号，如 1201' },
-        human_inputs: {
-          type: 'array',
-          description: '人工确认的现场条件（只填指挥人员明确给出的）：[{field, value, confirmed_by, note?}]，field 取 area_temperature_c、visibility_m、fire_source_confirmed、water_supply_sufficient、return_airway_clear',
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              field: { type: 'string', required: true, enum: ['area_temperature_c', 'visibility_m', 'fire_source_confirmed', 'water_supply_sufficient', 'return_airway_clear'] },
-              value: { type: 'json', required: true, description: '温度、能见度为数值；其余为 true / false' },
-              confirmed_by: { type: 'string', required: true, description: '确认人（姓名或岗位）' },
-              note: { type: 'string' },
-            },
-          },
-        },
-        leak_m3_min: { type: 'number', description: '采空区漏风量（m³/min），指挥人员给出时才填；与 target_o2_pct 一起用于由代码估算注氮流量' },
-        target_o2_pct: { type: 'number', description: '注氮的目标氧浓度（%），指挥人员给出时才填' },
-      },
+      name: flow.name,
+      description,
+      parameters,
       output: {
         schema: { type: 'json' as const },
         render: (_args: unknown, v: any) => [
@@ -273,15 +249,15 @@ export function apply(ctx: Context, config: Config) {
       execute: async (raw: unknown, exec: any) => {
         const args = raw as { panel: string; human_inputs?: HumanInput[]; leak_m3_min?: number; target_o2_pct?: number }
         const parent = exec.agent
-        if (!parent) throw new Error(`${SEALING_FLOW} 需要调用方会话`)
+        if (!parent) throw new Error(`${flow.name} 需要调用方会话`)
         const workspace: string = await c.workingDirectory.ensure(parent, exec.signal)
         const session = String(parent.id)
-        const runId = `${SEALING_FLOW}-${randomUUID()}`
-        append(parent.session, 'tool-workflow/run-start', { runId, name: `${args.panel} 封闭方案` })
+        const runId = `${flow.name}-${randomUUID()}`
+        append(parent.session, 'tool-workflow/run-start', { runId, name: `${args.panel} ${flow.label}` })
         let stopReason = 'completed'
         let n = 0
         try {
-          const out: any = await draftSealingPlan(evidence, {
+          const out: any = await draft(evidence, {
             panel: String(args.panel),
             humanInputs: args.human_inputs ?? [],
             ...(typeof args.leak_m3_min === 'number' ? { leakM3Min: args.leak_m3_min } : {}),
@@ -290,7 +266,7 @@ export function apply(ctx: Context, config: Config) {
             signal: exec.signal,
             maxRounds: config.sealingMaxRounds,
             ...(config.disableStage ? {} : { stage: stageRunner(parent, runId) }),
-            precheck: (plan) => precheck(exec, plan, ++n),
+            precheck: (plan) => precheck(exec, plan, ++n, flow.issueTool),
             getArticles: (document, articles) => knowledge.getArticles(document, articles).results,
           })
           const dir = join(workspace, 'records', session)
@@ -301,12 +277,12 @@ export function apply(ctx: Context, config: Config) {
             callId: `${exec.callId}:present`,
             rootCallId: exec.rootCallId,
             name: 'present',
-            arguments: { files: [{ path: reportPath, description: `${args.panel} 封闭方案与合规审核意见` }] },
+            arguments: { files: [{ path: reportPath, description: `${args.panel} ${flow.label}与合规审核意见` }] },
             agent: parent,
             parent: exec.token,
             signal: exec.signal,
           })
-          await logToIncident(String(args.panel), 'sealing_plan', out)
+          await logToIncident(String(args.panel), flow === FIREFIGHTING ? 'firefighting_plan' : 'sealing_plan', out)
           out.delivered = presented.isError
             ? { ok: false, error: presented.error?.message ?? '交付失败' }
             : { ok: true, files: [reportPath], note: '方案文件已交付给用户，不要再调用 present' }
@@ -319,6 +295,53 @@ export function apply(ctx: Context, config: Config) {
         }
       },
     }),
+  )
+
+  registerPlanFlow(
+    SEALING,
+    '编制采空区火区封闭方案（固定流程，指挥部决定封闭时一律调它，不要自己拼步骤）：按固定步骤采集证据，由代码生成现场条件' +
+    '（甲烷、氧浓度、爆炸危险性、封闭时间、人工确认项）和必备步骤，“方案编写”阶段选可选步骤和密闭巷道，代码计算密闭材料、注浆量、注氮流量并与库存比较，' +
+    '经 actions 红线预检和“合规审核”阶段（只引用条文索引给出的条文），不通过时自动修改重审，轮数有上限。' +
+    '完整方案和审核意见已作为文件交付（网页端右侧预览）；回答时把 brief_markdown（方案要点）原样单独成段放进回答，不要改写、不要贴完整方案、不要另写分析；next_step 是给你的下一步说明，不用贴。' +
+    'result.verdict 为 pass 时，下发用 issue_sealing_plan，参数只给 record_id = result.issue_record_id（不要提交方案内容）；' +
+    '不通过时照实转告，不要绕过。返回 human_input_request 时用 ask_user 逐项询问（写明确认人），带着 human_inputs 重新调用。' +
+    '人工确认项（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）只能由人提供，不要替人填写。方案结构和参数为开发占位值。',
+    {
+    panel: { type: 'string', required: true, description: '工作面编号，如 1201' },
+    human_inputs: {
+      type: 'array',
+      description: '人工确认的现场条件（只填指挥人员明确给出的）：[{field, value, confirmed_by, note?}]，field 取 area_temperature_c、visibility_m、fire_source_confirmed、water_supply_sufficient、return_airway_clear',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          field: { type: 'string', required: true, enum: ['area_temperature_c', 'visibility_m', 'fire_source_confirmed', 'water_supply_sufficient', 'return_airway_clear'] },
+          value: { type: 'json', required: true, description: '温度、能见度为数值；其余为 true / false' },
+          confirmed_by: { type: 'string', required: true, description: '确认人（姓名或岗位）' },
+          note: { type: 'string' },
+        },
+      },
+    },
+    leak_m3_min: { type: 'number', description: '采空区漏风量（m³/min），指挥人员给出时才填；与 target_o2_pct 一起用于由代码估算注氮流量' },
+    target_o2_pct: { type: 'number', description: '注氮的目标氧浓度（%），指挥人员给出时才填' },
+      },
+    draftSealingPlan,
+  )
+
+  registerPlanFlow(
+    FIREFIGHTING,
+    '编制采空区防灭火处置方案（固定流程，不封闭火区、不安排人员进入灾区；预警达到橙色或指挥部要求注惰、堵漏、阻化、注浆等处置时调它，不要自己拼步骤）：' +
+    '按固定步骤采集证据，由代码生成现场条件（甲烷、氧浓度、爆炸危险性）和必备步骤（检测观测、注惰），“方案编写”阶段选可选步骤（堵漏、阻化剂、均压、注浆、处置后取样），' +
+    '代码计算注氮流量、注浆量并与库存比较，经 actions 红线预检和“合规审核”阶段（只引用条文索引给出的条文），不通过时自动修改重审，轮数有上限。' +
+    '完整方案和审核意见已作为文件交付（网页端右侧预览）；回答时把 brief_markdown（方案要点）原样单独成段放进回答，不要改写、不要贴完整方案、不要另写分析；next_step 是给你的下一步说明，不用贴。' +
+    'result.verdict 为 pass 时，下发用 issue_firefighting_plan，参数只给 record_id = result.issue_record_id（不要提交方案内容）；不通过时照实转告，不要绕过。' +
+    '不需要向人要现场条件（没有人工确认项）。方案结构和参数为开发占位值。',
+    {
+      panel: { type: 'string', required: true, description: '工作面编号，如 1201' },
+      leak_m3_min: { type: 'number', description: '采空区漏风量（m³/min），指挥人员给出时才填；与 target_o2_pct 一起用于由代码估算注氮流量' },
+      target_o2_pct: { type: 'number', description: '注氮的目标氧浓度（%），指挥人员给出时才填' },
+    },
+    draftFirefightingPlan,
   )
 
   /** 把报告写成会话工作区里的 Markdown 文件，用 present 交付（网页端显示交付卡片、右侧预览） */

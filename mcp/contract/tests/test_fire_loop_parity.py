@@ -49,8 +49,8 @@ def _post(url: str, body: dict) -> dict:
         return json.loads(r.read())
 
 
-@pytest.fixture(scope="module")
-def sim_s4_60():
+def _sim(scenario: str, hours: float):
+    """起一个手动时钟的模拟矿井，推进到指定场景的指定小时，返回 MCP 地址（生成器：用完关闭）。"""
     import time
 
     port = _free_port()
@@ -63,17 +63,28 @@ def sim_s4_60():
             if proc.poll() is not None:
                 raise RuntimeError(f"模拟矿井启动失败（退出码 {proc.returncode}）")
             try:
-                _post(f"{base}/sim/scenario", {"id": "s4-escalation", "manual": True})
+                _post(f"{base}/sim/scenario", {"id": scenario, "manual": True})
                 break
             except OSError:
                 time.sleep(0.1)
         else:
             raise RuntimeError("模拟矿井 15 秒内没有就绪")
-        _post(f"{base}/sim/advance", {"hours": 60})
+        _post(f"{base}/sim/advance", {"hours": hours})
         yield f"{base}/mcp"
     finally:
         proc.terminate()
         proc.wait(timeout=10)
+
+
+@pytest.fixture(scope="module")
+def sim_s4_60():
+    yield from _sim("s4-escalation", 60)
+
+
+@pytest.fixture(scope="module")
+def sim_s3_39():
+    """加速氧化第 39 小时（橙色）：防灭火方案流程的时刻。"""
+    yield from _sim("s3-accelerating", 39)
 
 
 def _rerun_and_render(records: dict) -> tuple[int, int]:
@@ -130,6 +141,57 @@ def test_ts_sealing_flow_matches_python(sim_s4_60, tmp_path):
     # explosion_triangle、warning、personnel、skeleton + 2 轮 ×（compose、scope、review）
     assert n_results == 4 + 2 * 3
     assert n_reports == 2 + 1 + 1  # 2 轮方案文本 + 审核意见 + 方案要点
+
+
+@NEED_NODE
+def test_ts_firefighting_flow_matches_python(sim_s3_39, tmp_path):
+    rec_dir = tmp_path / "records"
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RESCUE_MCP_")}
+    env["RESCUE_SKILL_PYTHON"] = sys.executable
+    out = subprocess.run(["node", "tools/firefighting-plan.ts", str(SKILLS), str(rec_dir), "1201", sim_s3_39], cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=180)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    s, records = got["plan"], got["records"]
+    # 命令行的写死回答：第 1 轮审核判“通风稳定”不通过、退回重写，第 2 轮通过
+    assert s["result"]["verdict"] == "pass" and s["result"]["rounds"] == 2
+    assert s["result"]["issue_record_id"] == s["record_ids"]["review"]
+    assert [e["status"] for e in s["events"]].count("failed") == 0
+    assert s["report_markdown"].startswith("【防灭火处置方案】1201 采空区防灭火处置方案")
+    assert "【合规审核】" in s["report_markdown"] and "（第 2 轮）" in s["report_markdown"]
+    assert s["human_input_request"] is None
+    # 防灭火方案不算预警和受威胁人员，没有人工确认项
+    assert "warning" not in s["record_ids"] and "personnel" not in s["record_ids"]
+
+    store = RecordStore(rec_dir)
+    for rid in records:
+        store.get(rid)
+    from rescue_contract.validation import plan_from_record
+
+    rv = records[s["record_ids"]["review"]]
+    plan, problems, _, _ = plan_from_record("issue_firefighting_plan", rv["record_id"], store, datetime.fromisoformat(rv["as_of"]))
+    assert not problems and plan.record_id == rv["record_id"]
+    # 封闭方案的工具不接受它
+    plan, problems, _, _ = plan_from_record("issue_sealing_plan", rv["record_id"], store, datetime.fromisoformat(rv["as_of"]))
+    assert plan is None and "sealing-plan/compose" in problems[0]
+
+    spec = parse_collect_spec((SKILLS / "firefighting-plan" / "references" / "collect.yaml").read_text(encoding="utf-8"))
+    assert records[s["record_ids"]["evidence"]]["content"] == asyncio.run(collect_from(sim_s3_39, spec, "plan", "1201"))
+    n_results, n_reports = _rerun_and_render(records)
+    # explosion_triangle、skeleton + 2 轮 ×（compose、scope、review）
+    assert n_results == 2 + 2 * 3
+    assert n_reports == 2 + 1 + 1  # 2 轮方案文本 + 审核意见 + 方案要点
+
+
+def test_firefighting_collect_matches_sealing_sensors():
+    """防灭火方案的测点组与封闭方案相同（同一套爆炸三角形输入）；不取火区台账和人员定位。"""
+    import yaml
+
+    sp = yaml.safe_load((SKILLS / "sealing-plan" / "references" / "collect.yaml").read_text(encoding="utf-8"))
+    fp = yaml.safe_load((SKILLS / "firefighting-plan" / "references" / "collect.yaml").read_text(encoding="utf-8"))
+    assert fp["kinds"]["plan"]["sensors"] == sp["kinds"]["plan"]["sensors"]
+    assert "personnel" not in fp["kinds"]["plan"] and "fire_areas" not in fp["kinds"]["plan"]
+    for k in ("network", "inventory"):
+        assert fp["kinds"]["plan"][k] == sp["kinds"]["plan"][k]
 
 
 def test_sealing_collect_matches_assessment():

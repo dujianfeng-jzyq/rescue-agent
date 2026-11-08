@@ -166,6 +166,7 @@
    "assessments": 1,
    "effect_reviews": 1,
    "sealing_plans": 0,
+   "firefighting_plans": 0,
    "actions_issued": 1,
    "actions_rejected": 1,
    "actions_failed": 0,

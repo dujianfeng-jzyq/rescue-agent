@@ -1,5 +1,5 @@
 /**
- * 固定流程 draft_sealing_plan 的两个模型阶段（design-v2 4.4 第 3 点）：“方案编写”“合规审核”。
+ * 固定流程 draft_sealing_plan、draft_firefighting_plan 的两个模型阶段（design-v2 4.4 第 3 点）：“方案编写”“合规审核”。
  *
  * 模型只做选择：编号（可选步骤、密闭巷道、审核项、结论、条号）来自代码给出的清单，写短说明。
  * 阶段指令 = 相应技能的 SKILL.md 正文（sealing-plan、plan-compliance，每次运行读当前版本）+ 本阶段说明。
@@ -14,6 +14,8 @@ export const REVIEW_STAGE = '合规审核'
 
 export interface Skeleton {
   panel: string
+  /** sealing（封闭方案）/ firefighting（防灭火方案，不封闭火区、不进入灾区，没有密闭巷道、撤人和人工确认项） */
+  kind: string
   as_of: string
   title: string
   context: Record<string, unknown>
@@ -46,14 +48,14 @@ export interface ReviewChoice {
   summary: string
 }
 
-const ROLE = (stage: string) =>
-  `你是固定流程 draft_sealing_plan 的“${stage}”阶段。只用 structured_output 提交结果，不要调用任何其他工具，不要向人提问。`
+const ROLE = (stage: string, flow: string) =>
+  `你是固定流程 ${flow} 的“${stage}”阶段。只用 structured_output 提交结果，不要调用任何其他工具，不要向人提问。`
 const NUMBERS =
   '说明、概述里不写清单、现场条件和条文里没有的数值：不换算、不估算、不相加、不计数、不归纳界限；不写序号；不声称已执行任何处置。写不出合规的说明时留空字符串。'
 
 const show = (v: unknown) => (v === null || v === undefined ? '缺失' : v === true ? '是' : v === false ? '否' : String(v))
 
-/** 默认选择：阶段失败时用（封闭全部候选巷道，不加可选步骤），报告注明 */
+/** 默认选择：阶段失败时用（封闭全部候选巷道——没有密闭巷道的方案就没有——不加可选步骤），报告注明 */
 export function defaultSelection(sk: Skeleton): Selection {
   return { optional_steps: [], seal_roadways: sk.seal_roadway_options.map((o) => o.roadway_id), step_notes: [], summary: '' }
 }
@@ -66,7 +68,7 @@ export function writeSchema(sk: Skeleton): Record<string, unknown> {
     properties: {
       optional_steps: { type: 'array', items: { type: 'string', enum: sk.optional_steps.map((s) => s.key) } },
       // DSH 的结构化输出只支持 JSON Schema 的一个子集（没有 minItems），“至少一条”由 checkSelection 检查
-      seal_roadways: { type: 'array', items: { type: 'string', enum: sk.seal_roadway_options.map((o) => o.roadway_id) } },
+      ...(sk.seal_roadway_options.length ? { seal_roadways: { type: 'array', items: { type: 'string', enum: sk.seal_roadway_options.map((o) => o.roadway_id) } } } : {}),
       step_notes: {
         type: 'array',
         items: {
@@ -78,13 +80,35 @@ export function writeSchema(sk: Skeleton): Record<string, unknown> {
       },
       summary: { type: 'string' },
     },
-    required: ['optional_steps', 'seal_roadways', 'step_notes', 'summary'],
+    required: ['optional_steps', ...(sk.seal_roadway_options.length ? ['seal_roadways'] : []), 'step_notes', 'summary'],
   }
 }
 
 /** 骨架的文字版（阶段的输入，也是数值核对的材料之一） */
 export function skeletonText(sk: Skeleton): string {
   const c = sk.context
+  if (sk.kind === 'firefighting') {
+    return [
+      `## 现场条件（截至 ${sk.as_of}，代码生成，不能改）`,
+      '',
+      `- 灾区甲烷 ${show(c.methane_pct)} %，是否继续上升：${show(c.methane_rising)}`,
+      `- 氧浓度 ${show(c.o2_pct)} %${sk.explosion.worst_sensor_id ? `（${sk.explosion.worst_sensor_id}）` : ''}`,
+      `- 爆炸危险性：${show(sk.explosion.overall_name)}`,
+      '- 本方案不封闭火区，不安排人员进入灾区，没有密闭巷道和撤人步骤',
+      '',
+      '## 必备步骤（顺序和说明固定）',
+      '',
+      ...sk.required_steps.map((s) => `- ${s.key}：${s.description}`),
+      '',
+      '## 可选步骤清单（key：内容，插在哪一步之后）',
+      '',
+      ...sk.optional_steps.map((s) => `- ${s.key}：${s.label}（在 ${s.after} 之后）`),
+      '',
+      '## 待补充（这一阶段改不了）',
+      '',
+      ...(sk.missing_inputs.length ? sk.missing_inputs.map((m) => `- ${m.label}：${m.note}`) : ['- 无']),
+    ].join('\n')
+  }
   return [
     `## 现场条件（截至 ${sk.as_of}，代码生成，不能改）`,
     '',
@@ -114,14 +138,14 @@ export function skeletonText(sk: Skeleton): string {
   ].join('\n')
 }
 
-export function writePrompt(opts: { skillName: string; skillVersion: string; skillBody: string; skeleton: Skeleton; comments: string[] }): string {
+export function writePrompt(opts: { skillName: string; skillVersion: string; skillBody: string; skeleton: Skeleton; comments: string[]; flow?: string }): string {
   const l = opts.skeleton.limits
   return [
-    ROLE(WRITE_STAGE),
+    ROLE(WRITE_STAGE, opts.flow ?? 'draft_sealing_plan'),
     '',
     '本阶段要求：',
     '- optional_steps：从“可选步骤清单”里选需要的（可以不选）；',
-    '- seal_roadways：从“密闭巷道清单”里选要封闭的巷道（至少一条）；',
+    ...(opts.skeleton.seal_roadway_options.length ? ['- seal_roadways：从“密闭巷道清单”里选要封闭的巷道（至少一条）；'] : []),
     `- step_notes：给需要补充执行要点的步骤各写一句（key 用必备步骤或所选可选步骤的 key，不超过 ${l.max_note_chars} 字），可以不写；`,
     `- summary：一句方案概述（不超过 ${l.max_summary_chars} 字）。`,
     `- ${NUMBERS}`,
@@ -148,7 +172,8 @@ function noteProblems(text: string, max: number, what: string, material: string)
 /** 核对“方案编写”的结构化结果 */
 export function checkSelection(raw: unknown, sk: Skeleton, material: string): { ok: true; selection: Selection } | { ok: false; problems: string[] } {
   const r = raw as any
-  if (!r || typeof r !== 'object' || !Array.isArray(r.optional_steps) || !Array.isArray(r.seal_roadways) || !Array.isArray(r.step_notes) || typeof r.summary !== 'string') {
+  const hasSeals = sk.seal_roadway_options.length > 0
+  if (!r || typeof r !== 'object' || !Array.isArray(r.optional_steps) || (hasSeals && !Array.isArray(r.seal_roadways)) || !Array.isArray(r.step_notes) || typeof r.summary !== 'string') {
     return { ok: false, problems: ['结构化结果不完整'] }
   }
   const problems: string[] = []
@@ -156,12 +181,13 @@ export function checkSelection(raw: unknown, sk: Skeleton, material: string): { 
   const opt = new Set(sk.optional_steps.map((s) => s.key))
   const seals = new Set(sk.seal_roadway_options.map((o) => o.roadway_id))
   const optional = r.optional_steps.map(String)
-  const roads = r.seal_roadways.map(String)
+  const roads = (r.seal_roadways ?? []).map(String)
   for (const k of optional) if (!opt.has(k)) problems.push(`可选步骤不在清单里：${k}`)
   for (const k of roads) if (!seals.has(k)) problems.push(`密闭巷道不在清单里：${k}`)
   if (new Set(optional).size !== optional.length) problems.push('可选步骤有重复')
   if (new Set(roads).size !== roads.length) problems.push('密闭巷道有重复')
-  if (!roads.length) problems.push('至少选一条密闭巷道')
+  if (hasSeals && !roads.length) problems.push('至少选一条密闭巷道')
+  if (!hasSeals && roads.length) problems.push('本方案不封闭火区，不能选密闭巷道')
   const keys = new Set([...sk.required_steps.map((s) => s.key), ...optional])
   const seen = new Set<string>()
   const notes = r.step_notes.map((n: any) => ({ key: String(n?.key ?? ''), note: String(n?.note ?? '').trim() }))
@@ -209,10 +235,11 @@ export function reviewPrompt(opts: {
   planText: string
   redline: { ok: boolean; problems: string[] }
   articles: { document: string; article: string; content: string | null }[]
+  flow?: string
 }): string {
   const l = opts.scope.limits
   return [
-    ROLE(REVIEW_STAGE),
+    ROLE(REVIEW_STAGE, opts.flow ?? 'draft_sealing_plan'),
     '',
     '本阶段要求：',
     '- items：“审核项清单”的每一项都给一条：conclusion 从结论清单里选；articles 只能从“对照条文”的条号里选（可以为空）；' +

@@ -37,9 +37,28 @@ import {
 } from './plan-stages.ts'
 
 export const SEALING_FLOW = 'draft_sealing_plan'
-const SP = 'sealing-plan'
+export const FIREFIGHTING_FLOW = 'draft_firefighting_plan'
 const PC = 'plan-compliance'
 const FA = 'fire-assessment'
+
+/**
+ * 方案流程的配置：封闭方案和防灭火方案走同一套步骤（采集 → 骨架 → 方案编写 → 组装 → 红线预检 → 合规审核），
+ * 区别只在技能、要不要算受威胁人员和人工确认项（防灭火方案不封闭火区、不安排人员进入灾区，两者都没有）、下发工具。
+ */
+export interface PlanFlow {
+  name: string
+  skill: string
+  idPrefix: string
+  /** 报告和卡片里的方案名 */
+  label: string
+  /** 下发用的 guard 工具（precheck_plan 的 tool 参数也取它） */
+  issueTool: string
+  /** 是否算预警等级、受威胁人员（撤人巷道）并接受人工确认项 */
+  withPersonnel: boolean
+}
+
+export const SEALING: PlanFlow = { name: SEALING_FLOW, skill: 'sealing-plan', idPrefix: 'SP', label: '封闭方案', issueTool: 'issue_sealing_plan', withPersonnel: true }
+export const FIREFIGHTING: PlanFlow = { name: FIREFIGHTING_FLOW, skill: 'firefighting-plan', idPrefix: 'FP', label: '防灭火方案', issueTool: 'issue_firefighting_plan', withPersonnel: false }
 
 export interface HumanInput {
   field: string
@@ -100,11 +119,15 @@ export interface SealingOutcome {
 
 const content = (r: RescueRecord) => (r.content as any).result
 
-export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Promise<SealingOutcome> {
-  const runId = `SP-${Date.now().toString(36)}-${randomInt(36 ** 4).toString(36).padStart(4, '0')}`
+export const draftSealingPlan = (ev: Evidence, opts: SealingOptions) => draftPlan(ev, opts, SEALING)
+export const draftFirefightingPlan = (ev: Evidence, opts: SealingOptions) => draftPlan(ev, opts, FIREFIGHTING)
+
+export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFlow): Promise<SealingOutcome> {
+  const SP = flow.skill
+  const runId = `${flow.idPrefix}-${Date.now().toString(36)}-${randomInt(36 ** 4).toString(36).padStart(4, '0')}`
   const events: FlowEvent[] = []
   const emit = (stage: string, status: FlowEvent['status'], recordIds: string[] = [], detail: string | null = null) => {
-    const e: FlowEvent = { flow: SEALING_FLOW, run_id: runId, stage, status, at: new Date().toISOString(), record_ids: recordIds, detail }
+    const e: FlowEvent = { flow: flow.name, run_id: runId, stage, status, at: new Date().toISOString(), record_ids: recordIds, detail }
     events.push(e)
     opts.onEvent?.(e)
   }
@@ -131,14 +154,20 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
   const evidence = await step('evidence', () => ev.collectEvidence({ skill: SP, kind: 'plan', panel: opts.panel, origin }))
   const E = evidence.record_id
   const explosion = await step('explosion', () => script('explosion-triangle', 'explosion_triangle', { evidence: E }))
-  await step('warning', () => script(FA, 'warning', { evidence: E }))
-  const personnel = await step('personnel', () => script(FA, 'personnel', { evidence: E, warning: ids.warning! }, { include_personnel: true }))
-  const skOptions: Record<string, unknown> = { human_inputs: opts.humanInputs ?? [] }
+  const skInputs: Record<string, string> = { evidence: E, explosion: explosion.record_id }
+  const skOptions: Record<string, unknown> = {}
+  let personnel: RescueRecord | null = null
+  if (flow.withPersonnel) {
+    await step('warning', () => script(FA, 'warning', { evidence: E }))
+    personnel = await step('personnel', () => script(FA, 'personnel', { evidence: E, warning: ids.warning! }, { include_personnel: true }))
+    skInputs.personnel = personnel.record_id
+    skOptions.human_inputs = opts.humanInputs ?? []
+  }
   if (opts.leakM3Min !== undefined) skOptions.leak_m3_min = opts.leakM3Min
   if (opts.targetO2Pct !== undefined) skOptions.target_o2_pct = opts.targetO2Pct
-  const skeletonRec = await step('skeleton', () => script(SP, 'skeleton', { evidence: E, explosion: explosion.record_id, personnel: personnel.record_id }, skOptions))
+  const skeletonRec = await step('skeleton', () => script(SP, 'skeleton', skInputs, skOptions))
   const sk = content(skeletonRec) as Skeleton
-  const material0 = [skeletonText(sk), JSON.stringify(sk), JSON.stringify(content(explosion)), JSON.stringify(content(personnel))].join('\n')
+  const material0 = [skeletonText(sk), JSON.stringify(sk), JSON.stringify(content(explosion)), ...(personnel ? [JSON.stringify(content(personnel))] : [])].join('\n')
 
   const [spSkill, pcSkill] = await Promise.all([ev.skill(SP), ev.skill(PC)])
   const warnings: string[] = ['方案结构、材料参数和审核项为开发占位值，待专家审定']
@@ -164,7 +193,7 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
       if (opts.stage) {
         const run = await opts.stage({
           label: WRITE_STAGE,
-          prompt: writePrompt({ skillName: spSkill.name, skillVersion: spSkill.version, skillBody: spSkill.body, skeleton: sk, comments }),
+          prompt: writePrompt({ skillName: spSkill.name, skillVersion: spSkill.version, skillBody: spSkill.body, skeleton: sk, comments, flow: flow.name }),
           schema: writeSchema(sk),
           ...sig,
         })
@@ -175,7 +204,7 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
       if (selection) emit(`${WRITE_STAGE}#${round}`, 'completed')
       else {
         emit(`${WRITE_STAGE}#${round}`, 'failed', [], problem)
-        stageNotes.push(`第 ${round} 轮“${WRITE_STAGE}”未完成（${problem}），按缺省选择组装（封闭全部候选巷道、不加可选步骤）`)
+        stageNotes.push(`第 ${round} 轮“${WRITE_STAGE}”未完成（${problem}），按缺省选择组装（${sk.seal_roadway_options.length ? '封闭全部候选巷道、' : ''}不加可选步骤）`)
         selection = defaultSelection(sk)
       }
       planRec = await step(`compose#${round}`, () => script(SP, 'compose', { skeleton: skeletonRec.record_id, evidence: E }, { selection }), 'compose')
@@ -205,7 +234,7 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
       const planText = planReport!.content as string
       const run = await opts.stage({
         label: REVIEW_STAGE,
-        prompt: reviewPrompt({ skillName: pcSkill.name, skillVersion: pcSkill.version, skillBody: pcSkill.body, scope: scope!, planText, redline, articles }),
+        prompt: reviewPrompt({ skillName: pcSkill.name, skillVersion: pcSkill.version, skillBody: pcSkill.body, scope: scope!, planText, redline, articles, flow: flow.name }),
         schema: reviewSchema(scope!),
         ...sig,
       })
@@ -248,7 +277,7 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
   const humanRequest: HumanInputRequest | null =
     !redline.ok && missingHuman.length
       ? {
-          flow: SEALING_FLOW,
+          flow: flow.name,
           reason: `红线预检不通过，可能与缺失的现场条件有关：${redline.problems.join('；')}`,
           items: missingHuman.map((m) => ({
             field: m.field,
@@ -268,7 +297,7 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
   const summary = [
     `${p.plan.title}（${p.plan.plan_id}）`,
     `${p.step_count} 个步骤`,
-    `密闭巷道 ${p.seal_walls_text}`,
+    ...(p.seal_walls_text ? [`密闭巷道 ${p.seal_walls_text}`] : []),
     `红线预检${redline.ok ? '通过' : '不通过'}`,
     `${verdictText}（${rounds} 轮）`,
     p.has_shortages ? `有缺口的物资 ${p.shortage_count} 项` : '物资台账无缺口',
@@ -295,17 +324,17 @@ export async function draftSealingPlan(ev: Evidence, opts: SealingOptions): Prom
   )
   const facts = [(planReport!.content as string).trimEnd(), reviewReport ? (reviewReport.content as string).trimEnd() : `【合规审核】未完成：${stageNotes.join('；')}`]
   const tail = passed
-    ? `下发：指挥人员确认后用 issue_sealing_plan 提交审核记录 ${reviewRec!.record_id}（会弹出人工确认）。`
+    ? `下发：指挥人员确认后用 ${flow.issueTool} 提交审核记录 ${reviewRec!.record_id}（会弹出人工确认）。`
     : humanRequest
       ? '下发前需要先补充现场确认项（见问题清单），带着回答重新编制。'
       : `方案未通过合规审核，不能下发；请指挥人员决定如何处理。`
   return {
     card: {
-      title: `${opts.panel} 封闭方案`,
+      title: `${opts.panel} ${flow.label}`,
       summary,
       record_ids: [planReport!.record_id, ...(reviewReport ? [reviewReport.record_id] : []), ...(reviewRec ? [reviewRec.record_id] : []), planRec!.record_id],
       files: [],
-      next_actions: passed ? [{ label: '下发封闭方案（issue_sealing_plan，需人工确认）', tool: 'issue_sealing_plan', arguments: { record_id: reviewRec!.record_id } }] : [],
+      next_actions: passed ? [{ label: `下发${flow.label}（${flow.issueTool}，需人工确认）`, tool: flow.issueTool, arguments: { record_id: reviewRec!.record_id } }] : [],
       warnings,
     },
     report_markdown: facts.join('\n\n'),
