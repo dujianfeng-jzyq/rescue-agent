@@ -520,10 +520,11 @@ WORKFLOW_COVERS = {
 
 # 第二版（docs/design-v2.md）：固定流程和检测是 DSH 插件工具（不是 MCP），结果结构见 dsh-bundle/src/fire-loop、src/evidence/check.ts。
 # 用例的 tools_called 仍写第一版的 workflow 工具名，按下表认第二版的对应工具。
-V2_FLOW_TOOLS = {"run_fire_assessment", "check_mine", "draft_sealing_plan", "review_effect", "review_timeline", "assess_unsealing"}
+V2_FLOW_TOOLS = {"run_fire_assessment", "check_mine", "draft_sealing_plan", "draft_firefighting_plan", "review_effect", "review_timeline", "assess_unsealing"}
 V2_EQUIVALENT = {"assess_panel": "run_fire_assessment", "recommend_escalation": "run_fire_assessment", "draft_plan": "draft_sealing_plan"}
 WORKFLOW_COVERS["run_fire_assessment"] = sorted(set(WORKFLOW_COVERS["assess_panel"]) | set(WORKFLOW_COVERS["recommend_escalation"]))
 # draft_sealing_plan 在内部做了第一版 draft_plan + dispatch 用量估算的事
+WORKFLOW_COVERS["draft_firefighting_plan"] = ["mcp__dispatch__estimate_inert_gas", "mcp__dispatch__estimate_grout", "mcp__dispatch__check_supply"]  # 防灭火方案内部算的注氮流量、注浆量、库存比较
 WORKFLOW_COVERS["draft_sealing_plan"] = sorted(
     set(WORKFLOW_COVERS["draft_plan"]) | {"mcp__dispatch__estimate_seal_materials", "mcp__dispatch__estimate_inert_gas", "mcp__dispatch__estimate_grout", "mcp__dispatch__check_supply", "mcp__ventnet__threatened_personnel"}
 )
@@ -722,7 +723,7 @@ def grade(root: Session, checks: dict) -> dict:
 
     if checks.get("record_referenced"):
         # 固定流程产生的记录编号
-        produced = {v for t, r in wf if t in ("run_fire_assessment", "draft_sealing_plan", "assess_unsealing") for v in (r.get("record_ids") or {}).values() if isinstance(v, str)}
+        produced = {v for t, r in wf if t in ("run_fire_assessment", "draft_sealing_plan", "draft_firefighting_plan", "assess_unsealing") for v in (r.get("record_ids") or {}).values() if isinstance(v, str)}
         bad = []
         for s in sessions:
             for name, args in s.calls():

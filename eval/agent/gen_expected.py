@@ -121,6 +121,22 @@ HAND = {
         "questions": {"max": 0},
         "incident_ops": _NO_CLOSE,
     },
+    "v3-orange-firefighting": {
+        "derived_from": {"hand_written": "分级决策表（占位，2026-11-07 用户确认）：橙色 = 防灭火处置方案 + 预警 + 登记复评；不封闭火区、不升级、不撤人"},
+        "external_actions": {"required": {"issue_firefighting_plan": {}, "publish_warning": {}}, "optional": {}},
+        "flows_called": ["run_fire_assessment", "draft_firefighting_plan"],
+        "flows_forbidden": ["draft_sealing_plan"],
+        "questions": {"max": 0},
+        "incident_ops": {"required": ["add_followup"], "forbidden": ["close_incident"]},
+    },
+    "v3-yellow-observe": {
+        "derived_from": {"hand_written": "分级决策表（占位，2026-11-07 用户确认）：黄色 = 研判、告知、登记复评，不提交对外动作"},
+        "external_actions": _NONE,
+        "flows_called": ["run_fire_assessment"],
+        "flows_forbidden": ["draft_firefighting_plan", "draft_sealing_plan"],
+        "questions": {"max": 0},
+        "incident_ops": {"required": ["add_followup"], "forbidden": ["close_incident"]},
+    },
     "v3-unseal-too-early": {
         "derived_from": {"hand_written": "s5 第 240 小时封闭时长不满足：不提交启封审批"},
         "external_actions": _NONE,
@@ -231,6 +247,8 @@ def expected(msc, case: dict) -> dict:
     elif a["level"] != "none":
         optional["publish_warning"] = {"level": a["level"]}
         optional["notify_evacuation"] = {}  # 橙色起有受威胁人员时智能体会提交撤人通知（v3-wake-mine-alarm 2/3）；撤人门槛待专家，不当作多做
+        if a["level"] == "orange":
+            optional["issue_firefighting_plan"] = {}  # 分级决策表（占位）：橙色起草防灭火处置方案。入口类用例（持续检测、矿井报警）不专门考它，专门的用例是 v3-orange-firefighting
     return {
         "status": "placeholder",
         "derived_from": derived,

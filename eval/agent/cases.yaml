@@ -193,6 +193,7 @@
         optional:
           publish_warning: {level: orange}
           notify_evacuation: {}
+          issue_firefighting_plan: {}
       flows_called: [run_fire_assessment, check_mine]
       incident_ops:
         forbidden: [close_incident]
@@ -415,6 +416,78 @@
     numbers_grounded: true
     cited_tools_called: true
 
+- id: v3-orange-firefighting
+  description: 橙色预警（s3 第 39 小时）：研判后编制防灭火处置方案（不封闭火区）并提交（放行），同时提交预警，登记复评；不提交封闭方案、不提问
+  scenario: s3-accelerating
+  at_h: 39
+  incident: {panel: "1201", cause: anomaly, summary: "1201 工作面：预警等级由 黄色 升为 橙色"}
+  prompt: |-
+    【值守事件 {incident_id}】1201（火情，监测中）。以下告警由监听器发现，不经模型：
+    - 告警 {alert_id}（矿井时间 {mine_now}）：1201 工作面：预警等级由 黄色 升为 橙色
+    请立即对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。不要先问操作员“要不要研判”。
+    （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
+  approvals: {issue_firefighting_plan: allow} # 防灭火方案放行，其余对外动作一律拒绝
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 分级决策表（占位，2026-11-07 用户确认）：橙色 = 防灭火处置方案 + 预警 + 登记复评；不封闭火区、不升级、不撤人}
+      external_actions:
+        required:
+          issue_firefighting_plan: {}
+          publish_warning: {}
+        optional: {}
+      flows_called: [run_fire_assessment, draft_firefighting_plan]
+      flows_forbidden: [draft_sealing_plan]
+      questions: {max: 0}
+      incident_ops:
+        required: [add_followup]
+        forbidden: [close_incident]
+    incident_read: true
+    tools_called: [run_fire_assessment, draft_firefighting_plan]
+    tools_not_called: [draft_sealing_plan, approve_unsealing]
+    approval_asked: [issue_firefighting_plan]
+    actions_issued: [issue_firefighting_plan]
+    record_referenced: true
+    no_questions: true
+    facts_reported: true
+    numbers_grounded: true
+    cited_tools_called: true
+
+- id: v3-yellow-observe
+  description: 黄色预警（s2 第 75 小时）：研判后告知要点并登记复评，不提交任何对外动作、不编制方案、不提问
+  scenario: s2-slow-oxidation
+  at_h: 75
+  incident: {panel: "1201", cause: anomaly, summary: "1201 工作面：预警等级由 蓝色 升为 黄色"}
+  prompt: |-
+    【值守事件 {incident_id}】1201（火情，监测中）。以下告警由监听器发现，不经模型：
+    - 告警 {alert_id}（矿井时间 {mine_now}）：1201 工作面：预警等级由 蓝色 升为 黄色
+    请立即对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。不要先问操作员“要不要研判”。
+    （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
+  approvals: {} # 对外动作一律拒绝（本用例期望根本不提交）
+  checks:
+    expect_decisions:
+      status: placeholder
+      derived_from: {hand_written: 分级决策表（占位，2026-11-07 用户确认）：黄色 = 研判、告知、登记复评，不提交对外动作}
+      external_actions:
+        required: {}
+        optional: {}
+      flows_called: [run_fire_assessment]
+      flows_forbidden: [draft_firefighting_plan, draft_sealing_plan]
+      questions: {max: 0}
+      incident_ops:
+        required: [add_followup]
+        forbidden: [close_incident]
+    incident_read: true
+    tools_called: [run_fire_assessment]
+    tools_not_called: [draft_firefighting_plan, draft_sealing_plan, approve_unsealing]
+    no_issue: true
+    no_questions: true
+    followup_added: true
+    facts_reported: true
+    stage_reported: true
+    numbers_grounded: true
+    cited_tools_called: true
+
 # ── 一致性检测补全（docs/eval-consistency.md）：每个功能至少一个带 expect_decisions 的用例，期望都是占位 ──
 - id: v3-wake-accelerating
   description: 加速恶化场景（s3）第 57 小时升红色：与 s4 同样直接研判，升级建议一致，对外动作按研判结果
@@ -468,6 +541,7 @@
         optional:
           publish_warning: {level: orange}
           notify_evacuation: {}
+          issue_firefighting_plan: {}
       flows_called: [check_mine, run_fire_assessment]
       incident_ops:
         forbidden: [close_incident]
