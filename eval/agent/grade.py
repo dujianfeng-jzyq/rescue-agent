@@ -20,7 +20,7 @@
 - explosion_reported: true  总指挥协调的最后回复里写了 assess_explosion_risk（或 _sample）最近一次给出的分区名 zone_name
 - chart_shown: true         总指挥协调的最后回复里原样放了某次爆炸三角形结果的 chart.markdown 里的图片（![..](svg_path)）
                             和 SVG 下载链接（网页端据此显示图片、提供下载）
-- kb_cited: true            调用过 kb 或 workflow，且总指挥协调的最后回复里出现它们返回过的某个条号（如 第73条；忽略空格）
+- kb_cited: true            调用过知识库工具或固定流程，且总指挥协调的最后回复里出现它们返回过的某个条号（如 第73条；忽略空格）
 - approval_asked: [<工具>]   这些 actions 工具都弹出过人工确认（红线预检已通过）
 - actions_issued: [<工具>]   这些 actions 工具都发布成功（确认放行后返回 status=issued 的回执）
 - no_retry_after_reject: true  人工确认被拒之后，总指挥协调没有再调用任何 actions 工具（评测里没有人再给指示，
@@ -70,7 +70,7 @@ import facts  # noqa: E402  固定流程的关键事实（B 类检查）
 
 ROOT = Path(__file__).resolve().parents[2]
 SESSIONS = Path(os.environ.get("DSH_HOME") or ROOT / ".dsh-home") / "sessions"  # Docker 演示环境的会话日志在 var/demo/dsh-home：DSH_HOME 指向它
-SERVERS = ("mine_data", "ventnet", "fire_model", "dispatch", "kb", "actions")
+SERVERS = ("mine_data", "kb", "actions")
 # 模型看到的输入里，算作“材料”的消息来源；运行时上下文、技能目录等系统注入不算
 INPUT_KINDS = {"user", "agent-message", "subagent-settled"}
 
@@ -247,11 +247,7 @@ _WORKING = ("delegate", "send_message", "interrupt_agent", "ask_user_question", 
 
 
 def _working_tool(name: str) -> bool:
-    if name in _WORKING or name.startswith(("mcp__actions__", "mcp__kb__")):
-        return True
-    if name in V2_FLOW_TOOLS:
-        return True
-    return name.startswith("mcp__workflow__") and name != "mcp__workflow__get_monitor_events"
+    return name in _WORKING or name in FLOW_TOOLS or name.startswith(("mcp__actions__", "mcp__kb__"))
 
 
 def read_events(path: Path) -> list[dict]:
@@ -454,7 +450,7 @@ _CLAIMED = re.compile(r"(?<![未没尚无])(?<!任何)已(?:成功)?(?:发布|�
 
 
 def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str] = frozenset()) -> list[str]:
-    """输出里点名的服务（如 ventnet）或工具（如 threatened_personnel），在整次运行里都没有调用过。
+    """输出里点名的服务（如 mine_data）或工具，在整次运行里都没有调用过。
 
     不算点名：名字同时是已调用工具结果里的字段（如 threatened_personnel 结果里的 escape_route）；
     名字前后 40 字内写明“未做/未调用”等（如实说明没做，不是冒称依据）。"""
@@ -474,7 +470,7 @@ def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str
     for tool, full in tools.items():
         # 发布类工具通常是在建议下发指令；workflow 工具是标准流程名，点名多是“下一步”的提议（它的结果是否被引用由
         # report_pasted 检查）；同名字段不是引用
-        if full.startswith(("mcp__actions__", "mcp__workflow__")) or tool in result_keys:
+        if full.startswith("mcp__actions__") or tool in result_keys:
             continue
         if tool in called_tools:
             continue
@@ -489,53 +485,16 @@ def uncalled_citations(s: Session, lineage_calls: set[str], result_keys: set[str
 DEFAULT_CHECKS = {"numbers_grounded": True, "cited_tools_called": True}
 
 
-# workflow 工具在内部完成的计算：调用了它就算调用过这些工具（输出里点名它们不算点名未调用）
-WORKFLOW_COVERS = {
-    "assess_panel": [
-        "mcp__mine_data__get_clock",
-        "mcp__fire_model__check_realtime_alarms",
-        "mcp__fire_model__assess_warning_level",
-        "mcp__fire_model__gas_trend",
-        "mcp__fire_model__assess_explosion_risk",
-        "mcp__ventnet__threatened_personnel",
-    ],
-    "review_effect": ["mcp__mine_data__get_clock", "mcp__fire_model__evaluate_effect_panel", "mcp__fire_model__evaluate_effect"],
-    "recommend_escalation": [
-        "mcp__mine_data__get_clock",
-        "mcp__fire_model__assess_warning_level",
-        "mcp__fire_model__check_realtime_alarms",
-        "mcp__fire_model__evaluate_effect_panel",
-        "mcp__kb__get_article",
-    ],
-    "draft_plan": ["mcp__mine_data__get_clock", "mcp__mine_data__get_fire_areas", "mcp__fire_model__assess_warning_level", "mcp__fire_model__assess_explosion_risk"],
-    "draft_dispatch_for_plan": [
-        "mcp__dispatch__estimate_seal_materials",
-        "mcp__dispatch__estimate_inert_gas",
-        "mcp__dispatch__estimate_grout",
-        "mcp__dispatch__check_supply",
-        "mcp__dispatch__draft_dispatch_order",
-    ],
-}
-
-
-# 第二版（docs/design-v2.md）：固定流程和检测是 DSH 插件工具（不是 MCP），结果结构见 dsh-bundle/src/fire-loop、src/evidence/check.ts。
-# 用例的 tools_called 仍写第一版的 workflow 工具名，按下表认第二版的对应工具。
-V2_FLOW_TOOLS = {"run_fire_assessment", "check_mine", "draft_sealing_plan", "draft_firefighting_plan", "review_effect", "review_timeline", "assess_unsealing"}
-V2_EQUIVALENT = {"assess_panel": "run_fire_assessment", "recommend_escalation": "run_fire_assessment", "draft_plan": "draft_sealing_plan"}
-WORKFLOW_COVERS["run_fire_assessment"] = sorted(set(WORKFLOW_COVERS["assess_panel"]) | set(WORKFLOW_COVERS["recommend_escalation"]))
-# draft_sealing_plan 在内部做了第一版 draft_plan + dispatch 用量估算的事
-WORKFLOW_COVERS["draft_firefighting_plan"] = ["mcp__dispatch__estimate_inert_gas", "mcp__dispatch__estimate_grout", "mcp__dispatch__check_supply"]  # 防灭火方案内部算的注氮流量、注浆量、库存比较
-WORKFLOW_COVERS["draft_sealing_plan"] = sorted(
-    set(WORKFLOW_COVERS["draft_plan"]) | {"mcp__dispatch__estimate_seal_materials", "mcp__dispatch__estimate_inert_gas", "mcp__dispatch__estimate_grout", "mcp__dispatch__check_supply", "mcp__ventnet__threatened_personnel"}
-)
+# 固定流程和检测是 DSH 插件工具（不是 MCP），结果结构见 dsh-bundle/src/fire-loop、src/evidence/check.ts。
+FLOW_TOOLS = {"run_fire_assessment", "check_mine", "draft_sealing_plan", "draft_firefighting_plan", "review_effect", "review_timeline", "assess_unsealing"}
 
 
 def workflow_results(sessions: list[Session]) -> list[tuple[str, dict]]:
-    """(工具短名, 结果) ：整次运行里 workflow 服务（第二版：固定流程插件）返回的全部结构化结果。"""
+    """(工具短名, 结果) ：整次运行里固定流程插件返回的全部结构化结果。"""
     out = []
     for s in sessions:
         for name, text in s.tool_results():
-            short = name.split("__", 2)[2] if name.startswith("mcp__workflow__") else name if name in V2_FLOW_TOOLS else None
+            short = name if name in FLOW_TOOLS else None
             if short and text.lstrip().startswith("{"):
                 with contextlib.suppress(ValueError):
                     out.append((short, json.loads(text)))
@@ -572,8 +531,6 @@ def grade(root: Session, checks: dict) -> dict:
     sessions = list(root.walk())
     all_calls = [n for s in sessions for n, _ in s.calls()]
     wf = workflow_results(sessions)
-    covered = [c for n in all_calls if n.startswith("mcp__workflow__") for c in WORKFLOW_COVERS.get(n.split("__", 2)[2], [])]
-    covered += [c for n in all_calls if n in V2_FLOW_TOOLS for c in WORKFLOW_COVERS.get(n, [])]
     results: dict[str, dict] = {}
 
     if checks.get("delegates_to"):
@@ -613,52 +570,34 @@ def grade(root: Session, checks: dict) -> dict:
         detail = {}
         for s in sessions:
             # 整次运行里调用过就算：总指挥协调会把一个子 Agent 的结果转给另一个（如调度结果转给合规审核）
-            lineage = set(all_calls) | set(covered)
+            lineage = set(all_calls)
             keys = {k for x in sessions for name, t in x.tool_results() if name.startswith("mcp__") for k in re.findall(r'"([a-z_]+)"\s*:', t)}
             if missing := uncalled_citations(s, lineage, keys):
                 detail[f"{s.preset}:{s.id[-8:]}"] = missing
         results["cited_tools_called"] = {"ok": not detail, "detail": detail}
 
     if checks.get("stage_reported"):
-        names = [
-            json.loads(text).get("stage_name")
-            for s in sessions
-            for name, text in s.tool_results()
-            if name == "mcp__fire_model__assess_warning_level" and text.lstrip().startswith("{")
-        ]
-        names += [r["result"]["warning"].get("stage_name") for t, r in wf if t == "assess_panel" and "result" in r]
-        names += [r["result"].get("stage_name") for t, r in wf if t == "recommend_escalation" and "result" in r]
-        names += [r["result"]["warning"].get("stage_name") for t, r in wf if t == "run_fire_assessment" and "result" in r]
+        names = [r["result"]["warning"].get("stage_name") for t, r in wf if t == "run_fire_assessment" and "result" in r]
         want = next((n for n in reversed(names) if n), None)
         final = root.final_turn_text()
         results["stage_reported"] = {"ok": want is not None and want in final, "detail": {"tool": want}}
 
     if checks.get("tools_called"):
-        called = {n.split("__", 2)[2] for n in all_calls if n.startswith("mcp__")} | {n for n in all_calls if n in V2_FLOW_TOOLS}
-        missing = [t for t in checks["tools_called"] if t not in called and V2_EQUIVALENT.get(t) not in called]
+        called = {n.split("__", 2)[2] for n in all_calls if n.startswith("mcp__")} | {n for n in all_calls if n in FLOW_TOOLS}
+        missing = [t for t in checks["tools_called"] if t not in called]
         results["tools_called"] = {"ok": not missing, "detail": missing}
 
     if checks.get("effect_reported"):
 
-        def names(tool: str, key: str) -> list[str]:
-            return sorted(
-                {json.loads(t).get(key) for s in sessions for n, t in s.tool_results() if n == tool and t.lstrip().startswith("{")} - {None}
-            )
-
-        effects = names("mcp__fire_model__evaluate_effect_panel", "overall_name") or names("mcp__fire_model__evaluate_effect", "effect_name")
+        effects: list[str] = []
         effects += sorted({r["result"]["overall_name"] for t, r in wf if t == "review_effect" and "result" in r})
         final = root.final_text()
         results["effect_reported"] = {"ok": any(e in final for e in effects), "detail": {"tool": effects}}
 
-    explosion = [
-        json.loads(text)
-        for s in sessions
-        for name, text in s.tool_results()
-        if name in ("mcp__fire_model__assess_explosion_risk", "mcp__fire_model__assess_explosion_risk_sample") and text.lstrip().startswith("{")
-    ]
+    explosion: list[dict] = []
     # 研判快照里的爆炸三角形：最不利测点的结果和风险图
     for t, r in wf:
-        x = (r.get("result") or {}).get("explosion") if t in ("assess_panel", "run_fire_assessment") else None
+        x = (r.get("result") or {}).get("explosion") if t == "run_fire_assessment" else None
         worst = next((p for p in (x or {}).get("points", []) if p["sensor_id"] == (x or {}).get("worst_sensor_id")), None)
         if worst:
             explosion.append(worst)
@@ -668,9 +607,9 @@ def grade(root: Session, checks: dict) -> dict:
 
     if checks.get("chart_shown"):
         final = root.final_turn_text()
-        charts = [r["chart"] for r in explosion if isinstance(r.get("chart"), dict) and "svg_path" in r["chart"]]
-        shown = [c["svg_path"] for c in charts if f"]({c['svg_path']})" in final and c["download_svg"] in final]
-        # 第二版：风险图随结果记录导出到会话工作区，报告里是 Markdown 图片（经 DSH 的 /api/file 显示、下载）
+        charts: list[str] = []
+        shown: list[str] = []
+        # 风险图随结果记录导出到会话工作区，报告里是 Markdown 图片（经 DSH 的 /api/file 显示、下载）
         v2 = [x["chart_markdown"] for t, r in wf if t == "run_fire_assessment" and (x := (r.get("result") or {}).get("explosion") or {}).get("chart_markdown")]
         charts += v2
         shown += [m for m in v2 if m in _norm_links(final)]
@@ -680,7 +619,7 @@ def grade(root: Session, checks: dict) -> dict:
         articles: set[str] = set()
         for s in sessions:
             for name, text in s.tool_results():
-                if (name.startswith(("mcp__kb__", "mcp__workflow__")) or name in V2_FLOW_TOOLS) and text.lstrip().startswith("{"):
+                if (name.startswith("mcp__kb__") or name in FLOW_TOOLS) and text.lstrip().startswith("{"):
                     articles.update(re.sub(r"\s+", "", a) for a in re.findall(r'"article":\s*"([^"]+)"', text))
         final = re.sub(r"\s+", "", root.final_turn_text())
         hit = sorted(a for a in articles if a in final)

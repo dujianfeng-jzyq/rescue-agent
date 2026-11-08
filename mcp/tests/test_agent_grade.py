@@ -166,8 +166,8 @@ def test_future_tool_use_is_not_citation(tree, report):
 
 
 def test_cited_server_not_called_fails(tree):
-    r = grade.grade(tree("依据：ventnet 通风网络分析"), ALL)
-    assert r["checks"]["cited_tools_called"]["detail"] == {"rescue-assessment:sub-1": ["ventnet"]}
+    r = grade.grade(tree("依据：mine_data 取数分析"), ALL)
+    assert r["checks"]["cited_tools_called"]["detail"] == {"rescue-assessment:sub-1": ["mine_data"]}
 
 
 def test_field_names_and_declared_skips_are_not_citations():
@@ -197,12 +197,12 @@ def test_preset_name_is_not_a_server_citation(tree):
 
 
 def test_server_declared_not_called_is_not_a_citation(tree):
-    r = grade.grade(tree("ventnet 未调用（等级未达橙色）"), ALL)
+    r = grade.grade(tree("mine_data 未调用（等级未达橙色）"), ALL)
     assert r["checks"]["cited_tools_called"]["ok"]
 
 
 def test_citation_backed_by_parent_call_passes(tree):
-    r = grade.grade(tree("依据：ventnet 通风网络分析", root_calls=[("c3", "mcp__ventnet__escape_route", {})]), ALL)
+    r = grade.grade(tree("依据：mine_data 取数分析", root_calls=[("c3", "mcp__mine_data__get_clock", {})]), ALL)
     assert r["checks"]["cited_tools_called"]["ok"]
 
 
@@ -212,21 +212,21 @@ def test_actions_call_fails_no_actions(tree):
 
 
 def test_stage_reported(tmp_path):
-    result = json.dumps({"level": "none", "stage_name": "缓慢氧化"}, ensure_ascii=False)
+    result = json.dumps({"result": {"warning": {"level": "none", "stage_name": "缓慢氧化"}}}, ensure_ascii=False)
     for final, ok in (("结论：自燃发展阶段为缓慢氧化", True), ("结论：未见异常", False)):
         base = tmp_path / str(ok)
-        events = [{"type": "turn/start"}, _user("请研判"), *_assistant("", [("c1", "mcp__fire_model__assess_warning_level", {})]), _result("c1", result), *_assistant(final), {"type": "turn/end"}]
+        events = [{"type": "turn/start"}, _user("请研判"), *_assistant("", [("c1", "run_fire_assessment", {})]), _result("c1", result), *_assistant(final), {"type": "turn/end"}]
         _write(base, ROOT_ID, events, "rescue-commander")
         assert grade.grade(grade.load_tree(ROOT_ID, base), {"stage_reported": True})["checks"]["stage_reported"]["ok"] is ok
 
 
 def test_effect_reported_and_tools_called(tmp_path):
-    result = json.dumps({"effect": "continuing", "effect_name": "需继续处置"}, ensure_ascii=False)
-    checks = {"tools_called": ["evaluate_effect", "gas_trend"], "effect_reported": True}
+    result = json.dumps({"result": {"overall_name": "需继续处置"}}, ensure_ascii=False)
+    checks = {"tools_called": ["review_effect", "draft_sealing_plan"], "effect_reported": True}
     events = [
         {"type": "turn/start"},
         _user("请评估处置效果"),
-        *_assistant("", [("c1", "mcp__fire_model__evaluate_effect", {"sensor_id": "BT-1201-G1"})]),
+        *_assistant("", [("c1", "review_effect", {"panel": "1201"})]),
         _result("c1", result),
         *_assistant("效果评估：需继续处置"),
         {"type": "turn/end"},
@@ -234,7 +234,7 @@ def test_effect_reported_and_tools_called(tmp_path):
     _write(tmp_path, ROOT_ID, events, "rescue-commander")
     r = grade.grade(grade.load_tree(ROOT_ID, tmp_path), checks)
     assert r["checks"]["effect_reported"]["ok"]
-    assert r["checks"]["tools_called"] == {"ok": False, "detail": ["gas_trend"]}
+    assert r["checks"]["tools_called"] == {"ok": False, "detail": ["draft_sealing_plan"]}
 
 
 def test_delegation_to_wrong_preset_fails(tree):
@@ -325,14 +325,14 @@ def test_rejection_reported_in_question(tmp_path):
     assert r["checks"]["rejection_reported"]["ok"], r["checks"]
 
 
-# ── workflow 工具（研判快照）──
+# ── 固定流程（研判记录）──
 
 REPORT = "【预警研判】1201 工作面 2026-11-04 15:00:00\n结论：预警等级 红色（危险）（计算结果）\n自燃发展阶段：加速氧化（计算结果）"
 
 
 def _wf_tree(tmp_path, final: str, action_args: dict | None = None):
     wf = {"snapshot_id": "SN-20261104T150000-abc123", "report_markdown": REPORT, "result": {"warning": {"stage_name": "加速氧化"}, "explosion": {"points": []}}}
-    calls = [("w1", "mcp__workflow__assess_panel", {"panel": "1201"})]
+    calls = [("w1", "run_fire_assessment", {"panel": "1201"})]
     events = [{"type": "turn/start"}, _user("请研判 1201 工作面"), *_assistant("", calls), _result("w1", json.dumps(wf, ensure_ascii=False))]
     if action_args is not None:
         events += [*_assistant("", [("a1", "mcp__actions__publish_warning", action_args)]), _result("a1", '{"status": "issued"}')]
@@ -382,32 +382,31 @@ def test_record_referenced(tmp_path, args, ok):
     assert r["checks"]["record_referenced"]["ok"] is ok
 
 
-def test_workflow_call_covers_internal_tools(tmp_path):
-    """调用了 assess_panel，分析里提到 gas_trend、ventnet 不算点名未调用。"""
-    r = grade.grade(_wf_tree(tmp_path, REPORT + "\n分析：趋势见 gas_trend，人员按 ventnet 估算。"), {"cited_tools_called": True})
+def test_flow_names_are_not_checked_as_citations(tmp_path):
+    """固定流程的名字不按点名未调用判定（结果是否被如实引用由 report_pasted 查）。"""
+    r = grade.grade(_wf_tree(tmp_path, REPORT + "\n分析：详见 run_fire_assessment 的结果。"), {"cited_tools_called": True})
     assert r["checks"]["cited_tools_called"]["ok"], r["checks"]
 
 
 @pytest.mark.parametrize(
     ("line", "ok"),
     [
-        ("若复评结论转为“恶化”，再按流程调用 `recommend_escalation` 判断是否升级。", True),  # 以后视情况调用
-        ("是否升级为应急响应，可调 recommend_escalation 取条文依据后再由总工程师决定。", True),
-        ("升级后委派起草方案，物资按需走 recommend_escalation → issue_dispatch_order。", True),
-        ("升级建议见 `recommend_escalation` 的结论：建议升级。", True),  # workflow 工具名不查（结果是否引用由 report_pasted 查）
+        ("若复评结论转为“恶化”，再按流程调用 `run_fire_assessment` 判断是否升级。", True),  # 以后视情况调用
+        ("是否升级为应急响应，可调 run_fire_assessment 取条文依据后再由总工程师决定。", True),
+        ("升级后委派起草方案，物资按需走 review_effect → issue_dispatch_order。", True),
+        ("升级建议见 `run_fire_assessment` 的结论：建议升级。", True),  # 固定流程名不查（结果是否引用由 report_pasted 查）
     ],
 )
 def test_conditional_future_call_is_not_a_citation(tmp_path, line, ok):
     tree = _wf_tree(tmp_path, REPORT + "\n- " + line)
-    tree.events.insert(0, {"type": "request/header", "data": {"header": {"tools": [{"name": "mcp__workflow__recommend_escalation", "description": ""}]}}})
     r = grade.grade(tree, {"cited_tools_called": True})
     assert r["checks"]["cited_tools_called"]["ok"] is ok, r["checks"]
 
 
 def test_uncalled_service_still_flagged(tmp_path):
-    """声称依据 ventnet 的计算却没调用（也没调用覆盖它的 workflow 工具），仍判点名未调用。"""
-    events = [{"type": "turn/start"}, _user("q"), {"type": "request/header", "data": {"header": {"tools": [{"name": "mcp__ventnet__threatened_personnel", "description": ""}]}}}]
-    events += [*_assistant("依据 ventnet 的计算，受威胁人员如下。"), {"type": "turn/end"}]
+    """声称依据 mine_data 的计算却没调用，仍判点名未调用。"""
+    events = [{"type": "turn/start"}, _user("q"), {"type": "request/header", "data": {"header": {"tools": [{"name": "mcp__mine_data__get_clock", "description": ""}]}}}]
+    events += [*_assistant("依据 mine_data 的计算，受威胁人员如下。"), {"type": "turn/end"}]
     _write(tmp_path, ROOT_ID, events, "rescue-commander")
     r = grade.grade(grade.load_tree(ROOT_ID, tmp_path), {"cited_tools_called": True})
     assert not r["checks"]["cited_tools_called"]["ok"]
@@ -456,7 +455,7 @@ def test_polling_while_child_runs_fails(tmp_path):
 
 def test_working_while_child_runs_is_not_polling(tmp_path):
     work = [
-        _assistant("", [("w1", "mcp__workflow__assess_panel", {})]),
+        _assistant("", [("w1", "run_fire_assessment", {})]),
         _assistant("", [("w2", "mcp__kb__get_article", {})]),
         _assistant("", [("w3", "delegate", {"agent_preset": "rescue-compliance"})]),
         _assistant("已委派 rescue-plan，等待结果"),  # 只写一句话结束本轮：没有工具调用，不算轮询
@@ -473,7 +472,7 @@ def test_reads_after_child_finished_are_not_polling(tmp_path):
         *[e for i in range(3) for e in _assistant("", [(f"r{i}", "mcp__mine_data__get_latest", {})])],
         # send_message 让子 Agent 继续工作：之后的读数又算等待期间
         *_assistant("", [("s1", "send_message", {"agent_id": CHILD, "message": "按审核意见修改"})]),
-        *_assistant("", [("p1", "mcp__workflow__get_monitor_events", {})]),
+        *_assistant("", [("p1", "mcp__mine_data__get_clock", {})]),
         {"type": "turn/end"},
     ]
     _write(tmp_path, ROOT_ID, events, "rescue-commander")
