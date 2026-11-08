@@ -1,3 +1,4 @@
+# 字体：DSH 的 Office 预览（LibreOffice WASM）没有可用字体就拒绝转换，网页端预览 .docx 报告会显示“Office previews are unavailable”。
 # 演示部署（docs/design-v2.md 7.2）：DSH 0.2.1-rc.4 + 本项目 bundle + 技能脚本的 Python 运行时。
 #   构建上下文是仓库根目录（docker/compose.yml）。沙箱在容器里用 Landlock（Docker 默认安全配置，验证清单 #21）。
 FROM node:22-bookworm-slim AS node
@@ -7,7 +8,7 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
-    && apt-get update && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl && rm -rf /var/lib/apt/lists/* \
+    && apt-get update && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl fonts-wqy-microhei fonts-dejavu-core && rm -rf /var/lib/apt/lists/* \
     && npm i -g @deepseek-ai/dsh@0.2.1-rc.4 && npm cache clean --force \
     && corepack enable pnpm
 # 技能脚本只能用 skills/requirements.txt 里的包；技能自检用 rescue_contract
