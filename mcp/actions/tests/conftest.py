@@ -22,6 +22,8 @@ from rescue_mine_data_sim.server import build_server as build_mine
 SKILLS = Path(__file__).resolve().parents[3] / "skills"
 COMPOSE = json.loads((SKILLS / "sealing-plan/tests/cases/compose/s4-escalation-60h-full.expected.json").read_text(encoding="utf-8"))
 REVIEW = json.loads((SKILLS / "plan-compliance/tests/cases/review/pass.expected.json").read_text(encoding="utf-8"))
+FF_COMPOSE = json.loads((SKILLS / "firefighting-plan/tests/cases/compose/s3-accelerating-39h-full.expected.json").read_text(encoding="utf-8"))
+FF_REVIEW = json.loads((SKILLS / "plan-compliance/tests/cases/review/firefighting-pass.expected.json").read_text(encoding="utf-8"))
 UNSEAL_READY = json.loads((SKILLS / "unsealing-plan/tests/cases/unsealing_plan/s5-336h-ready.expected.json").read_text(encoding="utf-8"))
 ORIGIN = Origin(channel="web", trigger="chat")
 
@@ -67,6 +69,17 @@ class World:
         return self.put("plan-compliance", "review", review, inputs={"plan": pid})
 
 
+    def firefighting_records(self, mutate=None) -> str:
+        """防灭火方案记录 + 合规审核记录（通过），返回审核记录编号；mutate 可改方案（两条记录里的方案保持一致）。"""
+        compose = json.loads(json.dumps(FF_COMPOSE))
+        review = json.loads(json.dumps(FF_REVIEW))
+        if mutate:
+            mutate(compose["result"]["plan"])
+        review["result"]["plan"] = compose["result"]["plan"]
+        pid = self.put("firefighting-plan", "compose", compose)
+        return self.put("plan-compliance", "review", review, inputs={"plan": pid})
+
+
 def make_world(tmp_path, scenario="s4-escalation", hours=60) -> World:
     holder = SimHolder(scenario, manual_clock=True)
     holder.engine.clock.advance(hours)
@@ -81,6 +94,14 @@ def world(tmp_path) -> World:
     assert COMPOSE["result"]["as_of"] == "2026-11-04T20:00:00"  # 样例的矿井时间：s4-escalation 第 60 小时
     w = make_world(tmp_path)
     assert w.holder.engine.now().isoformat() == COMPOSE["result"]["as_of"]
+    return w
+
+
+@pytest.fixture
+def world_s3(tmp_path) -> World:
+    """s3 加速氧化第 39 小时（橙色，防灭火方案样例的时刻）。"""
+    w = make_world(tmp_path, "s3-accelerating", 39)
+    assert w.holder.engine.now().isoformat() == FF_COMPOSE["result"]["as_of"]
     return w
 
 

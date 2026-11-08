@@ -2,7 +2,7 @@
 
 边界约定：
 - rescue-mine（矿井接口）只执行、不判断；红线、记录核对、批准、台账都在这一侧。换矿不用重审。
-- 对外动作工具（publish_warning、escalate_emergency、notify_evacuation、issue_dispatch_order、issue_sealing_plan、approve_unsealing）都是 C 级动作
+- 对外动作工具（publish_warning、escalate_emergency、notify_evacuation、issue_dispatch_order、issue_sealing_plan、issue_firefighting_plan、approve_unsealing）都是 C 级动作
   （rescue_contract.action_policy）：先预检，再人工确认，本服务在执行前强制校验，通过后才调用 rescue-mine 的
   send_notice / dispatch_order / submit_treatment（写入令牌只有本服务持有）。
 - 只读和计算类工具分布在其他服务；方案自查用本服务的只读工具 precheck_plan，台账查询用 query_last_issued（A 级，不弹确认）。
@@ -336,6 +336,12 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
         return await issue_plan_record("issue_sealing_plan", record_id)
 
     @server.tool()
+    async def issue_firefighting_plan(record_id: str) -> ActionReceipt:
+        """下发防灭火处置方案（确认人：总工程师；不封闭火区、不安排人员进入灾区）。只给 record_id，照抄 draft_firefighting_plan
+        返回的 record_ids.review（合规审核通过的记录），不要提交方案内容——方案由本服务从记录里取，核对后执行强制红线校验，再按步骤交给矿井。"""
+        return await issue_plan_record("issue_firefighting_plan", record_id)
+
+    @server.tool()
     async def approve_unsealing(record_id: str) -> ActionReceipt:
         """批准启封（确认人：总指挥）。只给 record_id，照抄 assess_unsealing 返回的 record_ids.unseal（启封评估记录，结论必须是
         “具备启封条件”）；不要提交方案内容——方案由本服务从记录里取，核对启封条件、时效和红线（第164条：先检查、断电、撤人）后，
@@ -346,7 +352,7 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
 
     @server.tool()
     def precheck_plan(tool: str, plan: Plan) -> dict[str, Any]:
-        """方案红线自查（只读，不发布、不弹确认）。tool 取 issue_sealing_plan 或 approve_unsealing。只查方案类型和红线，不检查数据时效，
+        """方案红线自查（只读，不发布、不弹确认）。tool 取 issue_sealing_plan、issue_firefighting_plan 或 approve_unsealing。只查方案类型和红线，不检查数据时效，
         也不核对记录（发布时按审核记录核对，并强制再校验一次）。
         返回 ok 和问题清单（含条号）、检查了哪些规则（rules_checked_count 照抄，不要自己数）。
         规则所依据的条文原文用 kb_get_articles（document="矿山救援规程"，articles 取 rule_articles）获取。"""
@@ -364,12 +370,12 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
 
     @server.tool()
     def query_last_issued(panel: str = "1201") -> dict[str, Any]:
-        """本工作面最近一次已下发（status=issued）的封闭方案（只读）。固定流程 review_effect 缺处置开始时间时用它，
+        """本工作面最近一次已下发（status=issued）的封闭方案或防灭火方案（只读）。固定流程 review_effect 缺处置开始时间时用它，
         found 为 false 时没有可用的下发记录。返回 tool、action_id、issued_at（矿井时间）、plan_id、title。"""
         hits = [
             r
             for r in ledger_records(ledger.path)
-            if r.get("tool") == "issue_sealing_plan" and r.get("status") == "issued" and for_panel(r.get("payload") or {}, panel)
+            if r.get("tool") in ("issue_sealing_plan", "issue_firefighting_plan") and r.get("status") == "issued" and for_panel(r.get("payload") or {}, panel)
         ]
         if not hits:
             return {"found": False, "panel": panel}

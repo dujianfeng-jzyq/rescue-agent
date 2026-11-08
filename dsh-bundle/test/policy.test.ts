@@ -48,7 +48,7 @@ describe('classify（动作分级：C 级弹确认，A、B 级不弹，未登记
   })
   it('六个对外动作都是 C 级，每个都有确认人和批准超时', () => {
     const c = policies.filter((p) => p.level === 'C')
-    assert.deepEqual(c.map((p) => p.tool).sort(), ['approve_unsealing', 'escalate_emergency', 'issue_dispatch_order', 'issue_sealing_plan', 'notify_evacuation', 'publish_warning'])
+    assert.deepEqual(c.map((p) => p.tool).sort(), ['approve_unsealing', 'escalate_emergency', 'issue_dispatch_order', 'issue_firefighting_plan', 'issue_sealing_plan', 'notify_evacuation', 'publish_warning'])
     for (const p of c) {
       assert.ok(p.confirmer, `${p.tool} 缺确认人`)
       assert.ok((p.approval_timeout_min ?? 0) > 0, `${p.tool} 缺批准超时`)

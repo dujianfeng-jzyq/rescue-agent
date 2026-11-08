@@ -16,6 +16,7 @@ EXPECTED_TOOLS = {
     "notify_evacuation",
     "issue_dispatch_order",
     "issue_sealing_plan",
+    "issue_firefighting_plan",
     "approve_unsealing",
     "precheck_plan",
     "query_last_issued",
@@ -34,7 +35,7 @@ def test_tool_set(world):
         async with Client(world.server) as c:
             return {t.name for t in (await c.list_tools()).tools}
 
-    assert asyncio.run(go()) == EXPECTED_TOOLS  # 防灭火方案没有第二版流程，已删除；启封审批按记录重做（approve_unsealing）
+    assert asyncio.run(go()) == EXPECTED_TOOLS  # 防灭火方案、启封审批都按记录重做（issue_firefighting_plan、approve_unsealing）
 
 
 # ── 封闭方案：第二道、第三道防线 ──
@@ -87,6 +88,54 @@ def test_issue_sealing_plan_requires_a_record_id(world):
     assert r.is_error  # 参数缺失：不再接受直接提交的方案
     r = world.call("issue_sealing_plan", {"plan": {}})
     assert r.is_error
+
+
+# ── 防灭火方案（不封闭火区）──
+
+
+def test_firefighting_plan_is_issued_and_executed_by_the_mine(world_s3):
+    rid = world_s3.firefighting_records()
+    r = world_s3.call("issue_firefighting_plan", {"record_id": rid})
+    assert not r.is_error, r.content[0].text
+    out = r.structured_content
+    assert out["status"] == "issued" and out["mine_not_executed"] == []
+    assert [m["status"] for m in out["mine_receipts"]] == ["completed"] * 5
+    assert [iv.type for iv in world_s3.holder.engine.action_log if iv.type != "monitor"] == ["leak_sealing", "inert_injection", "grouting"]
+    row = world_s3.rows()[-1]
+    assert row["tool"] == "issue_firefighting_plan" and row["status"] == "issued" and row["record_ids"] == [rid]
+
+
+def test_firefighting_plan_cannot_be_issued_as_a_sealing_plan_and_vice_versa(world_s3, world):
+    """方案类型和出处按工具核对：防灭火方案记录不能走封闭方案的工具，封闭方案记录也不能走防灭火方案的工具。"""
+    r = world_s3.call("issue_sealing_plan", {"record_id": world_s3.firefighting_records()})
+    assert r.is_error and "sealing" in r.content[0].text and world_s3.holder.engine.action_log == []
+    r = world.call("issue_firefighting_plan", {"record_id": world.plan_records()})
+    assert r.is_error and "firefighting" in r.content[0].text and world.holder.engine.action_log == []
+
+
+def test_redline_violating_firefighting_plan_is_stopped_even_if_review_says_pass(world_s3):
+    """审核记录写“通过”，但方案含用水灭火而条件未确认（第79条）：guard 执行前再校验一次，矿井什么都没收到。"""
+    def add_water(plan):
+        n = len(plan["steps"])
+        plan["steps"].append({"order": n + 1, "type": "water_firefighting", "description": "用水灭火", "roadways": [], "team_size": 6, "standby_team": True, "params": {}})
+
+    r = world_s3.call("issue_firefighting_plan", {"record_id": world_s3.firefighting_records(add_water)})
+    assert r.is_error and "第79条" in r.content[0].text
+    assert world_s3.rows()[-1]["status"] == "rejected" and world_s3.holder.engine.action_log == []
+
+
+def test_stale_firefighting_record_is_rejected(world_s3):
+    rid = world_s3.firefighting_records()
+    world_s3.holder.engine.clock.advance(3)
+    r = world_s3.call("issue_firefighting_plan", {"record_id": rid})
+    assert r.is_error and "已过时" in r.content[0].text and world_s3.holder.engine.action_log == []
+
+
+def test_firefighting_issue_counts_as_the_last_treatment(world_s3):
+    """效果复评缺处置开始时间时查最近一次下发：防灭火方案也算。"""
+    world_s3.call("issue_firefighting_plan", {"record_id": world_s3.firefighting_records()})
+    found = world_s3.call("query_last_issued", {"panel": "1201"}).structured_content
+    assert found["found"] is True and found["tool"] == "issue_firefighting_plan"
 
 
 # ── 预警、升级 ──

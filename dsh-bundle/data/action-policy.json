@@ -47,6 +47,14 @@
       "escalate_to": "总指挥"
     },
     {
+      "tool": "issue_firefighting_plan",
+      "level": "C",
+      "name": "下发防灭火方案",
+      "confirmer": "总工程师",
+      "approval_timeout_min": 30,
+      "escalate_to": "总指挥"
+    },
+    {
       "tool": "approve_unsealing",
       "level": "C",
       "name": "批准启封",

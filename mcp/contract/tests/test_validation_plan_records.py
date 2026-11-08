@@ -120,12 +120,15 @@ def test_plan_tools_need_a_record_id(records):
 
 
 def test_tools_without_a_record_flow_are_not_plan_tools(records):
-    """防灭火方案没有第二版流程，已从 guard 删除：按记录下发只认 issue_sealing_plan、approve_unsealing。
-    启封审批认启封评估记录（unsealing-plan/unsealing_plan），封闭方案的审核记录不能拿来启封。"""
+    """按记录下发只认 issue_sealing_plan、issue_firefighting_plan、approve_unsealing，其余工具不支持。
+    启封审批认启封评估记录（unsealing-plan/unsealing_plan），封闭方案的审核记录不能拿来启封，
+    也不能拿来下发防灭火方案（方案记录出自 sealing-plan 而不是 firefighting-plan）。"""
     rid = reviewed(records)
     plan, problems, _, _ = plan_from_record("approve_unsealing", rid, records, NOW)
     assert plan is None and "unsealing-plan/unsealing_plan" in problems[0]
     plan, problems, _, _ = plan_from_record("issue_firefighting_plan", rid, records, NOW)
+    assert plan is None and "firefighting-plan/compose" in problems[0]
+    plan, problems, _, _ = plan_from_record("publish_warning", rid, records, NOW)
     assert plan is None and "不支持按记录下发" in problems[0]
 
 

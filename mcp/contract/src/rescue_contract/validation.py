@@ -37,6 +37,7 @@ CONTEXT_MAX_AGE = timedelta(hours=2)  # 方案依据的现场条件不得早于 
 
 PLAN_TOOLS: dict[str, PlanKind] = {
     "issue_sealing_plan": PlanKind.SEALING,
+    "issue_firefighting_plan": PlanKind.FIREFIGHTING,
     "approve_unsealing": PlanKind.UNSEALING,
 }
 NAMES = {"none": "无", "blue": "蓝色", "yellow": "黄色", "orange": "橙色", "red": "红色"}
@@ -72,11 +73,15 @@ RECORD_SOURCES: dict[str, tuple[str, str]] = {
     "publish_warning": ("fire-assessment", "warning"),
     "escalate_emergency": ("emergency-escalation", "escalation"),
     "issue_sealing_plan": ("plan-compliance", "review"),
+    "issue_firefighting_plan": ("plan-compliance", "review"),
     # 启封评估的结果记录本身就是方案记录（没有模型编写和审核阶段：方案由代码按固定步骤生成，红线在这里和 guard 强制校验）
     "approve_unsealing": ("unsealing-plan", "unsealing_plan"),
 }
-# 审核记录的输入里，方案记录必须是这个技能、这个脚本的结果
-PLAN_RECORD_SOURCE = ("sealing-plan", "compose")
+# 审核记录的输入里，方案记录必须是这个技能、这个脚本的结果（按工具区分：封闭方案、防灭火方案各出自自己的技能）
+PLAN_RECORD_SOURCES: dict[str, tuple[str, str]] = {
+    "issue_sealing_plan": ("sealing-plan", "compose"),
+    "issue_firefighting_plan": ("firefighting-plan", "compose"),
+}
 
 
 def _record(records: RecordStore | None, record_id: str, tool: str, what: str, now: datetime | None) -> tuple[Record | None, list[ApprovalCheck]]:
@@ -191,7 +196,7 @@ def plan_from_record(
     if tool == "approve_unsealing":
         return unseal_from_record(tool, record_id, records, now)
     if tool not in PLAN_TOOLS:
-        msg = f"{tool} 不支持按记录下发（目前只有 issue_sealing_plan）"
+        msg = f"{tool} 不支持按记录下发（目前有 issue_sealing_plan、issue_firefighting_plan、approve_unsealing）"
         return None, [msg], [], [ApprovalCheck(name="引用记录", ok=False, detail=msg)]
     rec, checks = _record(records, record_id, tool, "方案", now)
 
@@ -210,11 +215,12 @@ def plan_from_record(
         prec = records.get(str(parent))
     except (RecordNotFound, RecordTampered, ValueError) as exc:
         return fail("方案记录", f"审核记录 {rec.record_id} 引用的方案记录 {parent} 读不出来：{exc}")
-    if (prec.source.get("skill"), prec.source.get("script")) != PLAN_RECORD_SOURCE or prec.kind != RecordKind.RESULT:
-        return fail("方案记录", f"审核记录 {rec.record_id} 引用的 {parent} 不是 {'/'.join(PLAN_RECORD_SOURCE)} 的结果记录")
+    source = PLAN_RECORD_SOURCES[tool]
+    if (prec.source.get("skill"), prec.source.get("script")) != source or prec.kind != RecordKind.RESULT:
+        return fail("方案记录", f"审核记录 {rec.record_id} 引用的 {parent} 不是 {'/'.join(source)} 的结果记录")
     if _result(prec).get("plan") != r.get("plan"):
         return fail("方案记录", f"审核记录 {rec.record_id} 里的方案与方案记录 {parent} 不一致")
-    checks.append(ApprovalCheck(name="方案记录", ok=True, detail=f"{parent}（{'/'.join(PLAN_RECORD_SOURCE)}）与审核记录一致"))
+    checks.append(ApprovalCheck(name="方案记录", ok=True, detail=f"{parent}（{'/'.join(source)}）与审核记录一致"))
     try:
         plan = Plan.model_validate({**(r.get("plan") or {}), "record_id": rec.record_id})
     except ValueError as exc:
@@ -261,7 +267,7 @@ def precheck(tool: str, arguments: dict[str, Any], now: datetime | None, records
         elif tool in PLAN_TOOLS:
             record_id = arguments.get("record_id")
             if not isinstance(record_id, str) or not record_id:
-                problems = ["缺少 record_id：封闭方案只提交审核记录编号（draft_sealing_plan 返回的 record_ids.review），启封只提交启封评估记录编号（assess_unsealing 返回的 record_ids.unseal），方案由 guard 从记录取"]
+                problems = ["缺少 record_id：封闭方案、防灭火方案只提交审核记录编号（draft_sealing_plan、draft_firefighting_plan 返回的 record_ids.review），启封只提交启封评估记录编号（assess_unsealing 返回的 record_ids.unseal），方案由 guard 从记录取"]
             else:
                 plan, problems, notes, checks = plan_from_record(tool, record_id, records, now)
                 if plan is not None:

@@ -36,7 +36,7 @@ export interface EffectOptions {
 /** 调用方能处理的错误（缺处置开始时间等），工具把它作为说明返回 */
 export class EffectInputError extends Error {}
 
-const NAMES: Record<string, string> = { issue_sealing_plan: '封闭方案' }
+const NAMES: Record<string, string> = { issue_sealing_plan: '封闭方案', issue_firefighting_plan: '防灭火方案' }
 
 export async function reviewEffect(ev: Evidence, opts: EffectOptions) {
   const runId = `ER-${Date.now().toString(36)}-${randomInt(36 ** 4).toString(36).padStart(4, '0')}`

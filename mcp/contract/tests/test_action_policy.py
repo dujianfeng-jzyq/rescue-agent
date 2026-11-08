@@ -15,7 +15,7 @@ def test_unregistered_tools_are_level_c():
 
 def test_every_c_level_action_has_confirmer_timeout_and_escalation():
     c = [p for p in POLICIES if p.level == ActionLevel.C]
-    assert {p.tool for p in c} == {"publish_warning", "escalate_emergency", "notify_evacuation", "issue_dispatch_order", "issue_sealing_plan", "approve_unsealing"}
+    assert {p.tool for p in c} == {"publish_warning", "escalate_emergency", "notify_evacuation", "issue_dispatch_order", "issue_sealing_plan", "issue_firefighting_plan", "approve_unsealing"}
     for p in c:
         assert p.confirmer and p.approval_timeout_min and p.approval_timeout_min > 0 and p.escalate_to, p.tool
     assert all(p.confirmer is None for p in POLICIES if p.level != ActionLevel.C)
