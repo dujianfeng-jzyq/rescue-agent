@@ -58,7 +58,7 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 
 1. **数值只来自代码计算**。“代码”指 MCP 服务和技能脚本（第二版起以技能脚本为准）。Agent 提示词和 SKILL.md 的正文里不写阈值、不让模型估算；新的判断逻辑写进技能脚本（或迁移完成前的 MCP 服务）并加自检样例或测试。计数、合计、差值、汇总结论也算：评测发现 Agent 会自己数人数、相减算升温、汇总多个测点的结论，这些都要由工具给出（如 `threatened_personnel` 的 count、`gas_trend` 的 change、`evaluate_effect_panel` 的 counts/overall）。智能体在沙箱里自己运行脚本的结果只作参考，不能被指令引用。
 2. **只有 `rescue-commander` 挂载 actions（guard）**；其他预设只读（第二版只有这一个预设，固定流程的阶段子 Agent 用 `tools.guard` 限制为只能提交结果）。`scripts/check_patches.py` 会检查。指令必须引用记录（`record_id`；第一版的 `snapshot_id` 已在第三版 P2 删除），预警等级、升级结论、封闭方案按记录核对（`rescue_contract/validation.py`），不能由模型填写。**哪些指令要弹人工确认由动作分级表决定**（`rescue_contract/action_policy.py`，导出为 `dsh-bundle/data/action-policy.json`；改表后 `make schema`）：C 级（对外动作）弹确认，A、B 级不弹，**没有登记的工具按 C 级**。guard 之外没有任何途径写矿井：写入类工具要写入令牌，只有 guard 持有。
-3. **红线规则只在 `rescue_contract/redlines.py` 实现一次**（第二版不迁入技能）。新增规则：改规则表 + `contract/tests/test_redlines.py` + `skills/compliance/red-line-rules/SKILL.md`（有同步测试；第二版是 `plan-compliance` 技能）。知识库插件需要的条号由规则表导出，不在 TS 里再写一遍。未知值按不通过处理（fail closed）。
+3. **红线规则只在 `rescue_contract/redlines.py` 实现一次**（第二版不迁入技能）。新增规则：改规则表 + `contract/tests/test_redlines.py` + `skills/plan-compliance/SKILL.md`（有同步测试）。知识库插件需要的条号由规则表导出，不在 TS 里再写一遍。未知值按不通过处理（fail closed）。
 4. **智能体看不到模拟器真值**。`/sim/state` 的 truth、读数设置、倍速只给控制台和评测；不要通过 MCP 工具或证据插件暴露。DSH 不持有 `/sim` 控制令牌。
 5. **mine-data 的工具集合就是真实矿井适配器要实现的接口（rescue-mine，第三版）**。接口表在 `rescue_contract/interface.py`（工具、分组、读写、可选功能），增删工具要改它、同步 `rescue_contract/conformance.py`，并 `make interface-doc`；采集清单（技能的 `references/collect.yaml`）只能用这些工具，且按角色取数（`select: {role, source, panel}`），不写测点编号。写入类工具另认写入令牌（`RESCUE_MCP_MINE_ACT_TOKEN`）。
 6. 阈值（`fire-model/.../thresholds.yaml`）、场景参数、评测期望都是**开发占位值**。可以为了测试调整，但要在提交说明里写明，并且不要声称它们“正确”。
