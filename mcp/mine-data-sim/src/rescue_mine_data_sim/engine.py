@@ -29,7 +29,7 @@ from rescue_contract.models import (
     SensorSource,
 )
 
-from .mine import SENSOR_BY_ID, SENSORS
+from .mine import PANEL, SENSOR_BY_ID, SENSORS
 
 STEP_H = 0.25  # 积分步长 15 分钟
 SAMPLE_INTERVAL_H = {
@@ -41,10 +41,10 @@ MAX_POINTS = 5000
 
 # 报警阈值（演示用）。TODO(专家): 按《煤矿安全规程》和本矿安全监控设置核对。
 ALARM_THRESHOLDS = {
-    ("SM-1201-UC", Measurand.CO): 24.0,  # ppm
-    ("SM-1201-UC", Measurand.CH4): 1.0,  # %
-    ("SM-1201-RET", Measurand.CO): 24.0,
-    ("SM-1201-RET", Measurand.CH4): 1.0,
+    (f"SM-{PANEL}-UC", Measurand.CO): 24.0,  # ppm
+    (f"SM-{PANEL}-UC", Measurand.CH4): 1.0,  # %
+    (f"SM-{PANEL}-RET", Measurand.CO): 24.0,
+    (f"SM-{PANEL}-RET", Measurand.CH4): 1.0,
 }
 
 
@@ -371,9 +371,9 @@ class SimEngine:
             return []
         return [
             FireArea(
-                area_id="FA-1201-GOAF",
-                panel="1201",
-                name="1201 工作面采空区火区",
+                area_id=f"FA-{PANEL}-GOAF",
+                panel=f"{PANEL}",
+                name=f"{PANEL} 工作面采空区火区",
                 status=FireAreaStatus.SEALED if s.sealed else FireAreaStatus.UNSEALED,
                 sealed_at=self.at(s.sealed_at_h),
                 unsealed_at=None if s.unsealed_at_h is None else self.at(s.unsealed_at_h),
@@ -421,7 +421,7 @@ class SimEngine:
                 return max(0.0, 100 - o2 - co2 - ch4 - 0.93)
             return bg[m] + near * (hot[m] - bg[m])
         # 安全监控测点：封闭后断电，读不到数
-        if s.sealed and sensor_id in ("SM-1201-UC", "SM-1201-RET", "SM-1201-IN"):
+        if s.sealed and sensor_id in (f"SM-{PANEL}-UC", f"SM-{PANEL}-RET", f"SM-{PANEL}-IN"):
             return None
         leak_share = min(1.0, s.leak_mult)
         uc = {
@@ -431,9 +431,9 @@ class SimEngine:
             Measurand.TEMPERATURE: 24 + 0.02 * (s.temp_c - 30),
             Measurand.WIND_SPEED: 2.1,
         }
-        if sensor_id == "SM-1201-UC":
+        if sensor_id == f"SM-{PANEL}-UC":
             return uc.get(m)
-        if sensor_id == "SM-1201-RET":
+        if sensor_id == f"SM-{PANEL}-RET":
             return {
                 Measurand.CO: uc[Measurand.CO] * 0.85,
                 Measurand.CH4: uc[Measurand.CH4] * 0.9,
@@ -446,7 +446,7 @@ class SimEngine:
                 Measurand.CH4: 0.2 + uc[Measurand.CH4] * 0.25,
                 Measurand.WIND_SPEED: 3.5,
             }.get(m)
-        if sensor_id == "SM-1201-IN":
+        if sensor_id == f"SM-{PANEL}-IN":
             return {Measurand.CO: 0.5, Measurand.CH4: 0.05, Measurand.WIND_SPEED: 2.3}.get(m)
         return None
 
@@ -597,10 +597,10 @@ class SimEngine:
         now = self.now()
         shift = "ABC"[now.hour // 8]
         layout = [
-            ("R-1201-FACE", "采煤工", 9),
-            ("R-1201-IN", "运输工", 3),
-            ("R-1201-RET", "瓦斯检查员", 1),
-            ("R-1201-RET", "通风工", 1),
+            (f"R-{PANEL}-FACE", "采煤工", 9),
+            (f"R-{PANEL}-IN", "运输工", 3),
+            (f"R-{PANEL}-RET", "瓦斯检查员", 1),
+            (f"R-{PANEL}-RET", "通风工", 1),
             ("R-1202-IN", "掘进工", 6),
             ("R-MAIN-IN", "电钳工", 2),
         ]

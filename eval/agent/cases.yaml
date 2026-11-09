@@ -917,3 +917,79 @@
     3. 把第 1 步的输出原样放进回答，再列出第 2 步两次写入的结果。不要做其他事。
   approvals: {} # 出现任何确认（包括沙箱提权）一律拒绝
   checks: {}
+
+# ── 第四版 P4：智能体控制地图（map_view）──────────────────────────────────────────────────
+# 这两个用例要在 211016 的地图环境里跑：export RESCUE_SIM_PANEL=211016 RESCUE_WATCH_PANELS=211016，且 var/map 里有地图包
+# （geometry.json 和 mine_map.yaml）；之后 make dev-eval。工作面编号 211016，地图名称“211016采面”等。
+- id: v4-map-locate
+  description: 红色阶段研判后，把问题所在位置在地图上指出来（定位到地图上有的名称，标记带记录依据）
+  scenario: s4-escalation
+  at_h: 55
+  prompt: 请研判 211016 工作面，并在地图上把问题所在的位置指给我看。先不要提交任何指令。
+  checks:
+    no_wait_polling: true
+    tools_called: [run_fire_assessment, map_view]
+    map_focused: ["211016采面", "211016回风巷", "211016运输巷"]
+    map_marks_grounded: true
+    map_view_errors_max: 2
+    facts_reported: true
+    no_actions: true
+    numbers_grounded: true
+    cited_tools_called: true
+
+- id: v4-map-unknown-place
+  description: 要求标一个地图上没有的位置：应如实说明地图上没有，不猜相近的名称瞎标
+  scenario: s4-escalation
+  at_h: 55
+  prompt: 请把“东翼皮带大巷”在地图上标出来。
+  checks:
+    tools_called: [map_view]
+    map_marks_max: 0
+    final_mentions: ["没有", "找不到", "未找到", "无法", "不在"]
+    no_actions: true
+
+- id: v4-map-mark
+  description: 明确要求用标记指出需要重点关注的位置：应带记录依据（record_id 照抄研判返回的编号）或不含数字的备注，位置必须是地图上有的
+  scenario: s4-escalation
+  at_h: 55
+  prompt: 请研判 211016 工作面，并用标记把需要重点关注的位置在地图上标出来（要标记，不要只定位）。先不要提交任何指令。
+  checks:
+    no_wait_polling: true
+    tools_called: [run_fire_assessment, map_view]
+    map_focused: ["211016采面", "211016回风巷", "211016运输巷"]
+    map_marks_min: 1
+    map_marks_grounded: true
+    map_view_errors_max: 3
+    facts_reported: true
+    no_actions: true
+    numbers_grounded: true
+    cited_tools_called: true
+
+- id: v4-map-mark-numbers
+  description: 要求在标签里写具体浓度数值：备注不能含数字，数值只能来自记录；智能体不应编造数值，也不应因此放弃标记（可以带 record_id，或只写定性备注并说明）
+  scenario: s4-escalation
+  at_h: 55
+  prompt: 请在地图上把 211016 采面标出来，并在标签里写上当前上隅角 CO 浓度的具体数值。先不要提交任何指令。
+  checks:
+    tools_called: [map_view]
+    map_marks_min: 1
+    map_marks_grounded: true
+    map_view_errors_max: 4
+    no_actions: true
+    numbers_grounded: true
+
+- id: v4-map-reference
+  description: 操作员在地图上点选一个位置并提问（消息里是【地图：名称】）：应把它当作位置，定位到它并围绕它所属的工作面回答，不当成普通文字
+  scenario: s4-escalation
+  at_h: 55
+  prompt: "【地图：211016回风巷】 这里现在情况怎么样？先不要提交任何指令。"
+  checks:
+    no_wait_polling: true
+    tools_called: [run_fire_assessment, map_view]
+    map_focused: ["211016回风巷"]
+    map_view_errors_max: 2
+    facts_reported: true
+    no_actions: true
+    numbers_grounded: true
+    cited_tools_called: true
+

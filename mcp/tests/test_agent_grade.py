@@ -523,3 +523,65 @@ def test_decision_checks_fail(tmp_path):
 def test_zero_count_passes_only_for_empty_list(tree, report, result, grounded):
     r = grade.grade(tree(report, sub_result=result), ALL)
     assert r["checks"]["numbers_grounded"]["ok"] is grounded, r["checks"]
+
+
+# ── 第四版 P4：map_view 的判定 ─────────────────────────────────────────────────────────────
+
+def _map_session(steps: list[tuple[dict, str]], others: list[tuple[str, str]] = ()) -> "grade.Session":
+    """steps：(map_view 的参数, 结果文本)；others：(别的工具名, 结果文本)，先于 map_view 出现。"""
+    events: list[dict] = [_user("q")]
+    n = 0
+    for name, text in others:
+        n += 1
+        events += _assistant("", [(f"o{n}", name, {})]) + [_result(f"o{n}", text)]
+    for args, text in steps:
+        n += 1
+        events += _assistant("", [(f"m{n}", "map_view", args)]) + [_result(f"m{n}", text)]
+    return grade.Session("s", "rescue-commander", None, 0, events)
+
+
+OK = '{"ok": true}'
+ERR = "地图上没有叫“x”的位置"
+RS = "RS-20261102T143541-abcdef"
+
+
+def test_map_focused_needs_a_successful_call_on_a_wanted_name():
+    s = _map_session([({"action": "focus", "name": "211016采面"}, OK), ({"action": "focus", "name": "乱写"}, ERR)])
+    assert grade.grade(s, {"map_focused": ["211016采面"]})["checks"]["map_focused"]["ok"]
+    assert not grade.grade(s, {"map_focused": ["211016回风巷"]})["checks"]["map_focused"]["ok"]
+    failed_only = _map_session([({"action": "focus", "name": "211016采面"}, ERR)])
+    assert not grade.grade(failed_only, {"map_focused": ["211016采面"]})["checks"]["map_focused"]["ok"], "失败的调用不算"
+
+
+def test_map_marks_grounded_record_must_have_been_given_by_another_tool():
+    good = _map_session([({"action": "mark", "name": "a", "record_id": RS}, OK)], others=[("run_fire_assessment", f'{{"record_ids": {{"warning": "{RS}"}}}}')])
+    assert grade.grade(good, {"map_marks_grounded": True})["checks"]["map_marks_grounded"]["ok"]
+    invented = _map_session([({"action": "mark", "name": "a", "record_id": RS}, OK)])
+    r = grade.grade(invented, {"map_marks_grounded": True})["checks"]["map_marks_grounded"]
+    assert not r["ok"] and "没在任何工具结果里出现过" in r["detail"][0]
+    note_only = _map_session([({"action": "mark", "name": "a", "note": "建议撤人"}, OK)])
+    assert grade.grade(note_only, {"map_marks_grounded": True})["checks"]["map_marks_grounded"]["ok"]
+    empty = _map_session([({"action": "mark", "name": "a"}, OK)])
+    assert not grade.grade(empty, {"map_marks_grounded": True})["checks"]["map_marks_grounded"]["ok"]
+
+
+def test_map_marks_max_and_errors_max():
+    s = _map_session([({"action": "mark", "name": "a", "note": "x"}, OK), ({"action": "mark", "name": "b", "note": "x"}, ERR), ({"action": "focus", "name": "c"}, ERR)])
+    r = grade.grade(s, {"map_marks_max": 0, "map_view_errors_max": 1})["checks"]
+    assert not r["map_marks_max"]["ok"]  # 成功的标记有 1 次
+    assert not r["map_view_errors_max"]["ok"]  # 失败 2 次
+    assert grade.grade(s, {"map_marks_max": 1, "map_view_errors_max": 2})["checks"]["map_marks_max"]["ok"]
+
+
+def test_list_result_counts_as_success():
+    s = _map_session([({"action": "list", "query": "回风"}, '{"count": 5, "names": ["211016回风巷"]}')])
+    assert grade.grade(s, {"map_view_errors_max": 0})["checks"]["map_view_errors_max"]["ok"]
+
+
+def test_map_marks_min_counts_only_successful_marks():
+    s = _map_session([({"action": "mark", "name": "a", "note": "x"}, OK), ({"action": "mark", "name": "b", "note": "y"}, ERR), ({"action": "focus", "name": "c"}, OK)])
+    assert grade.grade(s, {"map_marks_min": 1})["checks"]["map_marks_min"]["ok"]
+    assert not grade.grade(s, {"map_marks_min": 2})["checks"]["map_marks_min"]["ok"]
+    only_focus = _map_session([({"action": "focus", "name": "c"}, OK)])
+    assert not grade.grade(only_focus, {"map_marks_min": 1})["checks"]["map_marks_min"]["ok"], "只定位不算标记"
+

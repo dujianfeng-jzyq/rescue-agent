@@ -57,7 +57,9 @@ class Sentinel:
         self.skill = load_skill(root / "fire-assessment")
         self.spec = parse_collect_spec((self.skill.dir / "references" / "collect.yaml").read_text(encoding="utf-8"))
         watch = yaml.safe_load((self.skill.dir / "references" / "watch.yaml").read_text(encoding="utf-8"))
-        self.panels: list[str] = list(watch["panels"])
+        # 监视哪些工作面：缺省取技能参数（watch.yaml 的 panels）；RESCUE_WATCH_PANELS=211016,1202 覆盖（接入别的矿井或换了演示矿井名称时用）
+        env_panels = [p.strip() for p in os.environ.get("RESCUE_WATCH_PANELS", "").split(",") if p.strip()]
+        self.panels: list[str] = env_panels or list(watch["panels"])
         self.cfg: dict[str, Any] = watch["sentinel"]
         self.state_dir = state_dir or store.dir / "sentinel"
         self.state_path = self.state_dir / "state.json"

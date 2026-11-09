@@ -4,10 +4,17 @@
 set -eu
 PORT="${DSH_PORT:-3080}"
 PUBLIC_PORT="${DSH_PUBLIC_PORT:-13080}"
-if [ ! -d "$DSH_HOME/profiles/rescue" ]; then
+PROFILE="$DSH_HOME/profiles/rescue"
+# 配置档要“装好了 bundle”才算有：只看目录存在会把中途失败的半成品当成好的，之后永远是 DSH 默认界面（没有任何本项目的插件）
+if [ -d "$PROFILE" ] && ! grep -q '@rescue/dsh-bundle' "$PROFILE/package.json" 2>/dev/null; then
+  echo "dsh-entrypoint: 配置档里没有 bundle（上一次安装失败），重建" >&2
+  rm -rf "$PROFILE"
+fi
+if [ ! -d "$PROFILE" ]; then
   mkdir -p "$DSH_HOME"
   dsh rescue --from-default-profile web --dump-config >/dev/null
-  dsh plugin --profile rescue add /app/dsh-bundle >/dev/null
+  # 安装失败就删掉半成品并退出（容器会按重启策略再来一次），不能留下一个没有 bundle 的配置档
+  dsh plugin --profile rescue add /app/dsh-bundle >/dev/null || { rm -rf "$PROFILE"; echo "dsh-entrypoint: 安装 bundle 失败" >&2; exit 1; }
   # 用户层 patch：演示前已确认过预览声明（不弹窗）；缺省模型（DEMO_MODEL=提供方/模型）
   MODEL="${DEMO_MODEL:-deepseek-official/deepseek-flash}"
   cat >"$DSH_HOME/profiles/rescue/cordis.patch.yml" <<YAML

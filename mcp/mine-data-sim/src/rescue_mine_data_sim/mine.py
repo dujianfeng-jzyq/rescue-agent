@@ -7,6 +7,8 @@ TODO(数据): 用典型矿井脱敏图纸替换本文件中的网络和测点。
 
 from __future__ import annotations
 
+import os
+
 from rescue_contract.models import (
     AirwayKind,
     EquipmentKind,
@@ -23,19 +25,26 @@ from rescue_contract.models import (
     SensorSource,
 )
 
+# 综采工作面的名称（编号里的 1201）。缺省 1201；RESCUE_SIM_PANEL=211016 时整套编号、名称都换成它，
+# 让演示矿井和地图上的工作面对得上（地图包的 mine_map.yaml 按这些编号映射）。1202 掘进工作面不变。
+# 这只是换名字：拓扑、测点布置、参数都不变。
+PANEL = os.environ.get("RESCUE_SIM_PANEL", "1201").strip() or "1201"
+if not PANEL.isalnum():
+    raise ValueError(f"RESCUE_SIM_PANEL 只能是字母数字：{PANEL!r}")
+
 MINE_ID = "demo-mine"
 MINE_NAME = "示范矿井（模拟）"
 
 NODES = [
     Node(id="N0", name="主井口", is_surface=True),
     Node(id="N1", name="主井底车场"),
-    Node(id="N2", name="1201运输巷口"),
-    Node(id="N3", name="1201工作面下端头"),
-    Node(id="N4", name="1201工作面上端头（上隅角）"),
-    Node(id="N5", name="1201回风巷口"),
+    Node(id="N2", name=f"{PANEL}运输巷口"),
+    Node(id="N3", name=f"{PANEL}工作面下端头"),
+    Node(id="N4", name=f"{PANEL}工作面上端头（上隅角）"),
+    Node(id="N5", name=f"{PANEL}回风巷口"),
     Node(id="N6", name="回风井底"),
     Node(id="N7", name="回风井口", is_surface=True),
-    Node(id="N8", name="1201避难硐室", is_refuge=True),
+    Node(id="N8", name=f"{PANEL}避难硐室", is_refuge=True),
     Node(id="N9", name="1202掘进工作面"),
 ]
 
@@ -62,8 +71,8 @@ ROADWAYS = [
         design_airflow_m3_min=6500,
     ),
     Roadway(
-        id="R-1201-IN",
-        name="1201运输巷",
+        id=f"R-{PANEL}-IN",
+        name=f"{PANEL}运输巷",
         from_node="N2",
         to_node="N3",
         kind=R.INTAKE,
@@ -72,8 +81,8 @@ ROADWAYS = [
         design_airflow_m3_min=1800,
     ),
     Roadway(
-        id="R-1201-FACE",
-        name="1201工作面",
+        id=f"R-{PANEL}-FACE",
+        name=f"{PANEL}工作面",
         from_node="N3",
         to_node="N4",
         kind=R.WORKING_FACE,
@@ -82,8 +91,8 @@ ROADWAYS = [
         design_airflow_m3_min=1700,
     ),
     Roadway(
-        id="R-1201-GOAF",
-        name="1201采空区漏风通道",
+        id=f"R-{PANEL}-GOAF",
+        name=f"{PANEL}采空区漏风通道",
         from_node="N3",
         to_node="N4",
         kind=R.GOAF,
@@ -92,8 +101,8 @@ ROADWAYS = [
         design_airflow_m3_min=100,
     ),
     Roadway(
-        id="R-1201-RET",
-        name="1201回风巷",
+        id=f"R-{PANEL}-RET",
+        name=f"{PANEL}回风巷",
         from_node="N4",
         to_node="N5",
         kind=R.RETURN,
@@ -150,33 +159,33 @@ M = Measurand
 TUBE = [M.O2, M.N2, M.CO, M.CO2, M.CH4, M.C2H4, M.C2H2, M.H2]
 SENSORS = [
     SensorPoint(
-        id="SM-1201-UC",
-        name="1201上隅角",
+        id=f"SM-{PANEL}-UC",
+        name=f"{PANEL}上隅角",
         source=SensorSource.SAFETY_MONITOR,
         measurands=[M.CO, M.CH4, M.O2, M.TEMPERATURE],
-        roadway_id="R-1201-FACE",
+        roadway_id=f"R-{PANEL}-FACE",
         position_m=215,
-        panel="1201",
+        panel=f"{PANEL}",
         role=SensorRole.UPPER_CORNER,
     ),
     SensorPoint(
-        id="SM-1201-RET",
-        name="1201回风巷",
+        id=f"SM-{PANEL}-RET",
+        name=f"{PANEL}回风巷",
         source=SensorSource.SAFETY_MONITOR,
         measurands=[M.CO, M.CH4, M.TEMPERATURE, M.WIND_SPEED],
-        roadway_id="R-1201-RET",
+        roadway_id=f"R-{PANEL}-RET",
         position_m=30,
-        panel="1201",
+        panel=f"{PANEL}",
         role=SensorRole.RETURN_AIRWAY,
     ),
     SensorPoint(
-        id="SM-1201-IN",
-        name="1201运输巷",
+        id=f"SM-{PANEL}-IN",
+        name=f"{PANEL}运输巷",
         source=SensorSource.SAFETY_MONITOR,
         measurands=[M.CO, M.CH4, M.WIND_SPEED],
-        roadway_id="R-1201-IN",
+        roadway_id=f"R-{PANEL}-IN",
         position_m=1700,
-        panel="1201",
+        panel=f"{PANEL}",
         role=SensorRole.INTAKE_AIRWAY,
     ),
     SensorPoint(
@@ -189,63 +198,63 @@ SENSORS = [
         role=SensorRole.MAIN_RETURN,
     ),
     SensorPoint(
-        id="BT-1201-G1",
-        name="1201采空区束管1号",
+        id=f"BT-{PANEL}-G1",
+        name=f"{PANEL}采空区束管1号",
         source=SensorSource.BUNDLE_TUBE,
         measurands=TUBE,
-        roadway_id="R-1201-GOAF",
+        roadway_id=f"R-{PANEL}-GOAF",
         goaf_depth_m=20,
-        panel="1201",
+        panel=f"{PANEL}",
         role=SensorRole.GOAF_GAS_TUBE,
     ),
     SensorPoint(
-        id="BT-1201-G2",
-        name="1201采空区束管2号",
+        id=f"BT-{PANEL}-G2",
+        name=f"{PANEL}采空区束管2号",
         source=SensorSource.BUNDLE_TUBE,
         measurands=TUBE,
-        roadway_id="R-1201-GOAF",
+        roadway_id=f"R-{PANEL}-GOAF",
         goaf_depth_m=50,
-        panel="1201",
+        panel=f"{PANEL}",
         role=SensorRole.GOAF_GAS_TUBE,
     ),
     SensorPoint(
-        id="BT-1201-G3",
-        name="1201采空区束管3号",
+        id=f"BT-{PANEL}-G3",
+        name=f"{PANEL}采空区束管3号",
         source=SensorSource.BUNDLE_TUBE,
         measurands=TUBE,
-        roadway_id="R-1201-GOAF",
+        roadway_id=f"R-{PANEL}-GOAF",
         goaf_depth_m=80,
-        panel="1201",
+        panel=f"{PANEL}",
         role=SensorRole.GOAF_GAS_TUBE,
     ),
     SensorPoint(
-        id="TP-1201-G1",
-        name="1201采空区测温1号",
+        id=f"TP-{PANEL}-G1",
+        name=f"{PANEL}采空区测温1号",
         source=SensorSource.TEMPERATURE,
         measurands=[M.TEMPERATURE],
-        roadway_id="R-1201-GOAF",
+        roadway_id=f"R-{PANEL}-GOAF",
         goaf_depth_m=20,
-        panel="1201",
+        panel=f"{PANEL}",
         role=SensorRole.GOAF_TEMPERATURE,
     ),
     SensorPoint(
-        id="TP-1201-G2",
-        name="1201采空区测温2号",
+        id=f"TP-{PANEL}-G2",
+        name=f"{PANEL}采空区测温2号",
         source=SensorSource.TEMPERATURE,
         measurands=[M.TEMPERATURE],
-        roadway_id="R-1201-GOAF",
+        roadway_id=f"R-{PANEL}-GOAF",
         goaf_depth_m=50,
-        panel="1201",
+        panel=f"{PANEL}",
         role=SensorRole.GOAF_TEMPERATURE,
     ),
     SensorPoint(
-        id="TP-1201-G3",
-        name="1201采空区测温3号",
+        id=f"TP-{PANEL}-G3",
+        name=f"{PANEL}采空区测温3号",
         source=SensorSource.TEMPERATURE,
         measurands=[M.TEMPERATURE],
-        roadway_id="R-1201-GOAF",
+        roadway_id=f"R-{PANEL}-GOAF",
         goaf_depth_m=80,
-        panel="1201",
+        panel=f"{PANEL}",
         role=SensorRole.GOAF_TEMPERATURE,
     ),
 ]
@@ -254,13 +263,13 @@ SENSOR_BY_ID = {s.id: s for s in SENSORS}
 # 工作面拓扑（describe_mine）。真实矿井由适配器按该矿图纸如实回答。
 PANELS = [
     Panel(
-        panel_id="1201",
-        name="1201综采工作面",
+        panel_id=f"{PANEL}",
+        name=f"{PANEL}综采工作面",
         kind=PanelKind.LONGWALL,
-        intake_roadway_id="R-1201-IN",
-        return_roadway_id="R-1201-RET",
-        face_roadway_id="R-1201-FACE",
-        goaf_roadway_id="R-1201-GOAF",
+        intake_roadway_id=f"R-{PANEL}-IN",
+        return_roadway_id=f"R-{PANEL}-RET",
+        face_roadway_id=f"R-{PANEL}-FACE",
+        goaf_roadway_id=f"R-{PANEL}-GOAF",
         refuge_node_id="N8",
     ),
     Panel(

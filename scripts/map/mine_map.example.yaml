@@ -1,0 +1,13 @@
+# 地图映射表示例。真实的放在地图包 var/map/mine_map.yaml（git 忽略，跟着地图走）。
+# 左边是矿井（rescue-mine 的 describe_mine / list_sensors 里的编号），右边是地图上的名称
+# （必须是 geometry.json 的 names 里有的；不在的条目会被丢弃并在 DSH 日志里警告）。
+#
+# 测点在图上的位置：先看 sensors 里的覆盖，再看它所在巷道（roadways），最后是工作面的锚点
+# （采空区测点用 goaf_anchor）。大多数情况只需要写 panels 和 roadways。
+panels:
+  "工作面编号":
+    anchor: 地图上工作面的名称          # 预警等级、新告警自动定位用它
+    goaf_anchor: 地图上采空区的名称     # 可省；火区和采空区测点用它，缺省同 anchor
+roadways:
+  R-巷道编号: 地图上巷道的名称
+sensors: {}                              # 个别测点不在它所在巷道的位置时才写：测点编号: 地图上的名称

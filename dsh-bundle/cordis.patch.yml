@@ -63,6 +63,21 @@
         token: !!js "process.env.RESCUE_MCP_ACTIONS_TOKEN || process.env.RESCUE_MCP_TOKEN"   # actions 的令牌（预检接口）
         incidentDir: !!js "process.env.RESCUE_INCIDENT_DIR || `${process.env.RESCUE_HOME ?? process.cwd()}/var/incidents`"   # 人工确认的等待和结果记进事件时间线（批准超时升级）
 
+    # 三维地图（docs/design-v4-map.md，验证中）：Node 侧提供几何与指令推送，浏览器侧由 package.json 的 dsh.client 声明（lib/client.js）。
+    # 宿主只把包根名称（@rescue/dsh-bundle）的入口当客户端包扫描，带子路径的入口不算，且同一个包只能有一个入口（验证清单 #25）。
+    - id: rescue-map
+      name: '@rescue/dsh-bundle'
+      config:
+        dataDir: !!js "process.env.RESCUE_MAP_DIR || `${process.env.RESCUE_HOME ?? process.cwd()}/var/map`"   # 地图包目录（真实矿井图不进仓库）
+        # 大屏左右栏的数据来源（只读）：事件库、记录目录、矿井数据服务
+        incidentDir: !!js "process.env.RESCUE_INCIDENT_DIR || `${process.env.RESCUE_HOME ?? process.cwd()}/var/incidents`"
+        recordDir: !!js "process.env.RESCUE_RECORD_DIR || `${process.env.RESCUE_HOME ?? process.cwd()}/var/records`"
+        mineDataUrl: !!js "process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'"
+        mineDataToken: !!js "process.env.RESCUE_MCP_MINE_DATA_TOKEN || process.env.RESCUE_MCP_TOKEN || undefined"
+        panel: !!js "process.env.RESCUE_MAP_PANEL || undefined"
+        autopilot: !!js "process.env.RESCUE_MAP_AUTOPILOT !== '0'"   # 自动叠加（等级、报警、火区、新告警自动定位）
+        debug: !!js "process.env.RESCUE_MAP_DEBUG === '1'"   # 调试路由 POST /rescue-map/emit，只在开发时开
+
     - id: rescue-audit
       name: '@rescue/dsh-bundle/audit'
       config:

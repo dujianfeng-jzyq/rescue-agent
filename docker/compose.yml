@@ -15,6 +15,7 @@ services:
     command: ["python", "-m", "rescue_mine_data_sim"]
     environment:
       RESCUE_SIM_MODE: demo                       # 启动即常态连续运行
+      RESCUE_SIM_PANEL: ${DEMO_PANEL:-1201}       # 综采工作面的名称；内部演示用 DEMO_PANEL=211016，与地图包的 mine_map.yaml 对上
       RESCUE_MCP_ALLOWED_HOSTS: "mine-sim:*"      # 容器之间按服务名访问 MCP（DNS 重绑定防护的白名单）
       RESCUE_SIM_SPEED: ${RESCUE_SIM_SPEED:-60}
       RESCUE_MCP_MINE_DATA_TOKEN: ${RESCUE_MCP_MINE_DATA_TOKEN:?}
@@ -62,6 +63,7 @@ services:
       RESCUE_MCP_MINE_DATA_URL: http://mine-sim:8101/mcp
       RESCUE_INCIDENT_DIR: /data/incidents
       RESCUE_SKILLS_DIR: /app/skills
+      RESCUE_WATCH_PANELS: ${DEMO_PANEL:-1201}     # 监视的工作面，要和 mine-sim 的 RESCUE_SIM_PANEL 一致
     volumes:
       - ../skills:/app/skills:ro
       - ../var/demo/incidents:/data/incidents
@@ -89,6 +91,7 @@ services:
       RESCUE_INCIDENT_DIR: /data/incidents        # 事件库：事件插件读写，唤醒插件扫描
       RESCUE_DUTY_CWD: /data/duty                 # 值班会话的工作目录
       RESCUE_RUN_DIR: /data/runs                  # 技能脚本的运行目录
+      RESCUE_MAP_DIR: /data/map                   # 地图包（geometry.json），真实矿井图不进仓库
       RESCUE_AUDIT_LOG: /data/audit/tool-actions.jsonl
       DSH_PUBLIC_PORT: ${DEMO_WEB_PORT:-13080}
       RAGFLOW_BASE_URL: ${RAGFLOW_BASE_URL:-}
@@ -105,6 +108,7 @@ services:
       - ../var/demo/audit:/data/audit
       - ../var/demo/dsh-home:/home/node/.dsh-home
       - ../var/demo/documents:/home/node/Documents
+      - ../var/map:/data/map:ro                   # 地图包只读；没有 geometry.json 时网页端是 DSH 原界面
     ports: ["127.0.0.1:${DEMO_WEB_PORT:-13080}:3080"]
     depends_on:
       mine-sim: {condition: service_healthy}

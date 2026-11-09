@@ -49,6 +49,7 @@ def main(argv: list[str]) -> int:
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1400, "height": 1000})
+        page.add_init_script("try { localStorage.setItem('rescue-map:disabled', '1') } catch (e) {}")  # 用 DSH 原界面，不用地图界面
         page.goto(a.url)
         ctx: dict = {}
 

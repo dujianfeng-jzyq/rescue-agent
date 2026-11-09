@@ -5,6 +5,8 @@
 - 方案（为什么这样做）：`docs/implementation-plan.md`（主版本；同名 PDF 是第一版的带图快照）
 - **第三版设计（已实施并合入 `main`，2026-11-06）**：`docs/design-v3.md`（rescue-agent + rescue-mine、常驻监听与事件、专家型智能体）
 - **第二版设计（已实施，已包含在 `main`）**：`docs/design-v2.md`，决策见 `docs/decisions/0007-skills-plugins-fixed-flows.md`
+- **第四版设计（草案，P0 验证完成 2026-11-08）：通风图地图界面**：`docs/design-v4-map.md`（下层通风立体图、上层半透明悬浮的 DSH 界面、智能体定位/标记地图；浏览器端插件、验证清单 #25–#27）
+- 第四版撤人路线与受威胁人员标注（E1–E5 已实现，本机和 Docker 演示里渲染过，见验证清单 #36）：`docs/design-v4-evacuation.md`
 - **rescue-mine 接口说明（代码生成，`make interface-doc`）**：`docs/rescue-mine-interface.md`；第三版 rescue-mine/guard/动作分级的决策：`docs/decisions/0008-guard-and-rescue-mine.md`
 - 架构（怎么连起来）：`docs/architecture.md`（第二版；第 8 节是过渡期）；设计决策：`docs/decisions/`
 - 真实 DSH 上的验证记录（含已知问题）：`docs/validation-checklist.md`
@@ -50,6 +52,7 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 - `eval/baseline.py` + `expectations.yaml`：确定性回归基线（运行技能脚本）。
 - `eval/agent/`：智能体端到端评测。`cases.yaml` 用例（`approvals` 指定人工确认时放行哪些指令，其余拒绝），`run.py` 经 DSH 网页端（Playwright）提问并点确认，`grade.py` 读 `.dsh-home/sessions` 会话日志判定（可 `grade.py <会话 id>` 离线判定、`run.py --regrade` 按新规则重判）。
 - 第三版 P5 新增：技能 `incident-review`（事件复盘，脚本 `timeline.py`）、固定流程 `review_timeline`（`src/fire-loop/timeline.ts`，事件库条目经 `Evidence.putEvidence` 存成证据记录再由脚本算次数和时长）、演示故事线 `eval/agent/story.py`（`make dev-story` + `make story`）。
+- 地图（第四版 P0）：`scripts/map/`（`convert_dwg.sh` DWG→DXF、`extract_geometry.py` 按 `var/map/extract.json`（示例见 `scripts/map/extract.example.json`）提取几何到 `var/map/geometry.json`（**地图包，真实矿井图不进仓库**，git 忽略，Docker 里只读挂载到 `/data/map`，环境变量 `RESCUE_MAP_DIR`；没有这个文件时网页端就是 DSH 原界面）；LibreDWG 的 DXF 带未转义换行，用自带的 `dxfscan.py`）；`dsh-bundle/src/map`（Node 侧，**必须是 bundle 的包根入口 `@rescue/dsh-bundle`**，宿主只扫描包根名称的入口当客户端包；`MapHub` 校验指令并广播）；`dsh-bundle/client/src`（浏览器端，`pnpm build` 用 esbuild 打成 `lib/client.js`；悬浮层样式依赖 DSH 的哈希类名，升级 DSH 要重核）。右栏智能体状态来自 DSH 事件（`src/map/activity.ts`：agent/status、tools/*、approval/request、user-questions/request，只旁路观察、原样放行，15 分钟过期）；智能体的 `map_view` 工具（`src/map/tools.ts`：名称只能是地图上有的，标记的标签由代码从记录里取，备注不能含数字，智能体最多 12 个标记；评测用例 v4-* 要在 `RESCUE_SIM_PANEL=211016` 环境里跑）；地图自动叠加（`src/map/autopilot.ts`：预警等级、矿井报警、火区、新告警自动定位，映射表是地图包里的 `var/map/mine_map.yaml`）；模拟矿井的工作面名可用 `RESCUE_SIM_PANEL=211016` 换成与地图一致（监听器同时设 `RESCUE_WATCH_PANELS`，Docker 用 `DEMO_PANEL`）。大屏界面（自绘顶栏/左栏/右栏 + DSH 会话组件换皮）的数据来自 `/rescue-map/state`（`src/map/state.ts`：事件库、记录目录、监听器心跳、矿井读数，只汇总不判断）。改了 `dsh-bundle/src` 要 `pnpm build`（只改 `client/src` 用 `node client/build.mjs` 就够）。调试路由 `/rescue-map/emit` 只在 `RESCUE_MAP_DEBUG=1` 时存在。**验证界面时不要让本地 DSH 带着密钥跑：DSH 启动会读当前目录的 `.env`（有 `DEEPSEEK_API_KEY`），要从别的目录启动，否则值班唤醒插件会真实调用模型。**
 - `mcp/sentinel`（第三版 P3）：常驻监听器 `python -m rescue_sentinel`，不经模型；判据只用 `skills/fire-assessment`（check.py，参数在 `references/watch.yaml` 的 `sentinel` 节）。事件库 `rescue_contract/incidents.py`（`var/incidents/<事件编号>.jsonl`，只追加、折叠出状态；TS 侧 `dsh-bundle/src/incident/store.ts` 同格式，共用 `contract/tests/fixtures/incidents`）。DSH 侧 `src/incident`：事件插件（预设里的工具 get_incident 等）和唤醒插件（`cordis.patch.yml` 的 rescue-wake，全局，无人会话也能唤醒值班会话）。**事件库不是记录库**：监听器的检测摘要不能被指令引用，智能体被唤醒后自己研判、产生记录。
 - 第一版的 Python 服务（ventnet、fire-model、dispatch、kb、workflow）已于 2026-11-04 从工作树删除，见 `docs/architecture.md` 第 8 节；契约里的研判快照已在第三版 P2 删除，`grade.py` 的其余第一版兼容留待第三版 P5 清理。
 

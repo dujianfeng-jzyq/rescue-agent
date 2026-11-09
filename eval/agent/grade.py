@@ -40,6 +40,11 @@
 - tools_not_called: [<工具>]  这些工具整次运行都没有调用（如不该启封、不该下发）
 - incident_read: true       调用过 get_incident（读事件）
 - followup_added: true      调用过 add_followup（登记了跟踪计划）
+- map_focused: [<名称>]      （第四版 P4）map_view 成功定位或标记过其中某个地图名称（focus、mark 的 name；成功 = 工具返回 ok）
+- map_marks_grounded: true  map_view 成功的 mark 调用，要么带 record_id 且该编号在本次运行的工具结果里出现过（不是自己编的），要么有 note
+- map_marks_min: <N>        map_view 成功的 mark 调用至少 N 次（用例明确要求“标出来”时，防止只定位不标记）
+- map_marks_max: <N>        map_view 成功的 mark 调用不超过 N 次（“地图上没有这个位置”时应为 0，防止瞎标）
+- map_view_errors_max: <N>  map_view 调用失败（名称不在地图上等）不超过 N 次，衡量智能体有没有先 list 再用名称
 - final_mentions: [<词>]     最后回复里出现这些词（至少一个）；用于“数据不可信时要如实说明”这类要求
 - no_issue: true            整次运行没有任何 actions 指令发布成功（回执 status=issued）
 - rejection_reported: true  总指挥协调的最后回复（含最后向人提的问题）写明指令被拒绝，且没有声称已发布或已下发
@@ -247,7 +252,7 @@ _WORKING = ("delegate", "send_message", "interrupt_agent", "ask_user_question", 
 
 
 def _working_tool(name: str) -> bool:
-    return name in _WORKING or name in FLOW_TOOLS or name.startswith(("mcp__actions__", "mcp__kb__"))
+    return name in _WORKING or name in FLOW_TOOLS or name in NATIVE_TOOLS or name.startswith(("mcp__actions__", "mcp__kb__"))
 
 
 def read_events(path: Path) -> list[dict]:
@@ -486,6 +491,8 @@ DEFAULT_CHECKS = {"numbers_grounded": True, "cited_tools_called": True}
 
 
 # 固定流程和检测是 DSH 插件工具（不是 MCP），结果结构见 dsh-bundle/src/fire-loop、src/evidence/check.ts。
+# DSH 进程内的工具（不是 MCP 工具，名字里没有 mcp__ 前缀），tools_called 也认
+NATIVE_TOOLS = {"map_view"}
 FLOW_TOOLS = {"run_fire_assessment", "check_mine", "draft_sealing_plan", "draft_firefighting_plan", "review_effect", "review_timeline", "assess_unsealing"}
 
 
@@ -525,6 +532,22 @@ def _record_ids(obj) -> list[str]:
     if isinstance(obj, list):
         return [x for v in obj for x in _record_ids(v)]
     return []
+
+
+def _map_view_calls(sessions: list[Session]) -> list[dict]:
+    """map_view 的调用，按会话内出现顺序把参数和结果配对：{args, raw（结果文本）, result, ok}。成功 = 结果里有 "ok": true 或名称列表。"""
+    out = []
+    for s in sessions:
+        calls = [a for n, a in s.calls() if n == "map_view"]
+        results = [t for n, t in s.tool_results() if n == "map_view"]
+        for i, raw in enumerate(calls):
+            try:
+                args = json.loads(raw) if raw else {}
+            except ValueError:
+                args = {}
+            res = results[i] if i < len(results) else ""
+            out.append({"args": args, "raw": res, "result": res, "ok": '"ok": true' in res or '"names"' in res})
+    return out
 
 
 def grade(root: Session, checks: dict) -> dict:
@@ -583,7 +606,7 @@ def grade(root: Session, checks: dict) -> dict:
         results["stage_reported"] = {"ok": want is not None and want in final, "detail": {"tool": want}}
 
     if checks.get("tools_called"):
-        called = {n.split("__", 2)[2] for n in all_calls if n.startswith("mcp__")} | {n for n in all_calls if n in FLOW_TOOLS}
+        called = {n.split("__", 2)[2] for n in all_calls if n.startswith("mcp__")} | {n for n in all_calls if n in FLOW_TOOLS | NATIVE_TOOLS}
         missing = [t for t in checks["tools_called"] if t not in called]
         results["tools_called"] = {"ok": not missing, "detail": missing}
 
@@ -686,6 +709,36 @@ def grade(root: Session, checks: dict) -> dict:
         short = {n.split("__", 2)[-1] for n in all_calls}
         used = sorted(set(checks["tools_not_called"]) & short)
         results["tools_not_called"] = {"ok": not used, "detail": used}
+
+    if any(checks.get(k) is not None for k in ("map_focused", "map_marks_grounded", "map_marks_min", "map_marks_max", "map_view_errors_max")):
+        mv = _map_view_calls(sessions)
+        ok_calls = [c for c in mv if c["ok"]]
+        if checks.get("map_focused"):
+            want = set(checks["map_focused"])
+            hit = sorted({c["args"].get("name") for c in ok_calls if c["args"].get("action") in ("focus", "mark")} & want)
+            results["map_focused"] = {"ok": bool(hit), "detail": hit or [f"没有成功定位或标记 {sorted(want)} 中的任何一个"]}
+        if checks.get("map_marks_grounded"):
+            texts = "\n".join(t for s in sessions for n, t in s.tool_results() if n != "map_view")  # 别的工具给出过的记录编号
+            bad = []
+            for c in ok_calls:
+                a = c["args"]
+                if a.get("action") != "mark":
+                    continue
+                rid = a.get("record_id")
+                if rid and rid not in texts:
+                    bad.append(f"{a.get('name')}：record_id {rid} 没在任何工具结果里出现过")
+                elif not rid and not a.get("note"):
+                    bad.append(f"{a.get('name')}：既没有 record_id 也没有 note")
+            results["map_marks_grounded"] = {"ok": not bad, "detail": bad}
+        if checks.get("map_marks_min") is not None:
+            n = sum(1 for c in ok_calls if c["args"].get("action") == "mark")
+            results["map_marks_min"] = {"ok": n >= int(checks["map_marks_min"]), "detail": [f"成功标记 {n} 次（至少 {checks['map_marks_min']}）"]}
+        if checks.get("map_marks_max") is not None:
+            n = sum(1 for c in ok_calls if c["args"].get("action") == "mark")
+            results["map_marks_max"] = {"ok": n <= int(checks["map_marks_max"]), "detail": [f"成功标记 {n} 次（最多 {checks['map_marks_max']}）"]}
+        if checks.get("map_view_errors_max") is not None:
+            bad = [c for c in mv if not c["ok"]]
+            results["map_view_errors_max"] = {"ok": len(bad) <= int(checks["map_view_errors_max"]), "detail": [f"失败 {len(bad)} 次（最多 {checks['map_view_errors_max']}）"] + [c["result"][:80] for c in bad[:4]]}
 
     for key, tool in (("incident_read", "get_incident"), ("followup_added", "add_followup")):
         if checks.get(key):

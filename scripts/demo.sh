@@ -31,6 +31,7 @@ tokens() {
     echo "RESCUE_MCP_MINE_ACT_TOKEN=$(openssl rand -hex 16)" >>"$DEMO/tokens.env"
     echo "  已向 var/demo/tokens.env 补充 RESCUE_MCP_MINE_ACT_TOKEN"
   fi
+  mkdir -p "$ROOT/var/map"   # 地图包（真实矿井图，git 忽略）：不放进 var/demo，demo-reset 不清它
   mkdir -p "$DEMO/records" "$DEMO/incidents" "$DEMO/duty" "$DEMO/runs" "$DEMO/ledger" "$DEMO/audit" "$DEMO/dsh-home" "$DEMO/documents"
 }
 

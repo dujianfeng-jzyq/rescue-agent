@@ -302,3 +302,11 @@ async def test_approval_timeout_escalates_even_when_mine_clock_is_down(tmp_path,
     with pytest.raises(ConnectionError):
         await f.s.tick()  # 再来一次不重复升级
     assert [x["data"]["cause"] for x in f.store.entries(iid) if x["kind"] == "alert"].count("approval_timeout") == 1
+
+
+def test_watch_panels_can_be_overridden_by_env(tmp_path, monkeypatch):
+    # 缺省取技能参数；RESCUE_WATCH_PANELS 覆盖（换了演示矿井的工作面名称时用）
+    assert Fake(tmp_path / "a", monkeypatch).s.panels == ["1201"]
+    monkeypatch.setenv("RESCUE_WATCH_PANELS", " 211016 , 1202 ")
+    assert Fake(tmp_path / "b", monkeypatch).s.panels == ["211016", "1202"]
+

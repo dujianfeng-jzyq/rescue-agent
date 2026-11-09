@@ -9,8 +9,8 @@ COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
     && apt-get update && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl fonts-wqy-microhei fonts-dejavu-core && rm -rf /var/lib/apt/lists/* \
-    && npm i -g @deepseek-ai/dsh@0.2.1-rc.4 && npm cache clean --force \
-    && corepack enable pnpm
+    # pnpm 直接装进镜像，不用 corepack：corepack 没有 packageManager 字段时每次都联网查 latest，运行期网络不通就装不上 bundle（见 dsh-entrypoint.sh）
+    && npm i -g @deepseek-ai/dsh@0.2.1-rc.4 pnpm@12.18.0 && npm cache clean --force
 # 技能脚本只能用 skills/requirements.txt 里的包；技能自检用 rescue_contract
 COPY skills/requirements.txt /tmp/skills-requirements.txt
 COPY mcp/contract /tmp/contract

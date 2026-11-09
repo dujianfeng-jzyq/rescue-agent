@@ -11,6 +11,7 @@ import yaml
 from rescue_contract.models import Measurand
 
 from .engine import Fault, Intervention, ProcessParams, Scenario
+from .mine import PANEL
 
 DEFAULT_DIR = Path(__file__).resolve().parents[4] / "scenarios"
 
@@ -26,7 +27,7 @@ def parse(doc: dict) -> Scenario:
         raise ValueError(f"场景 {doc.get('id')} 的 params 有未知字段：{sorted(unknown)}")
     faults = tuple(
         Fault(
-            sensor_id=f["sensor"],
+            sensor_id=f["sensor"].replace("-1201-", f"-{PANEL}-"),  # 场景文件里写的是缺省的 1201 编号
             kind=f["kind"],
             start_h=float(f["start_h"]),
             end_h=float(f["end_h"]) if f.get("end_h") is not None else None,
