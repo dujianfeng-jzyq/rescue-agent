@@ -517,6 +517,8 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         body = await req.json()
         try:
             sim.reset(body["id"], bool(body.get("manual", False)))
+            if director is not None:
+                director.reset()
         except KeyError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse({"ok": True, "scenario": body["id"], "now": sim.engine.now().isoformat()})
@@ -549,6 +551,8 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         """回到常态连续运行（清空历史、读数设置和事故注入）。"""
         body = await req.json() if (await req.body()) else {}
         sim.reset_normal(float(body["speed"]) if body.get("speed") is not None else float(os.environ.get("RESCUE_SIM_SPEED", "60")))
+        if director is not None:
+            director.reset()
         return JSONResponse({"ok": True, "now": sim.engine.now().isoformat(), "speed": sim.engine.clock.speed})
 
     @server.custom_route("/sim/demo/inject", methods=["POST"])

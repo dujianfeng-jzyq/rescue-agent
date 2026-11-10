@@ -2,7 +2,7 @@
 
 边界约定：
 - rescue-mine（矿井接口）只执行、不判断；红线、记录核对、批准、台账都在这一侧。换矿不用重审。
-- 对外动作工具（publish_warning、escalate_emergency、notify_evacuation、issue_dispatch_order、issue_sealing_plan、issue_firefighting_plan、approve_unsealing）都是 C 级动作
+- 对外动作工具（start_monitoring、publish_warning、escalate_emergency、notify_evacuation、issue_dispatch_order、issue_sealing_plan、issue_firefighting_plan、approve_unsealing）都是 C 级动作
   （rescue_contract.action_policy）：先预检，再人工确认，本服务在执行前强制校验，通过后才调用 rescue-mine 的
   send_notice / dispatch_order / submit_treatment（写入令牌只有本服务持有）。
 - 只读和计算类工具分布在其他服务；方案自查用本服务的只读工具 precheck_plan，台账查询用 query_last_issued（A 级，不弹确认）。
@@ -63,6 +63,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 log = logging.getLogger("rescue.actions")
+
+
+class MonitoringRequest(BaseModel):
+    """加密监测指令（台账里的 payload）：只引用预警等级记录。"""
+
+    record_id: str
 
 INSTRUCTIONS = (
     "守卫服务：所有对外动作（预警、撤人、调度、封闭方案、升级）都经这里。每个指令工具都会触发人工确认，确认后才执行。"
@@ -240,6 +246,17 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
             idempotency_key=idempotency_key("publish_warning", notice),
         )
         return await deliver("publish_warning", notice, [notice.record_id], [lambda: md.send_notice(request)], "；".join(result["notes"]) or None)
+
+    @server.tool()
+    async def start_monitoring(record_id: str) -> ActionReceipt:
+        """开始加密监测（观察跟进；确认人：值班长，黄色预警的处置）。只给 record_id，照抄 run_fire_assessment 返回的 record_ids.warning。
+        监测只增加观察、不改变现场；批准超时没人回应时按动作分级表自动放行（并提醒总工程师）。"""
+        payload = MonitoringRequest(record_id=record_id)
+        now = await require_now("start_monitoring", payload, [record_id])
+        result = precheck("start_monitoring", {"record_id": record_id}, now, record_store)
+        await reject_if("start_monitoring", payload, result["problems"], [record_id])
+        req = TreatmentRequest(type=StepType.MONITOR, panel=record_panel(record_id), idempotency_key=idempotency_key("start_monitoring", payload))
+        return await deliver("start_monitoring", payload, [record_id], [lambda: md.submit_treatment(req)])
 
     @server.tool()
     async def escalate_emergency(escalation: Escalation) -> ActionReceipt:

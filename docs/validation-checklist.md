@@ -217,3 +217,10 @@
 - 已验证（自动测试）：映射表扩展与 `check_mine_map.py`（内部演示 10 个节点，`--sim` 0 错误 0 警告）；`evacuation.ts` 按 personnel 记录生成图元（新鲜度 2h/6h、缺映射不画、走不通写“需人工研判”）；指令中心的 figure/unfigure 校验与快照（测试发现 `OPS` 白名单漏了这两个操作，已修）；对账 `reconcileFigures`；`state.evacuation`。TS 258 通过，`make check` 通过。
 - 浏览器里已验证（本机临时记录、Docker 演示红色阶段真实记录）：污染巷道着色、绿色流动虚线沿 211016 运输巷、人数徽标（与标记标签错开）、“需人工研判”徽标、避难目标、左栏区块。踩到的坑：模拟矿井时钟重置后，上一轮留下的“未来”记录会被当成最新（`latestPersonnelRecord` 现在忽略晚于当前矿井时间的记录）。**未验证**：记录过期后变灰（2 小时）和隐藏（6 小时）的渲染。节点位置是助手按 211016 附近标注摆的示意位置（`var/map/mine_map.yaml`，`status: placeholder`），没有现场核对；界面会标“示意映射”。
 - 现场演示需要客户提供：矿井网络（节点、巷道、名称）与图纸上的巷道名称对应；避难硐室、出口的位置；节点位置核对人。
+
+### #37 批准超时自动处理（第五版，on_timeout，2026-11-09，Docker 演示环境）
+
+- 做法：动作分级表给 `start_monitoring`（黄色的加密监测，C 级，确认人值班长，批准超时 5 分钟）设 `on_timeout: approve`；审批插件在 `approval/request` 里让 `next()`（网页端确认卡片）和一个计时器竞争，到点按表返回 `allowed-once`（或 `rejected`）。其余 7 个对外动作保持 `escalate`（只升级提醒，不自动执行），有测试固定。
+- 已验证（真实 DSH，deepseek-flash，导演推到黄色后故意不点确认）：智能体按技能提交 `start_monitoring`；确认卡片弹出，`approval_pending` 带 `on_timeout: approve`；**5 分钟整**后时间线写 `approval_decided`（`outcome: allowed-once, auto: timeout`），guard 执行并写台账（矿井回执 completed、模拟矿井处置日志有 monitor），会话继续下一轮；智能体的回答如实写“超时没人回应时系统自动放行，已提醒总工程师”，没有重复提交。监听器没有重复升级。
+- **发现的问题与处理**：只让插件返回 `allowed-once`，网页端的确认卡片和侧栏会话上的 “Approval” 标记**不会消失**（卡片绑在请求的 `signal` 上，`next()` 一直挂着）。处理：自动处理的动作在调用 `next()` 前把 `req.signal` 换成“原信号 + 插件自己的信号”，到点中止后者。重跑后卡片撤掉、会话回到 Idle、输入框恢复；原信号（会话的）不受影响（单元测试检查）。
+- 没验证：人在超时前点了确认的真实界面路径（单元测试覆盖）；`on_timeout: reject` 的真实界面（单元测试覆盖）；多个会话同时等确认。`req.signal` 可被替换依赖 DSH 0.2.1-rc.4 的请求对象可写，升级 DSH 要重核（不可写时插件退回“卡片留着”，自动处理本身不受影响）。

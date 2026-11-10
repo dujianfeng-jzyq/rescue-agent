@@ -48,6 +48,24 @@ describe('批准超时自动处理（on_timeout）', () => {
     assert.deepEqual((await store.get(iid)).pending_approvals, [])
   })
 
+  it('自动处理时撤掉网页端的确认卡片：传给确认界面的 signal 在到点后被中止，人先回应则不中止', async () => {
+    const a = await setup('approve')
+    await a.ask()
+    let seen: AbortSignal | undefined
+    const original = new AbortController()
+    const req: any = { callId: 'c1', signal: original.signal }
+    assert.equal(await a.handlers['approval/request']!(req, () => { seen = req.signal; return new Promise<string>(() => {}) }), 'allowed-once')
+    assert.equal(seen!.aborted, true) // 卡片依据它撤掉
+    assert.equal(original.signal.aborted, false) // 原信号（会话的）不受影响
+
+    const b = await setup('approve')
+    await b.ask()
+    const req2: any = { callId: 'c1', signal: new AbortController().signal }
+    let seen2: AbortSignal | undefined
+    assert.equal(await b.handlers['approval/request']!(req2, async () => { seen2 = req2.signal; return 'rejected' }), 'rejected')
+    assert.equal(seen2!.aborted, false)
+  })
+
   it('reject：到点自动拒绝', async () => {
     const { store, iid, handlers, ask } = await setup('reject')
     await ask()

@@ -73,6 +73,16 @@ export function apply(ctx: Context, config: Config) {
     let auto: 'timeout' | undefined
     const auto_ = timeoutOutcome(info.policy)
     let timer: ReturnType<typeof setTimeout> | undefined
+    // 网页端的确认卡片绑在请求的 signal 上，signal 一中止卡片就撤掉：自动处理时要关掉卡片，免得它留在界面上让人误以为还在等
+    // （实测：不关的话卡片和会话上的“Approval”标记会一直留着）。换成“原信号 + 我们自己的信号”，到点由我们中止。
+    const dismiss = new AbortController()
+    if (auto_) {
+      try {
+        req.signal = req.signal ? AbortSignal.any([req.signal, dismiss.signal]) : dismiss.signal
+      } catch {
+        // 请求对象不能改：卡片会留到有人点掉，自动处理本身不受影响
+      }
+    }
     try {
       const answer = next()
       if (auto_) {
@@ -82,6 +92,7 @@ export function apply(ctx: Context, config: Config) {
         const first = await Promise.race([answer, timedOut])
         if (first === 'timeout') {
           answer.catch(() => {}) // 弹窗那一侧的结果不要了
+          dismiss.abort() // 撤掉网页端的确认卡片
           outcome = auto_.outcome
           auto = 'timeout'
           ctx.logger.info?.(`rescue-approval: ${info.tool} 批准超时（${info.policy?.approval_timeout_min} 分钟），按 on_timeout=${info.policy?.on_timeout} 自动${outcome === 'allowed-once' ? '放行' : '拒绝'}`)

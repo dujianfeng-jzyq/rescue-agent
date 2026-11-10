@@ -11,6 +11,7 @@ from mcp.client import Client
 from rescue_contract.client import MineData
 
 EXPECTED_TOOLS = {
+    "start_monitoring",
     "publish_warning",
     "escalate_emergency",
     "notify_evacuation",
@@ -148,6 +149,28 @@ def test_publish_warning_is_sent_to_the_mine_as_a_notice(world):
     assert r.structured_content["status"] == "issued" and r.structured_content["mine_receipts"][0]["kind"] == "notice"
     (notice,) = world.holder.notices
     assert notice["kind"] == "warning" and notice["level"] == "red" and notice["panel"] == "1201" and "1201 工作面采空区" in notice["message"]
+
+
+def test_start_monitoring_is_sent_to_the_mine_as_a_monitor_step(world):
+    rid = world.result_record("fire-assessment", "warning", {"level": "yellow"})
+    r = world.call("start_monitoring", {"record_id": rid})
+    assert not r.is_error, r.content[0].text
+    assert r.structured_content["status"] == "issued" and r.structured_content["mine_receipts"][0]["kind"] == "treatment"
+    assert [iv.type for iv in world.holder.engine.action_log] == ["monitor"]
+    row = world.rows()[-1]
+    assert row["tool"] == "start_monitoring" and row["record_ids"] == [rid] and row["status"] == "issued"
+    # 重复提交：幂等，矿井只执行一次
+    world.call("start_monitoring", {"record_id": rid})
+    assert [iv.type for iv in world.holder.engine.action_log] == ["monitor"]
+
+
+def test_start_monitoring_needs_a_fresh_warning_record(world):
+    assert world.call("start_monitoring", {"record_id": "RS-20261104T200000-zzzzzz"}).is_error
+    wrong = world.result_record("emergency-escalation", "escalation", {"recommend": True})
+    r = world.call("start_monitoring", {"record_id": wrong})
+    assert r.is_error and "fire-assessment/warning" in r.content[0].text and world.holder.engine.action_log == []
+    nolevel = world.result_record("fire-assessment", "warning", {})
+    assert world.call("start_monitoring", {"record_id": nolevel}).is_error
 
 
 def test_warning_level_must_match_the_record(world):

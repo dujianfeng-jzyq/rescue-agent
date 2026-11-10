@@ -71,6 +71,7 @@ def validate_plan(tool: str, plan: Plan, now: datetime | None) -> list[str]:
 # 指令 → 它引用的记录必须是哪个技能、哪个脚本的结果
 RECORD_SOURCES: dict[str, tuple[str, str]] = {
     "publish_warning": ("fire-assessment", "warning"),
+    "start_monitoring": ("fire-assessment", "warning"),  # 观察跟进：引用同一个预警等级记录，不手写等级
     "escalate_emergency": ("emergency-escalation", "escalation"),
     "issue_sealing_plan": ("plan-compliance", "review"),
     "issue_firefighting_plan": ("plan-compliance", "review"),
@@ -145,6 +146,19 @@ def check_warning_record(
     note = f"与计算结果不一致：计算 {NAMES[computed]}，提交 {NAMES[notice.level.value]}，理由：{notice.override_reason}"
     checks.append(ApprovalCheck(name="预警等级", ok=True, detail=note))
     return [], [note], checks
+
+
+def check_monitoring_record(record_id: str, records: RecordStore | None, now: datetime | None) -> tuple[list[str], list[ApprovalCheck]]:
+    """加密监测（观察跟进）：引用 run_fire_assessment 的预警等级记录，记录要新鲜、有可核对的等级；监测只增加观察，不改变现场。"""
+    rec, checks = _record(records, record_id, "start_monitoring", "加密监测", now)
+    if rec is None:
+        return [c.detail or c.name for c in checks if not c.ok], checks
+    level = _result(rec).get("level")
+    if level not in NAMES:
+        checks.append(ApprovalCheck(name="预警等级", ok=False, detail=f"记录 {rec.record_id} 里没有可核对的预警等级"))
+        return [checks[-1].detail or ""], checks
+    checks.append(ApprovalCheck(name="预警等级", ok=True, detail=f"{rec.panel or '工作面'} 当前 {NAMES[level]}，按记录开始加密监测"))
+    return [], checks
 
 
 def check_escalation_record(esc: Escalation, records: RecordStore | None, now: datetime | None) -> tuple[list[str], list[ApprovalCheck]]:
@@ -261,6 +275,12 @@ def precheck(tool: str, arguments: dict[str, Any], now: datetime | None, records
         if tool == "publish_warning":
             n = WarningNotice.model_validate(arguments.get("notice", arguments))
             problems, notes, checks = check_warning_record(n, records, now)
+        elif tool == "start_monitoring":
+            record_id = arguments.get("record_id")
+            if not isinstance(record_id, str) or not record_id:
+                problems = ["缺少 record_id：加密监测只提交 run_fire_assessment 返回的 record_ids.warning"]
+            else:
+                problems, checks = check_monitoring_record(record_id, records, now)
         elif tool == "escalate_emergency":
             e = Escalation.model_validate(arguments.get("escalation", arguments))
             problems, checks = check_escalation_record(e, records, now)
@@ -288,6 +308,7 @@ __all__ = [
     "RECORD_SOURCES",
     "WarningLevel",
     "check_escalation_record",
+    "check_monitoring_record",
     "check_warning_record",
     "plan_from_record",
     "precheck",

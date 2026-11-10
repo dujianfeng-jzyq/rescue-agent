@@ -7,6 +7,15 @@
   },
   "policies": [
     {
+      "tool": "start_monitoring",
+      "level": "C",
+      "name": "开始加密监测（观察跟进）",
+      "confirmer": "值班长",
+      "approval_timeout_min": 5,
+      "escalate_to": "总工程师",
+      "on_timeout": "approve"
+    },
+    {
       "tool": "publish_warning",
       "level": "C",
       "name": "发布预警等级",

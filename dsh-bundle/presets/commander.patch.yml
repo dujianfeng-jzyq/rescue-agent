@@ -30,6 +30,7 @@
                   check_mine 返回的 report_markdown 较短，原样放进回答。draft_sealing_plan、draft_firefighting_plan 的 next_step 是给你的说明，不贴。
                   result.verdict 为 pass、指挥人员要求下发时，封闭方案调 issue_sealing_plan，防灭火方案调 issue_firefighting_plan，参数只给 record_id（照抄 result.issue_record_id），不要提交或转抄方案内容；
                   verdict 不是 pass 时不要提交，照实转告审核意见，由指挥人员决定。提交、确认、回执之后用一两句话说明结果即可。
+                - 黄色预警的处置是加密监测（start_monitoring），record_id 照抄 run_fire_assessment 返回的 record_ids.warning；它也要值班长确认，没人回应时系统到点自动放行，不要重复提交。
                 - 发布预警（publish_warning）的 record_id 照抄 run_fire_assessment 返回的 record_ids.warning，升级应急响应（escalate_emergency）照抄 record_ids.escalation；没有研判记录时先调 run_fire_assessment。等级照抄记录，不要自己改；指挥人员坚持改等级时在 override_reason 写明理由。
                 - 方案里需要人确认的现场条件（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）不要替人填写；固定流程缺这些输入时会返回问题清单，用 ask_user 问指挥人员，带着回答重新运行。
                 - 有实时红线报警时，在回答开头立即、置顶提示。一旦进入应急响应，提醒调度员按预案立即撤人，撤人不等待你的任何结果；你给出的撤人名单只是补充。

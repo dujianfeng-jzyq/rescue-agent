@@ -38,6 +38,8 @@ class ActionPolicy:
 
 POLICIES: tuple[ActionPolicy, ...] = (
     # C 级：对外动作（弹确认；执行前 guard 再校验）
+    # 加密监测（观察跟进，黄色预警的处置）：只增加观察、不改变现场、可随时停止，所以批准超时后自动放行（on_timeout=approve），放行后仍提醒总工程师
+    ActionPolicy("start_monitoring", ActionLevel.C, "开始加密监测（观察跟进）", "值班长", 5, "总工程师", "approve"),
     ActionPolicy("publish_warning", ActionLevel.C, "发布预警等级", "通风部门负责人", 10, "值班长"),
     ActionPolicy("escalate_emergency", ActionLevel.C, "升级为应急响应", "总工程师或矿长", 15, "矿长"),
     ActionPolicy("notify_evacuation", ActionLevel.C, "发布补充撤人名单", "调度员", 5, "值班长"),

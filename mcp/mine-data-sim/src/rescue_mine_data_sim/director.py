@@ -95,6 +95,12 @@ class Director:
                 "log": self.log[-12:],
             }
 
+    def reset(self) -> None:
+        """矿井被重置（回到常态、换场景）时调用：导演回到待开始，丢掉进行中的演示。"""
+        with self.lock:
+            self.state, self.stage, self._outcome, self._done, self.chosen = "idle", None, "", [], []
+            self.log = []
+
     def start(self) -> None:
         with self.lock:
             if self.state in ("running", "holding", "ending"):

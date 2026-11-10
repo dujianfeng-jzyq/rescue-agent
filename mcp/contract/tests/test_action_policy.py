@@ -15,7 +15,7 @@ def test_unregistered_tools_are_level_c():
 
 def test_every_c_level_action_has_confirmer_timeout_and_escalation():
     c = [p for p in POLICIES if p.level == ActionLevel.C]
-    assert {p.tool for p in c} == {"publish_warning", "escalate_emergency", "notify_evacuation", "issue_dispatch_order", "issue_sealing_plan", "issue_firefighting_plan", "approve_unsealing"}
+    assert {p.tool for p in c} == {"start_monitoring", "publish_warning", "escalate_emergency", "notify_evacuation", "issue_dispatch_order", "issue_sealing_plan", "issue_firefighting_plan", "approve_unsealing"}
     for p in c:
         assert p.confirmer and p.approval_timeout_min and p.approval_timeout_min > 0 and p.escalate_to, p.tool
     assert all(p.confirmer is None for p in POLICIES if p.level != ActionLevel.C)
@@ -43,4 +43,7 @@ def test_on_timeout_defaults_to_escalate_and_never_auto_executes_field_actions()
     for tool in ("publish_warning", "escalate_emergency", "notify_evacuation", "issue_dispatch_order", "issue_sealing_plan", "issue_firefighting_plan", "approve_unsealing"):
         assert BY_TOOL[tool].on_timeout == "escalate", tool
     assert all(p.on_timeout == "escalate" for p in POLICIES if p.level != ActionLevel.C)
+    # 唯一自动放行的是加密监测（只增加观察、不改变现场）；放行后仍有升级对象
+    assert [p.tool for p in POLICIES if p.on_timeout != "escalate"] == ["start_monitoring"]
+    assert BY_TOOL["start_monitoring"].on_timeout == "approve" and BY_TOOL["start_monitoring"].escalate_to
     assert all(p["on_timeout"] in ("approve", "reject", "escalate") for p in export()["policies"])

@@ -9,7 +9,7 @@
 
 主线（场景 s3，按预警等级分段推进：每段先暂停时钟、推进到该等级、等监听器告警和智能体处理完，再进入下一段）：
 1 常态：监听器在运行，没有未关闭事件
-2 黄色：监听器告警、唤醒值班会话；智能体研判、告知操作员、登记跟踪，不提交对外动作（分级决策表）
+2 黄色：监听器告警、唤醒值班会话；智能体研判、告知操作员、加密监测（确认下发）、登记跟踪，不提交其他对外动作（分级决策表）
 3 橙色：智能体研判后编制防灭火方案、预警，经人工确认下发
 4 红色：预警、（建议时）升级、撤人通知；封闭方案经合规审核、人工确认下发
 5 封闭后：跟踪计划到点，监听器唤醒智能体复评
@@ -41,7 +41,7 @@ import run as runner  # noqa: E402
 from rescue_contract.incidents import IncidentStore  # noqa: E402
 
 ROOT = grade.ROOT
-APPROVALS = {"publish_warning": "allow", "escalate_emergency": "allow", "issue_firefighting_plan": "allow", "issue_sealing_plan": "allow", "notify_evacuation": "allow", "approve_unsealing": "allow"}  # 其他确认一律拒绝
+APPROVALS = {"start_monitoring": "allow", "publish_warning": "allow", "escalate_emergency": "allow", "issue_firefighting_plan": "allow", "issue_sealing_plan": "allow", "notify_evacuation": "allow", "approve_unsealing": "allow"}  # 其他确认一律拒绝
 
 
 def say(msg: str) -> None:
@@ -301,7 +301,7 @@ def main(argv: list[str]) -> int:
         b = stage("步骤 2 黄色", 35.5, "黄色")
         iid = ctx["iid"]
         check("黄色：研判记入时间线", notes(store, iid, b, "assessment") >= 1)
-        check("黄色：没有对外动作（只告知、跟踪）", actions(store, iid, b) == [])
+        check("黄色：加密监测经确认下发，没有其他对外动作", set(actions(store, iid, b)) == {("start_monitoring", "issued")})
         check("黄色：登记了跟踪计划", followups_since(store, iid, b) >= 1)
 
         # ── 橙色 ──
@@ -383,7 +383,7 @@ def main(argv: list[str]) -> int:
                 break
             advance(48)
             time.sleep(20)
-            prompt = "又过了 48 小时。请重新评估 {panel} 采空区火区是否具备启封条件；具备的话提交启封方案，等我确认。".format(panel=PANEL)
+            prompt = f"又过了 48 小时。请重新评估 {PANEL} 采空区火区是否具备启封条件；具备的话提交启封方案，等我确认。"
         check("启封：评估记入时间线", assessed)
         check("启封：条件不满足时没有下发启封", refused_ok)
         check("启封：具备条件后启封方案经确认下发", ready and ("approve_unsealing", "issued") in acts)

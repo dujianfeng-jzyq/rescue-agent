@@ -162,3 +162,15 @@ def test_director_routes():
     st = c.get("/sim/state").json()
     assert st["director"]["state"] == "running" and st["paused"] is True and st["injected"]
     assert "directorBox" in c.get("/console").text
+
+
+def test_normal_reset_resets_the_director():
+    from rescue_contract.serving import build_app
+    from rescue_mine_data_sim.server import build_server
+    from starlette.testclient import TestClient
+
+    c = TestClient(build_app(build_server(SimHolder(mode="demo")), public_prefixes=("/console",)))
+    assert c.post("/sim/demo/start").json()["state"] == "running"
+    assert c.post("/sim/demo/normal", json={"speed": 60}).json()["ok"]
+    assert c.get("/sim/demo/director").json()["state"] == "idle"  # 重置为常态后可以再开始
+    assert c.post("/sim/demo/start").json()["state"] == "running"

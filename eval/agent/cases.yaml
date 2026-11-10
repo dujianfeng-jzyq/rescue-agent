@@ -454,7 +454,7 @@
     cited_tools_called: true
 
 - id: v3-yellow-observe
-  description: 黄色预警（s2 第 75 小时）：研判后告知要点并登记复评，不提交任何对外动作、不编制方案、不提问
+  description: 黄色预警（s2 第 75 小时）：研判后告知要点，提交加密监测（放行）并登记复评；不提交预警等其他对外动作、不编制方案、不提问
   scenario: s2-slow-oxidation
   at_h: 75
   incident: {panel: "1201", cause: anomaly, summary: "1201 工作面：预警等级由 蓝色 升为 黄色"}
@@ -463,13 +463,14 @@
     - 告警 {alert_id}（矿井时间 {mine_now}）：1201 工作面：预警等级由 蓝色 升为 黄色
     请立即对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。不要先问操作员“要不要研判”。
     （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
-  approvals: {} # 对外动作一律拒绝（本用例期望根本不提交）
+  approvals: {start_monitoring: allow} # 加密监测放行，其余对外动作一律拒绝（本用例期望不提交别的）
   checks:
     expect_decisions:
       status: placeholder
-      derived_from: {hand_written: 分级决策表（占位，2026-11-07 用户确认）：黄色 = 研判、告知、登记复评，不提交对外动作}
+      derived_from: {hand_written: 分级决策表（占位，2026-11-09 第五版）：黄色 = 研判、告知、加密监测（start_monitoring，超时自动放行）、登记复评，不提交其他对外动作}
       external_actions:
-        required: {}
+        required:
+          start_monitoring: {}
         optional: {}
       flows_called: [run_fire_assessment]
       flows_forbidden: [draft_firefighting_plan, draft_sealing_plan]
