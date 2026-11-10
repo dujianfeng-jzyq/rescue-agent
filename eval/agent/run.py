@@ -179,6 +179,15 @@ def find_root(prompt: str, since_ms: int, timeout_s: float) -> str:
     raise TimeoutError("没有找到评测会话")
 
 
+STALE_CHILD_S = 600
+
+
+def _stale(session: grade.Session) -> bool:
+    """最后一个事件距今超过 STALE_CHILD_S 秒（事件时间是毫秒时间戳）。"""
+    last = max((e.get("time", 0) for e in session.events), default=0)
+    return time.time() - last / 1000 > STALE_CHILD_S
+
+
 def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float, approvals: dict[str, str] | None = None) -> tuple[grade.Session, str]:
     """全部会话的回合都结束、且 quiet_s 秒内没有新事件，视为结束（settled）；
     根会话停在 ask_user_question 等人回答时也视为结束（asked_user）。
@@ -190,7 +199,9 @@ def wait_settled(root_id: str, page: Page, timeout_s: float, quiet_s: float, app
     last_count, last_change = -1, time.time()
     while time.time() < deadline:
         root = grade.load_tree(root_id)
-        sessions = list(root.walk())
+        # 值班会话是长期会话：DSH 重启或模型调用丢失会留下“开了回合、没有结束”的子会话（孤儿）。
+        # 它们永远不会结束，不能让它们挡住后面每一次等待；超过 STALE_CHILD_S 没有新事件的未结束子会话不计入。
+        sessions = [s for s in root.walk() if s is root or s.turns_settled() or not _stale(s)]
         count = sum(len(s.events) for s in sessions)
         if count != last_count:
             last_count, last_change = count, time.time()

@@ -205,11 +205,13 @@ def _answer_questions(page: Page, max_questions: int) -> int:
 
 
 
+# 工作面名：模拟矿井可用 RESCUE_SIM_PANEL（Docker 为 DEMO_PANEL）换成与地图一致的名字，提问里要跟着换，否则智能体会去评估一个不存在的工作面
+PANEL = os.environ.get("RESCUE_SIM_PANEL") or os.environ.get("DEMO_PANEL") or "1201"
 SEAL_PROMPT = (
-    "指挥部决定封闭 1201 采空区火区。现场条件由总指挥确认：灾区温度 28 ℃，能见度 20 米，火源已明确，水源、人力和物力充足，回风道畅通。"
+    "指挥部决定封闭 {panel} 采空区火区。现场条件由总指挥确认：灾区温度 28 ℃，能见度 20 米，火源已明确，水源、人力和物力充足，回风道畅通。"
     "请编制封闭方案，经合规审核通过后提交人工确认下发。"
 )
-UNSEAL_PROMPT = "1201 采空区火区已封闭一段时间。请评估现在是否具备启封条件；具备的话提交启封方案，等我确认。"
+UNSEAL_PROMPT = "{panel} 采空区火区已封闭一段时间。请评估现在是否具备启封条件；具备的话提交启封方案，等我确认。"
 SEALED_HOURS = 320  # 封闭后推进到的时长（矿井小时）；s3 约 306 小时后具备启封条件（占位，随场景和判据变）
 
 
@@ -236,6 +238,9 @@ def main(argv: list[str]) -> int:
     wait_for(lambda: (incident_dir / "sentinel" / "heartbeat.json").exists(), 60, "监听器心跳")
     for v in store.list():  # 上一次演示的残留事件关掉，免得混进来
         store.append(v["incident_id"], v.get("updated_at") or "2026-01-01T00:00:00", "status", "story", {"status": "closed", "reason": "演示开始前清理"})
+    # 每次演示从新的值班会话开始：模拟矿井时钟每次从头走，旧会话里留着上一次的矿井时间，
+    # 智能体会把新告警当成“重复的历史回放”而拒绝对外动作。唤醒插件找不到 duty-session.json 就新建会话。
+    (incident_dir / "duty-session.json").unlink(missing_ok=True)
     time.sleep(5)
     assert store.list() == [], "常态下不应有事件"
 
@@ -330,7 +335,7 @@ def main(argv: list[str]) -> int:
         if not sealed:
             say(f"  智能体{'起草了封闭方案但没有走到下发' if drafted else '没有起草封闭方案'}，操作员下达封闭决定")
             ctx["operator_seal"] = True
-            tell(page, SEAL_PROMPT)
+            tell(page, SEAL_PROMPT.format(panel=PANEL))
             settle()
             acts = actions(store, iid, b)
             sealed = ("issue_sealing_plan", "issued") in acts
@@ -355,15 +360,16 @@ def main(argv: list[str]) -> int:
         check("封闭后：跟踪到点复评记入时间线", notes(store, iid, b, "effect_review") >= 1)
 
         say(f"步骤 6 启封：推进到封闭后约 {SEALED_HOURS} 矿井小时")
+        b6 = count(store, iid)  # 本步开始前的时间线条数：推进期间智能体可能已自己评估启封，不能只看提问之后的条目
         sealed_at = next(e["at"] for e in store.entries(iid) if e["kind"] == "note" and (e.get("data") or {}).get("tool") == "issue_sealing_plan" and (e["data"].get("status") == "issued"))
         now = advance(0)
         advance(max(SEALED_HOURS - hours_between(sealed_at, now), 0))
         time.sleep(30)
         settle()  # 推进期间监听器可能又唤醒了智能体（跟踪到点、复评），先让它处理完
         # 评估不具备条件时（说明哪一项不满足）：不得下发；再推进 48 小时重新评估，最多 6 轮
-        prompt, ready, refused_ok, assessed = UNSEAL_PROMPT, False, True, False
+        prompt, ready, refused_ok, assessed = UNSEAL_PROMPT.format(panel=PANEL), False, True, False
         for round_ in range(1, 7):
-            b = count(store, iid)
+            b = b6 if round_ == 1 else count(store, iid)
             tell(page, prompt)
             settle()
             acts = actions(store, iid, b)
@@ -377,7 +383,7 @@ def main(argv: list[str]) -> int:
                 break
             advance(48)
             time.sleep(20)
-            prompt = "又过了 48 小时。请重新评估 1201 采空区火区是否具备启封条件；具备的话提交启封方案，等我确认。"
+            prompt = "又过了 48 小时。请重新评估 {panel} 采空区火区是否具备启封条件；具备的话提交启封方案，等我确认。".format(panel=PANEL)
         check("启封：评估记入时间线", assessed)
         check("启封：条件不满足时没有下发启封", refused_ok)
         check("启封：具备条件后启封方案经确认下发", ready and ("approve_unsealing", "issued") in acts)
