@@ -7,7 +7,7 @@
  * - 消息正文只是事实和要求，判据不在这里。
  */
 
-import type { Entry, IncidentStore, IncidentView } from './store.ts'
+import { type AlertStatus, alertStatuses, type Entry, type IncidentStore, type IncidentView } from './store.ts'
 
 export interface WakeOptions {
   /** 把消息投递到值班会话；成功返回会话编号，失败抛错 */
@@ -27,11 +27,22 @@ const CAUSE_TEXT: Record<string, string> = {
   degraded: '监听器取数/检测连续失败，此期间的“无异常”不可信。请如实告知操作员监听已降级及其影响；不要用不可信的数据支撑对外动作。',
 }
 
-export function composeMessage(view: IncidentView, alerts: Entry[]): string {
+const REPEAT_TEXT = '这是重复投递：这些告警之后事件时间线里已有处理记录（见上面的标注）。请用一两句话告知操作员“已处理、重复投递”，指出最近的研判或处置记录；不要重新研判，不要重复提交对外动作。'
+
+/**
+ * 唤醒消息。statuses（代码按事件时间线判断每条告警是否已处理，见 alertStatuses）给了就在告警后标注“重复投递”，
+ * 已处理的告警不再带“立即研判”之类的要求（否则消息自相矛盾，智能体多数时候照要求重做）；没给就当全部是新告警。
+ */
+export function composeMessage(view: IncidentView, alerts: Entry[], statuses: AlertStatus[] = []): string {
   const head = `【值守事件 ${view.incident_id}】${view.panel ?? '全矿'}（${view.category === 'monitor' ? '监听降级' : '火情'}，${view.status_name}）。以下告警由监听器发现，不经模型：`
-  const lines = alerts.map((a) => `- 告警 ${a.event_id}（矿井时间 ${a.at}）：${a.data.summary ?? ''}`)
-  const causes = [...new Set(alerts.map((a) => String(a.data.cause)))]
-  const todo = causes.map((c) => CAUSE_TEXT[c] ?? '请核实并告知操作员。').join('\n')
+  const handled = new Map(statuses.filter((s) => s.state === 'handled').map((s) => [s.alert_id, s]))
+  const lines = alerts.map((a) => {
+    const h = handled.get(a.event_id)
+    return `- 告警 ${a.event_id}（矿井时间 ${a.at}）：${a.data.summary ?? ''}${h ? `【重复投递：之后已有${h.handled_by}记录，已处理】` : ''}`
+  })
+  const fresh = alerts.filter((a) => !handled.has(a.event_id))
+  const causes = [...new Set(fresh.map((a) => String(a.data.cause)))]
+  const todo = [...causes.map((c) => CAUSE_TEXT[c] ?? '请核实并告知操作员。'), ...(handled.size ? [REPEAT_TEXT] : [])].join('\n')
   return `${head}\n${lines.join('\n')}\n${todo}\n（投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）`
 }
 
@@ -67,7 +78,7 @@ export class Waker {
         const at = entries[entries.length - 1]!.at
         const ids = alerts.map((a) => a.event_id)
         try {
-          const { sessionId } = await this.opts.deliver(composeMessage(view, alerts), { incidentId: view.incident_id, alertIds: ids })
+          const { sessionId } = await this.opts.deliver(composeMessage(view, alerts, alertStatuses(entries, new Set(ids))), { incidentId: view.incident_id, alertIds: ids })
           for (const id of ids) await this.store.append(view.incident_id, at, 'delivered', 'plugin', { alert_id: id, session_id: sessionId })
           delivered.push(...ids)
         } catch (err) {

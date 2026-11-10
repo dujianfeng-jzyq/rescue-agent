@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { describe, it } from 'node:test'
 
 import { registerTools } from '../src/incident/index.ts'
-import { IncidentStore } from '../src/incident/store.ts'
+import { alertStatuses, IncidentStore } from '../src/incident/store.ts'
 import { composeMessage, Waker } from '../src/incident/wake.ts'
 
 async function setup() {
@@ -88,6 +88,66 @@ describe('唤醒', () => {
     const text = composeMessage(view, [degraded])
     assert.doesNotMatch(text, /run_fire_assessment/)
     assert.match(text, /不可信/)
+  })
+})
+
+describe('告警是否已处理（代码判断）与重复投递的唤醒消息', () => {
+  it('告警之后有研判记录或确认才算已处理；之后又来的新告警不受影响', async () => {
+    const { store, id, alert } = await setup()
+    let st = alertStatuses(await store.entries(id))
+    assert.deepEqual(st.map((s) => [s.alert_id, s.state, s.handled_by, s.deliveries]), [[alert.event_id, 'new', null, 0]])
+    await store.append(id, '2026-11-05T08:11:00', 'delivered', 'plugin', { alert_id: alert.event_id, session_id: 'S1' })
+    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判' })
+    const b = await store.append(id, '2026-11-05T09:00:00', 'alert', 'sentinel', { cause: 'anomaly', summary: '又一条' })
+    st = alertStatuses(await store.entries(id))
+    assert.deepEqual(st.map((s) => [s.alert_id, s.state, s.handled_by]), [[alert.event_id, 'handled', '研判'], [b.event_id, 'new', null]])
+    assert.equal(st[0]!.deliveries, 1)
+    // 确认（acked）也算；只看指定的告警
+    await store.append(id, '2026-11-05T09:01:00', 'acked', 'agent', { alert_id: b.event_id })
+    const only = alertStatuses(await store.entries(id), new Set([b.event_id]))
+    assert.deepEqual(only.map((s) => [s.alert_id, s.state, s.handled_by]), [[b.event_id, 'handled', '确认']])
+    // 与告警无关的记录（审批、其他 note）不算处理
+    const { store: s2, id: id2, alert: a2 } = await setup()
+    await s2.append(id2, '2026-11-05T08:12:00', 'note', 'approval', { type: 'approval_pending', approval_key: 'k', tool: 'publish_warning' })
+    assert.equal(alertStatuses(await s2.entries(id2))[0]!.state, 'new')
+    assert.ok(a2)
+  })
+
+  it('已处理的告警：消息标注“重复投递”，不再带“立即研判”，只让简短说明', async () => {
+    const { store, id, alert } = await setup()
+    await store.append(id, '2026-11-05T08:11:00', 'delivered', 'plugin', { alert_id: alert.event_id, session_id: 'S1' })
+    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判' })
+    const entries = await store.entries(id)
+    const text = composeMessage(await store.get(id), [entries.find((e) => e.kind === 'alert')!], alertStatuses(entries))
+    assert.match(text, /【重复投递：之后已有研判记录，已处理】/)
+    assert.match(text, /这是重复投递/)
+    assert.doesNotMatch(text, /请立即对该工作面做完整研判/)
+    // 新告警的消息不变
+    const fresh = composeMessage(await store.get(id), [entries.find((e) => e.kind === 'alert')!], [])
+    assert.match(fresh, /请立即对该工作面做完整研判/)
+    assert.doesNotMatch(fresh, /重复投递：/)
+  })
+
+  it('同一条消息里新旧告警并存：新的照常要求，旧的标注重复', async () => {
+    const { store, id, alert } = await setup()
+    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判' })
+    const b = await store.append(id, '2026-11-05T09:00:00', 'alert', 'sentinel', { cause: 'mine_alarm', summary: '矿井报警' })
+    const entries = await store.entries(id)
+    const alerts = entries.filter((e) => e.kind === 'alert')
+    const text = composeMessage(await store.get(id), alerts, alertStatuses(entries))
+    assert.match(text, new RegExp(`${alert.event_id}.*重复投递`))
+    assert.doesNotMatch(text, new RegExp(`${b.event_id}.*重复投递`))
+    assert.match(text, /check_mine/) // 新告警（矿井报警）的要求还在
+    assert.doesNotMatch(text, /请立即对该工作面做完整研判/) // 旧告警（异常）的要求没了
+  })
+
+  it('get_incident 返回最近告警的处理状态', async () => {
+    const { store, id, alert } = await setup()
+    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判' })
+    const reg: Record<string, any> = {}
+    registerTools({ tools: { register: (t: any) => (reg[t.name] = t) } }, store, async () => '2026-11-05T10:00:00', async () => ({ default_after_h: 2, max_after_h: 48 }))
+    const out = await reg.get_incident.execute({ incident_id: id })
+    assert.deepEqual(out.alert_status.map((s: any) => [s.alert_id, s.state]), [[alert.event_id, 'handled']])
   })
 })
 

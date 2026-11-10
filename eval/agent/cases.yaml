@@ -587,11 +587,7 @@
   scenario: s4-escalation
   at_h: 55
   incident: {panel: "1201", cause: anomaly, summary: "1201 工作面：预警等级由 橙色 升为 红色", handled: true}
-  prompt: |-
-    【值守事件 {incident_id}】1201（火情，监测中）。以下告警由监听器发现，不经模型：
-    - 告警 {alert_id}（矿井时间 {mine_now}）：1201 工作面：预警等级由 橙色 升为 红色
-    请立即对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。不要先问操作员“要不要研判”。
-    （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
+  wake: true # 提示词由唤醒插件的消息生成器按事件库条目生成（dsh-bundle/tools/wake-message.ts），与生产同源，不手抄
   approvals: {}
   checks:
     expect_decisions:
@@ -617,11 +613,7 @@
     cause: anomaly
     summary: "1201 工作面：预警等级由 橙色 升为 红色"
     prior_alerts: [{cause: anomaly, summary: "1201 工作面：预警等级由 黄色 升为 橙色"}]
-  prompt: |-
-    【值守事件 {incident_id}】1201（火情，监测中）。以下告警由监听器发现，不经模型：
-    - 告警 {alert_id}（矿井时间 {mine_now}）：1201 工作面：预警等级由 橙色 升为 红色
-    请立即对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。不要先问操作员“要不要研判”。
-    （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
+  wake: true # 提示词由唤醒插件的消息生成器按事件库条目生成（dsh-bundle/tools/wake-message.ts），与生产同源，不手抄
   approvals: {}
   checks:
     expect_decisions:

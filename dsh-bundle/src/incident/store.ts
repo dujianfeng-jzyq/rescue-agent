@@ -250,3 +250,60 @@ export class IncidentStore {
     return found.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))[0]
   }
 }
+
+/** 研判、复评、方案、对外动作等“处理告警”的记录类型（流程和 guard 自动写进时间线的 note）；acked 也算已处理 */
+const HANDLING_NOTES: Record<string, string> = {
+  assessment: '研判',
+  effect_review: '效果复评',
+  firefighting_plan: '防灭火方案',
+  sealing_plan: '封闭方案',
+  unsealing: '启封评估',
+  action: '对外动作',
+}
+
+export interface AlertStatus {
+  alert_id: string
+  at: string
+  cause: string
+  summary: string
+  /** 已投递次数（delivered 条目数）；大于 1 一定是重复投递 */
+  deliveries: number
+  /** handled：这条告警之后时间线里已有研判等处理记录（或被确认过）；new：还没有 */
+  state: 'handled' | 'new'
+  /** 已处理时，依据是哪类记录（如“研判”） */
+  handled_by: string | null
+}
+
+/**
+ * 每条告警是不是已经处理过——由代码按时间线判断，不靠智能体自己读（第五版：重复投递的告警应忽略，评测里智能体约三分之二照消息里的
+ * “立即研判”重做）。规则：告警条目之后（文件顺序）出现 acked，或出现研判、复评、方案、对外动作的记录，就算已处理；之后又来的新告警不受前面记录影响。
+ * 只用事件库已有的条目，不改折叠规则（Python 侧共用折叠样例不受影响）。
+ */
+export function alertStatuses(entries: Entry[], only?: Set<string>): AlertStatus[] {
+  const out: AlertStatus[] = []
+  entries.forEach((e, i) => {
+    if (e.kind !== 'alert' || (only && !only.has(e.event_id))) return
+    let by: string | null = null
+    for (const later of entries.slice(i + 1)) {
+      if (later.kind === 'acked' && later.data.alert_id === e.event_id) {
+        by = '确认'
+        break
+      }
+      const t = later.kind === 'note' ? String(later.data.type ?? '') : ''
+      if (HANDLING_NOTES[t]) {
+        by = HANDLING_NOTES[t]!
+        break
+      }
+    }
+    out.push({
+      alert_id: e.event_id,
+      at: e.at,
+      cause: String(e.data.cause ?? ''),
+      summary: String(e.data.summary ?? ''),
+      deliveries: entries.filter((x) => x.kind === 'delivered' && x.data.alert_id === e.event_id).length,
+      state: by ? 'handled' : 'new',
+      handled_by: by,
+    })
+  })
+  return out
+}

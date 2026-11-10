@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.request
@@ -272,7 +273,15 @@ def _unanswered(s: grade.Session) -> list[tuple[str, str]]:
 def run_one(page: Page, case: dict, model: str | None, timeout_s: float, quiet_s: float) -> dict:
     mine_now, fmt = setup_sim(case)
     setup_incident(case, mine_now, fmt)
-    prompt = " ".join(case["prompt"].format(**fmt).split("\n"))  # 输入框里换行会提前发送：压成一行
+    if case.get("wake"):
+        # 提示词由唤醒插件的生成器按事件库里的真实条目生成（与生产里智能体收到的消息同源），不在用例里手抄
+        text = subprocess.run(
+            ["node", "tools/wake-message.ts", os.environ["RESCUE_INCIDENT_DIR"], fmt["incident_id"], fmt["alert_id"]],
+            cwd=ROOT / "dsh-bundle", capture_output=True, text=True, check=True, timeout=60,
+        ).stdout  # fmt: skip
+    else:
+        text = case["prompt"].format(**fmt)
+    prompt = " ".join(text.split("\n"))  # 输入框里换行会提前发送：压成一行
     new_session(page)
     if model:
         select_model(page, model)

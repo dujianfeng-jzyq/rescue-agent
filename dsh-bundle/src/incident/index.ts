@@ -14,7 +14,7 @@ import { parse as parseYaml } from 'yaml'
 import type { Context } from '../adapter/dsh.ts'
 import { defineTool, Schema } from '../adapter/dsh.ts'
 import { McpClient } from '../evidence/mcp-client.ts'
-import { IncidentStore, STATUSES, type Entry, type IncidentView } from './store.ts'
+import { alertStatuses, IncidentStore, STATUSES, type Entry, type IncidentView } from './store.ts'
 
 export const name = 'rescue-incident'
 export const inject = ['tools']
@@ -43,6 +43,7 @@ const jsonOutput = {
 const toJson = (v: unknown) => v as never
 
 const TIMELINE_LIMIT = 40
+const ALERT_STATUS_LIMIT = 10
 
 const brief = (e: Entry) => ({ event_id: e.event_id, at: e.at, kind: e.kind, by: e.by, ...e.data })
 
@@ -78,6 +79,8 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
     return {
       ...v,
       pending_alert_details: entries.filter((e) => want.has(e.event_id)).map(brief),
+      // 最近的告警各自是不是已处理（代码按时间线判断）：消息里的告警编号在这里 state 为 handled，就是重复投递，不要重新研判
+      alert_status: alertStatuses(entries).slice(-ALERT_STATUS_LIMIT),
       timeline: entries.slice(-TIMELINE_LIMIT).map(brief),
       timeline_truncated: entries.length > TIMELINE_LIMIT,
     }
@@ -88,6 +91,7 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
       name: 'get_incident',
       description:
         '读事件。不给 incident_id：列出所有未关闭的事件（含待确认告警数、跟踪计划数）。给 incident_id：返回事件的状态、待确认告警、跟踪计划和最近的时间线。' +
+        '返回里的 alert_status 是最近告警各自的处理状态（代码按时间线判断）：消息里的告警编号在这里 state 为 handled，就是重复投递，简短说明即可，不要重新研判、不要重复对外动作。' +
         '事件由常驻监听器在发现异常时创建，之后的研判、对外动作、跟踪都应挂在事件上。',
       parameters: { incident_id: { type: 'string', description: '事件编号（INC-…）；缺省为列表' } },
       output: jsonOutput,
