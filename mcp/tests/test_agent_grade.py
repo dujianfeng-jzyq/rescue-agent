@@ -585,3 +585,18 @@ def test_map_marks_min_counts_only_successful_marks():
     only_focus = _map_session([({"action": "focus", "name": "c"}, OK)])
     assert not grade.grade(only_focus, {"map_marks_min": 1})["checks"]["map_marks_min"]["ok"], "只定位不算标记"
 
+
+
+def test_code_cards_do_not_count_as_extra_questions():
+    """第五版：代码给出的卡片（处置选项、现场条件）是设计内的选处置/缺信息，no_questions 不计；别的提问照计。"""
+    import json as _json
+
+    from grade import _is_code_card
+
+    card = _json.dumps({"questions": [{"header": "处置选项", "id": "o", "question": "q"}]})
+    cond = _json.dumps({"questions": [{"header": "现场条件", "id": "a", "question": "q"}, {"header": "现场条件", "id": "b", "question": "q"}]})
+    other = _json.dumps({"questions": [{"header": "要不要研判", "id": "x", "question": "q"}]})
+    mixed = _json.dumps({"questions": [{"header": "处置选项", "id": "o", "question": "q"}, {"header": "别的", "id": "x", "question": "q"}]})
+    assert _is_code_card(card) and _is_code_card(cond)
+    assert not _is_code_card(other) and not _is_code_card(mixed)
+    assert not _is_code_card(None) and not _is_code_card("坏的 json")
