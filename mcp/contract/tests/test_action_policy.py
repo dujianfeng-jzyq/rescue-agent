@@ -34,3 +34,13 @@ def test_approval_titles_come_from_the_table():
     assert ACTION_NAMES["publish_warning"] == "发布预警等级"
     r = precheck("notify_evacuation", {}, None, None)
     assert r["summary"]["action"] == BY_TOOL["notify_evacuation"].name
+
+
+def test_on_timeout_defaults_to_escalate_and_never_auto_executes_field_actions():
+    """第五版：超时怎么办。缺省 escalate（只升级提醒、不执行）；自动处理要有批准超时和升级对象；非 C 级不能设；
+    影响现场或不可逆的动作（预警广播、撤人、升级、封闭、调度、防灭火方案、启封）一律不自动执行。"""
+    assert all(p.on_timeout in ("approve", "reject", "escalate") for p in POLICIES)
+    for tool in ("publish_warning", "escalate_emergency", "notify_evacuation", "issue_dispatch_order", "issue_sealing_plan", "issue_firefighting_plan", "approve_unsealing"):
+        assert BY_TOOL[tool].on_timeout == "escalate", tool
+    assert all(p.on_timeout == "escalate" for p in POLICIES if p.level != ActionLevel.C)
+    assert all(p["on_timeout"] in ("approve", "reject", "escalate") for p in export()["policies"])

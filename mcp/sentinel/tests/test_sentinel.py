@@ -275,6 +275,24 @@ async def test_approval_timeout_escalates_once(tmp_path, monkeypatch):
 
 
 @arun
+async def test_auto_timeout_approvals_are_left_to_the_plugin(tmp_path, monkeypatch):
+    """on_timeout 为 approve / reject 的确认由审批插件到点处理，监听器不重复升级；超过两倍批准超时仍未决才兜底（插件已经挂了）。"""
+    from datetime import datetime
+
+    f = Fake(tmp_path, monkeypatch)
+    await f.step(result("blue", "latent", reasons=["x"], escalated=True))
+    (inc,) = f.store.list()
+    iid = inc["incident_id"]
+    f.store.append(iid, f.mine_now(), "note", "approval", {"type": "approval_pending", "approval_key": "a1", "tool": "start_monitoring", "confirmer": "值班长", "timeout_min": 5, "escalate_to": "总工程师", "on_timeout": "approve"})
+    asked = datetime.fromisoformat(f.store.entries(iid)[-1]["wall"]).timestamp()
+    f.s.wall = lambda: asked + 6 * 60  # type: ignore[method-assign]
+    assert await f.step(result("blue", "latent")) == []  # 超时了，但插件会自动处理
+    f.s.wall = lambda: asked + 11 * 60  # type: ignore[method-assign]
+    got = await f.step(result("blue", "latent"))  # 两倍超时仍未决：兜底升级
+    assert [a["data"]["tool"] for a in got] == ["start_monitoring"]
+
+
+@arun
 async def test_approval_timeout_escalates_even_when_mine_clock_is_down(tmp_path, monkeypatch):
     """矿井接口故障（取不到时钟）时，人工确认的批准超时仍要升级：超时按真实时间算，与矿井无关。"""
     from datetime import datetime

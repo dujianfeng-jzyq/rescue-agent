@@ -20,6 +20,8 @@ export interface ActionPolicy {
   /** 批准超时（分钟）：P3 的监听器据此提醒、升级 */
   approval_timeout_min?: number | null
   escalate_to?: string | null
+  /** 批准超时后怎么办：approve 自动放行、reject 自动拒绝、escalate 只升级提醒（缺省，不执行） */
+  on_timeout?: 'approve' | 'reject' | 'escalate'
 }
 
 export interface ApprovalConfig {

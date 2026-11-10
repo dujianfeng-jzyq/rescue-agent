@@ -209,6 +209,10 @@ class Sentinel:
                 waited_s = wall_now - datetime.fromisoformat(a["asked_wall"]).timestamp()
                 if waited_s < limit * 60:
                     continue
+                # on_timeout 为 approve / reject 的由审批插件到点自动处理（结果记 approval_decided，确认就不再未决）；
+                # 这里只在超过两倍批准超时仍未决时兜底升级（插件或 DSH 已经挂了，没有人在处理）
+                if a.get("on_timeout") in ("approve", "reject") and waited_s < 2 * limit * 60:
+                    continue
                 waited_min = int(waited_s // 60)
                 to = a.get("escalate_to") or "上一级"
                 self.store.append(v["incident_id"], now, "note", BY, {"type": "approval_escalated", "approval_key": a["approval_key"], "tool": a["tool"], "escalate_to": to, "waited_min": waited_min})

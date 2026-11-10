@@ -15,7 +15,7 @@ import { Schema } from '../adapter/dsh.ts'
 import { readFileSync } from 'node:fs'
 
 import { IncidentStore } from '../incident/store.ts'
-import { type PendingInfo, recordDecided, recordPending } from './pending.ts'
+import { type PendingInfo, recordDecided, recordPending, timeoutOutcome } from './pending.ts'
 
 import { type ActionPolicy, type ApprovalConfig, classify, type FetchLike, precheck } from './policy.ts'
 
@@ -40,6 +40,7 @@ export const Config: Schema<Config> = Schema.object({
     confirmer: Schema.string(),
     approval_timeout_min: Schema.number(),
     escalate_to: Schema.string(),
+    on_timeout: Schema.union(['approve', 'reject', 'escalate'] as const),
   })).default(loadPolicies()),
   precheckUrl: Schema.string().default('http://127.0.0.1:8106/redlines/check'),
   precheckTimeoutMs: Schema.natural().default(5000),
@@ -60,19 +61,41 @@ export function apply(ctx: Context, config: Config) {
     for (const [k, v] of asked) if (v.at < limit) asked.delete(k)
   }
 
-  // 确认的等待和结果记进事件时间线（失败只记警告，不影响确认）
+  // 确认的等待和结果记进事件时间线（失败只记警告，不影响确认）。
+  // 第五版：动作分级表 on_timeout 为 approve / reject 的动作，批准超时（真实时间）没人回应就按表自动处理，结果记 auto: timeout；
+  // 其余（escalate，缺省）一直等人，由监听器升级提醒，**不会自动执行**。
   ;(ctx as any).on('approval/request', async (req: any, next: () => Promise<string>) => {
     const info = req.callId ? asked.get(String(req.callId))?.info : undefined
     if (!info || !incidents) return next()
     const key = String(req.callId)
     await recordPending(incidents, key, info).catch((err: Error) => ctx.logger.warn(`rescue-approval: 记录待确认失败：${err.message}`))
     let outcome = 'unavailable'
+    let auto: 'timeout' | undefined
+    const auto_ = timeoutOutcome(info.policy)
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      outcome = await next()
+      const answer = next()
+      if (auto_) {
+        const timedOut = new Promise<'timeout'>((resolve) => {
+          timer = setTimeout(() => resolve('timeout'), auto_.ms)
+        })
+        const first = await Promise.race([answer, timedOut])
+        if (first === 'timeout') {
+          answer.catch(() => {}) // 弹窗那一侧的结果不要了
+          outcome = auto_.outcome
+          auto = 'timeout'
+          ctx.logger.info?.(`rescue-approval: ${info.tool} 批准超时（${info.policy?.approval_timeout_min} 分钟），按 on_timeout=${info.policy?.on_timeout} 自动${outcome === 'allowed-once' ? '放行' : '拒绝'}`)
+          return outcome as never
+        }
+        outcome = first
+        return outcome as never
+      }
+      outcome = await answer
       return outcome as never
     } finally {
+      if (timer) clearTimeout(timer)
       asked.delete(key)
-      await recordDecided(incidents, key, info, outcome).catch((err: Error) => ctx.logger.warn(`rescue-approval: 记录确认结果失败：${err.message}`))
+      await recordDecided(incidents, key, info, outcome, auto).catch((err: Error) => ctx.logger.warn(`rescue-approval: 记录确认结果失败：${err.message}`))
     }
   })
 

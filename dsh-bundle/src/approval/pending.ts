@@ -29,9 +29,19 @@ export async function recordPending(store: IncidentStore, key: string, info: Pen
     confirmer: info.policy?.confirmer ?? null,
     timeout_min: info.policy?.approval_timeout_min ?? null,
     escalate_to: info.policy?.escalate_to ?? null,
+    on_timeout: info.policy?.on_timeout ?? 'escalate',
   })
 }
 
-export async function recordDecided(store: IncidentStore, key: string, info: PendingInfo, outcome: string): Promise<void> {
-  await store.append(info.incidentId, await lastAt(store, info.incidentId), 'note', 'approval', { type: 'approval_decided', approval_key: key, tool: info.tool, outcome })
+export async function recordDecided(store: IncidentStore, key: string, info: PendingInfo, outcome: string, auto?: 'timeout'): Promise<void> {
+  await store.append(info.incidentId, await lastAt(store, info.incidentId), 'note', 'approval', { type: 'approval_decided', approval_key: key, tool: info.tool, outcome, ...(auto ? { auto } : {}) })
+}
+
+/** 批准超时自动处理（第五版）：on_timeout 为 approve / reject 且给了批准超时（分钟，真实时间）才有；否则返回 undefined（人没回应就一直等，由监听器升级提醒） */
+export function timeoutOutcome(policy: ActionPolicy | undefined): { ms: number; outcome: 'allowed-once' | 'rejected' } | undefined {
+  const min = policy?.approval_timeout_min
+  if (!min || min <= 0) return undefined
+  if (policy.on_timeout === 'approve') return { ms: min * 60_000, outcome: 'allowed-once' }
+  if (policy.on_timeout === 'reject') return { ms: min * 60_000, outcome: 'rejected' }
+  return undefined
 }

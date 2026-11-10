@@ -12,7 +12,8 @@
       "name": "发布预警等级",
       "confirmer": "通风部门负责人",
       "approval_timeout_min": 10,
-      "escalate_to": "值班长"
+      "escalate_to": "值班长",
+      "on_timeout": "escalate"
     },
     {
       "tool": "escalate_emergency",
@@ -20,7 +21,8 @@
       "name": "升级为应急响应",
       "confirmer": "总工程师或矿长",
       "approval_timeout_min": 15,
-      "escalate_to": "矿长"
+      "escalate_to": "矿长",
+      "on_timeout": "escalate"
     },
     {
       "tool": "notify_evacuation",
@@ -28,7 +30,8 @@
       "name": "发布补充撤人名单",
       "confirmer": "调度员",
       "approval_timeout_min": 5,
-      "escalate_to": "值班长"
+      "escalate_to": "值班长",
+      "on_timeout": "escalate"
     },
     {
       "tool": "issue_dispatch_order",
@@ -36,7 +39,8 @@
       "name": "下发物资调度单",
       "confirmer": "指挥部指定负责人",
       "approval_timeout_min": 15,
-      "escalate_to": "总指挥"
+      "escalate_to": "总指挥",
+      "on_timeout": "escalate"
     },
     {
       "tool": "issue_sealing_plan",
@@ -44,7 +48,8 @@
       "name": "下发封闭方案",
       "confirmer": "总指挥 + 救护队带队指挥员",
       "approval_timeout_min": 30,
-      "escalate_to": "总指挥"
+      "escalate_to": "总指挥",
+      "on_timeout": "escalate"
     },
     {
       "tool": "issue_firefighting_plan",
@@ -52,7 +57,8 @@
       "name": "下发防灭火方案",
       "confirmer": "总工程师",
       "approval_timeout_min": 30,
-      "escalate_to": "总指挥"
+      "escalate_to": "总指挥",
+      "on_timeout": "escalate"
     },
     {
       "tool": "approve_unsealing",
@@ -60,7 +66,8 @@
       "name": "批准启封",
       "confirmer": "总指挥",
       "approval_timeout_min": 30,
-      "escalate_to": "矿长"
+      "escalate_to": "矿长",
+      "on_timeout": "escalate"
     },
     {
       "tool": "precheck_plan",
@@ -68,7 +75,8 @@
       "name": "方案红线自查",
       "confirmer": null,
       "approval_timeout_min": null,
-      "escalate_to": null
+      "escalate_to": null,
+      "on_timeout": "escalate"
     },
     {
       "tool": "query_last_issued",
@@ -76,7 +84,8 @@
       "name": "查询最近一次下发",
       "confirmer": null,
       "approval_timeout_min": null,
-      "escalate_to": null
+      "escalate_to": null,
+      "on_timeout": "escalate"
     }
   ]
 }

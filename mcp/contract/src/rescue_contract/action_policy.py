@@ -8,6 +8,7 @@
 这张表是分级的唯一来源：DSH 审批插件按它决定哪些工具要弹确认（读 `dsh-bundle/data/action-policy.json`，由 export_schema 导出），
 guard 的测试检查“每个工具都登记了、登记的都存在”。**没有登记的工具按 C 级处理**（fail closed）。
 
+超时后怎么办（on_timeout，第五版）：approve 自动放行（只给低风险、可逆的动作，如加密监测）、reject 自动拒绝、escalate 只升级提醒不执行（缺省；影响现场或不可逆的动作一律不自动执行）。
 确认人、批准超时、超时后升级给谁，都是占位值（TODO(专家)：演示后审定）。超时升级由 P3 的监听器执行
 （写进事件时间线）；批准人按角色限定需要 DSH 的用户身份，P3/P4 再做，目前确认人只用于弹窗显示。
 """
@@ -32,6 +33,7 @@ class ActionPolicy:
     confirmer: str | None = None  # 确认人角色（C 级）
     approval_timeout_min: int | None = None  # 批准超时（分钟，C 级）：超时未批准要提醒、升级
     escalate_to: str | None = None  # 超时后提醒/升级给谁
+    on_timeout: str = "escalate"  # 批准超时后怎么办（第五版）：approve 自动放行、reject 自动拒绝、escalate 只升级提醒（缺省，不执行）
 
 
 POLICIES: tuple[ActionPolicy, ...] = (
@@ -48,6 +50,13 @@ POLICIES: tuple[ActionPolicy, ...] = (
     ActionPolicy("query_last_issued", ActionLevel.A, "查询最近一次下发"),
     # B 级（给值班人员的告警、事件更新）随第三版 P3 的 incident 插件加入
 )
+
+ON_TIMEOUT = ("approve", "reject", "escalate")
+for _p in POLICIES:
+    assert _p.on_timeout in ON_TIMEOUT, f"{_p.tool} 的 on_timeout 不合法：{_p.on_timeout}"
+    # 只有 C 级（要人批准的）有“超时怎么办”；自动放行必须有批准超时和升级对象（放行后仍要让上级知道）
+    assert _p.level == ActionLevel.C or _p.on_timeout == "escalate", f"{_p.tool}：非 C 级不能设 on_timeout"
+    assert _p.on_timeout == "escalate" or (_p.approval_timeout_min and _p.escalate_to), f"{_p.tool}：自动处理要有批准超时和升级对象"
 
 BY_TOOL: dict[str, ActionPolicy] = {p.tool: p for p in POLICIES}
 assert len(BY_TOOL) == len(POLICIES), "action_policy 里有重复的工具"
