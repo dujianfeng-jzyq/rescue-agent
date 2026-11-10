@@ -2,7 +2,7 @@
 
 > 2026-11-07 整理。取代 `eval-consistency-handoff.md`（交接文档，任务完成后删除，内容已并入本文）。
 > 所有期望都是**占位值**，来自我们的猜测或技能文字，**不是专家规则**，不要声称它们“正确”（CLAUDE.md 约定 6）。
-> 分支 `eval-facts`，未推送、未合入。
+> 已合入 `main`。2026-11-10 更新：第五版（处置选项卡片、现场条件卡片、重复告警的代码判断）对评测的影响见 6.2。
 
 ## 1. 目标与思路
 
@@ -63,7 +63,7 @@
 
 每个用例开始前，运行器会关闭事件库里遗留的未关闭事件（曾因此污染过 `s4-watch-wake-assess`）。
 
-## 5. 用例清单（34 个，不含探测用例 `exp-probe-env`）
+## 5. 用例清单（本节是 34 个用例的清单；之后新增 5 个 `v4-map-*` 地图用例和探测用例 `exp-probe-env`，现共 40 个，第五版对用例的调整见 6.2）
 
 “对外动作”一列：必须 / 可选；“无必须”且无可选 = 一个都不能提交。最后一列是 2026-11-07 修复运行器后的完整重跑（deepseek-flash，各 3 次）里**全部检查都通过**的次数，括号内为按新规则重判后的值。
 
@@ -131,6 +131,15 @@
 - **`grade.py` 清理第一版兼容后**：对 40 个已有会话清理前后逐项判定相同；`s2-assess-1201`、`s2-effect-after-inerting`、`s4-escalate-1201`、`s4-explosion-risk`、`s4-sealing-plan` 各 1 次真实运行通过。用例的 `tools_called` 现在直接写第二版工具名。
 - **故事线整条走通**（`eval/agent/story.py`，场景 s3 按黄、橙、红分段推进，再到封闭、启封、复盘、收尾；检查点按分级决策表）：本机 14 项全过；Docker 演示环境一次 11/13（黄色漏登记跟踪计划、橙色漏下发防灭火方案，都是智能体行为；同样的两处在单次提问的决策评测里 10/10，稳定性留待演示后）。红色阶段智能体是否自己起草封闭方案每次不同，列为观察项。
 
+### 6.2 第五版回归（2026-11-09 至 11-10，deepseek-flash）
+
+- **运行器和判定**：用例 `operator_cards: true` 时，运行器扮演操作员回答代码给出的卡片（橙色处置选项多选、封闭方案现场条件 6 题、点跳过），沿用故事线的答题逻辑；`no_questions` 和 `expect_decisions.questions` 不计代码给出的卡片（header 为“处置选项”“现场条件”，`decisions.is_code_card`）；`tools_called` 认 `get_response_options`、`get_field_conditions`；用例 `wake: true` 时提示词由 `dsh-bundle/tools/wake-message.ts` 用唤醒插件同一个生成器生成（与生产同源，不手抄）。
+- **用例调整**：黄色用例 `v3-yellow-observe` 改为“加密监测放行、不提交别的”（去掉 `no_issue`）；`v3-reignition-reseal` 把 `start_monitoring` 列为可选；橙色用例要求先 `get_response_options`；橙色、封闭、复燃重新封闭、`s4-plan-context-tamper`、`s4-watch-wake-assess`、`v3-dispatch-order` 声明 `operator_cards`。
+- **全量**（40 个用例含 `exp-probe-env`，各 1 次）：36 通过；4 个未通过里 3 个是用例没适配新流程（智能体弹出卡片，运行停在卡片处），适配后重跑：`s4-watch-wake-assess` 3/3、`v3-dispatch-order` 3/3、`s4-plan-context-tamper` 2/3（失败 1 次是已知的 `no_wait_polling`）。
+- **`v3-wake-repeat-dup`（原第 8 节第 4 项）已解决**：重复投递的告警 2/6 通过。A/B 对比（主预设和技能回退到改动前也是 2/6）证明是原有的不稳定，根因是生产里的唤醒消息自相矛盾（“请立即研判”+“已处理的忽略”），“是否已处理”全靠智能体自己判断。改为代码判断（`alertStatuses`）并让消息同源后 6/6，`v3-wake-repeat-new` 6/6，平均 token 17.6 万 → 3.5 万。详见 `docs/design-v5-demo-flow.md` 第 7 节。
+- **故事线**（`story.py`）14/14；橙色卡片默认点跳过才会自然升红（追加注浆、堵漏则受控、不会升红）。演示脚本 `eval/agent/demo_run.py` 按导演流程走一遍。
+- 稳定性：除重复告警用例（各 6 次）和重跑的 3 个（各 3 次）外，都只跑了 1 次。
+
 ## 7. 怎么跑
 
 ```bash
@@ -151,7 +160,9 @@ cd mcp && uv run --python 3.14 pytest tests/test_agent_*.py -q ; cd .. && make l
 - 用 `pgrep -f` 等进程会匹配到自己的 shell；`pkill -f eval/agent/run.py` 会把当前 shell 一起杀掉。
 - 评测期间模拟时钟冻结，不要在演示进行中运行；放行类用例会写台账，必须用 `make dev-eval`。
 - 运行器缺省把事件建在 `var/eval/incidents`；漏设 `RESCUE_INCIDENT_DIR` 会让依赖事件的用例结果作废。
-- 重新生成技能样例（`make_skill_cases.py` 全量）会改写约 26 个无关文件，提交前回退。
+- 重新生成技能样例（`make_skill_cases.py` 全量）会改写大量无关文件，提交前要看 diff。
+- 会弹代码给出卡片的用例（橙色、封闭方案、复燃重新封闭等）必须写 `operator_cards: true`，否则运行停在卡片处（`asked_user`），后面的检查没法做。
+- `make dev-eval` 和 Docker 演示不要同时跑；评测运行器偶发“没有找到评测会话”，重跑即可。
 - 失败先看会话日志：`grade.load_tree(会话 id)` 读 `.dsh-home/sessions/.../session.v4.jsonl.zstd`。
 - 改文档时用“整行替换”并核对结果：Python 的 `str.replace` 不匹配时静默无变化，曾因此丢过几次补充。
 
@@ -161,7 +172,7 @@ cd mcp && uv run --python 3.14 pytest tests/test_agent_*.py -q ; cd .. && make l
 1. 撤人通知 `notify_evacuation` 什么等级起必须提交（现在一律可选）；预警 `publish_warning` 什么等级、阶段起必须主动发（现在只有红色必须）。
 2. 复评后“需继续处置”是否必须登记新跟踪计划（现按技能步骤推导为必须，`v3-followup-due` 3/3 都在做）。
 3. `Escalation.recommended_level` 是自由字符串（智能体有时填 `red`，有时填“红色（危险）”），守卫不校验、期望里不约束。要不要改枚举或去掉（改契约要 `make schema`）。
-4. `v3-wake-repeat-dup`（重复投递不该重新研判）：现在记为智能体的问题，要不要加强技能 `fire-incident-management` 第 1 步的写法（之前加禁令没有可测量的好处，改之前先判断值不值得）。
+4. ~~`v3-wake-repeat-dup`（重复投递不该重新研判）~~：**已解决（2026-11-10）**，改为由代码判断告警是否已处理并让唤醒消息同源，见 6.2。
 5. “自己数的 1 条”（单元素列表的计数）要不要像空列表的 0 一样放行。
 6. 评测员去留，要不要换更强的模型（`deepseek-v4-pro` 可用，先对比校准结果）；去留定了再处理 `rejection_reported`、`final_mentions` 与评测员并存的问题。
 
@@ -178,4 +189,4 @@ cd mcp && uv run --python 3.14 pytest tests/test_agent_*.py -q ; cd .. && make l
 
 **维护**
 14. 阈值、场景、技能变了就重新 `gen_expected.py`，看 diff；期望转为专家审定后把 `status: placeholder` 改成审定状态（并更新 `test_agent_decisions.py` 里的检查）。
-15. `CLAUDE.md` 的评测说明里补充 `expect_decisions` 与本文的指针（已加一行）。
+15. `CLAUDE.md` 的文档索引里有本文和 `eval/README.md` 的指针（已有）。

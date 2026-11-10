@@ -1,8 +1,17 @@
 # 真实 DSH 验证清单
 
-骨架在无法访问 npm 的环境中搭建：TypeScript 插件只对照按 0.2.1-rc.4 签名编写的类型桩做过类型检查和单元测试，patch 只做过离线校验（`scripts/check_patches.py`）。**第一次在联网环境装好 DSH 后，按下表逐项验证**；以后每次升级 DSH 也重跑一遍。
+在真实 DSH（锁定 0.2.1-rc.4）上验证的记录。每次升级 DSH 都要把相关项重跑一遍（尤其是依赖 DSH 内部行为的：#22、#26/#28/#29 的悬浮层选择器、#37 的自动放行换 signal）。
+最早的 #1–#17 是在无法访问 npm 的环境里搭骨架后第一次联网验证的表格；之后每项验证写成“编号 + 日期 + 结果”的小节，附在表后。✓ / ✗ 和日期写在“结果”列或小节里，✗ 的项开 issue 并在此链接。
 
-验证人在“结果”列填 ✓ / ✗ 和日期；✗ 的项开 issue 并在此链接。
+**编号索引**（按版本）：
+
+| 编号 | 内容 |
+| --- | --- |
+| #1–#17 | 第一版：bundle 安装、patch 合成、技能发现、委派、预检拦截、人工确认、审计、上下文压缩、本地大模型等 |
+| #18–#23 | 第二版 P0/P4：DSH 自带工作流（不采用）、插件工具编排、插件登记后台任务、容器内 bash 沙箱、插件起 Python 子进程、唤醒失败的补救 |
+| #24、#40–#42 | 第三版：无人会话唤醒（#24）、监听器 + 事件库 + 唤醒插件整条链路（#40，原编号 #25）、值班会话工作区与标题（#41，原 #26）、审批等待写事件与批准超时升级（#42，原 #27）；#25–#27 原编号与第四版重复，2026-11-10 改号 |
+| #25–#36 | 第四版：浏览器端插件、悬浮层、推送与鉴权、底图与界面、大屏外壳、实时叠加、智能体控制地图、人工确认走查、智能体状态、点选引用、撤人路线与受威胁人员 |
+| #37–#39 | 第五版：批准超时自动处理（含确认卡片残留的发现）、处置选项卡片与导演衔接、封闭方案现场条件卡片 |
 
 | # | 验证项 | 怎么验证 | 期望 | 结果 |
 | --- | --- | --- | --- | --- |
@@ -78,7 +87,7 @@
   - 借道委派：子 Agent 调 delegate 被拒，原因是委派层数上限（当前深度 1，上限 1）。所以子 Agent 也拿不到 kb 和其他 rescue-* 预设。
   - 结构化输出：5 个子 Agent 都按 schema 返回；取预警等级的子 Agent 照抄 `level=red`、`stage_name=加速氧化`，与工具结果一致；每个子 Agent 6–10 秒。
   - 人工确认：子会话日志里 `approval/policy` 为 `{"policy": "never", "source": "delegation"}`。子 Agent 调 `publish_warning` 时红线预检通过、记了 `approval/asked`，随即 `approval/decided: rejected`，网页端没有弹确认；`var/eval/audit/tool-actions.jsonl` 2026-11-02T16:24:15Z 一条 denied，detail 为 `the user rejected tool ...`，与真人拒绝无法区分（与“Full access 下指令一律被自动拒绝”同类）。指令发不出去，不会绕过确认，但复盘时会误判为人拒绝。
-  - 结论：不采用（ADR 0006）。确定性流程改为 MCP 工具实现（`docs/workflow-design.md`）。以后 DSH 版本若支持 `agent()` 指定预设，再重新评估。
+  - 结论：不采用（ADR 0006）。确定性流程改为 MCP 工具实现（第一版的 `workflow-design.md` 已于 2026-11-10 删除，见提交历史；第二版起改为固定流程插件）。以后 DSH 版本若支持 `agent()` 指定预设，再重新评估。
   - 更正（2026-11-02，见 #19）：`workflow` 工具的参数就是脚本，可以要求模型原样提交固定脚本，并不是“每次现写”；DSH 没有“保存的工作流”，但插件可以用 `ctx.workflowEngine.start({ script, meta, args, parent })` 运行仓库里审定过的脚本。“`agent()` 不能指定预设”的原因是 `dsh-workflow-ptc` 的 `startChild` 只传 prompt、schema、provider、model，没有把 `agentPreset` 传给 `subagents.startActivation`（后者支持）。
 - #19 插件工具编排（2026-11-02，s4 第 60 小时，deepseek-official/deepseek-flash，验证分支 `spike/plugin-workflow`）：
   - 做法：验证插件在工具 `spike_plan_review` 里依次 ① 用 `ctx.tools.execute` 调 `mcp__workflow__draft_plan`、`mcp__mine_data__get_clock` 和总指挥没有挂载的 `mcp__kb__check_plan_redlines`；② 直接 POST actions 的 `/redlines/check` 做红线检查；③ 用 `ctx.subagents.startActivation({ provider: 'spawn', delivery: 'caller', request: { agentPreset: 'rescue-compliance', outputSchema, parent, prompt } })` 起合规审核子 Agent；④ 往调用方会话写 `tool-workflow/run-start`、`agent-start`、`agent-end`、`run-end`；⑤ 经 `ctx.tools.execute` 调 `mcp__actions__issue_sealing_plan`（评测运行器在确认弹窗点拒绝）。
@@ -140,17 +149,17 @@
   - 踩到的坑：① 消息来源 `kind` 不能是 `plugin`（v4 会话格式拒绝，报 `format v4 message requires a producer-owned source kind`），其他非空字符串都行；② 落盘失败时没有改名，每个轮询周期都会重投并报同样的错，正式实现要限制重试并退避，反复失败记“投递失败”事件；③ `createUserMessage` 在 `@deepseek-ai/dsh-llm`，bundle 没有这个依赖（验证插件从 dsh-tools 的位置解析），正式实现要把它收进 `src/adapter/dsh.ts`；④ 投递是“至少一次”：flush 之后、改名之前崩溃会重复投递（`dsh-schedule` 文档写明了同类限制），事件要带 `incident_id`/事件编号，智能体按编号去重。
   - 没有验证：无人会话里遇到需人批准的 C 级动作（`ask_user_question` 的阻塞与“Waiting for answer”标记在 #20 验证过，审批弹窗同属“等待人”，但未单独复测）；值班会话长时间空闲（超过 20 分钟）；操作员正在同一会话输入时又来事件（交错）；`workspaceId` 与标题。
   - 结论：**唤醒可行，设计 7.3 的退路不启用**（sentinel 的“发现异常—通知操作员”仍独立于模型；唤醒失败时仍按 #23 的两道补救，最后由控制台显示“未确认的异常”）。
-- #25 监听器 + 事件库 + 唤醒插件的整条链路（第三版 P3，2026-11-06，deepseek-flash，真实 DSH 0.2.1-rc.4，`scripts/dev.sh` 起全部服务，事件库在临时目录）：
+- #40 监听器 + 事件库 + 唤醒插件的整条链路（第三版 P3，原编号 #25–#27（#40–#42 三项）与第四版的 #25–#27 重复，2026-11-10 改号，2026-11-06，deepseek-flash，真实 DSH 0.2.1-rc.4，`scripts/dev.sh` 起全部服务，事件库在临时目录）：
   - 做法：模拟矿井演示模式（倍速 3600）+ 监听器（`rescue_sentinel`）+ DSH（唤醒插件 `rescue-wake` 在 `cordis.patch.yml`，事件插件在预设的 `rescue` 组里）；`scripts/sim.py inject s4-escalation` 注入事故。**全程没有浏览器连接**。
   - 通过：监听器写 opened + alert → 控制台 `/sim/state` 的 `incident_store` 显示事件和监听器心跳、演示时钟自动暂停 → 唤醒插件新建值班会话并投递（来源 `rescue-sentinel`），写 delivered → 值班会话里智能体自己调 `get_incident`、`run_fire_assessment`（含阶段子 Agent），`turn/end completed`，没有向人提问。监听器重启后读回状态，不重复告警。
   - 没有验证：C 级动作在无人会话里等人批准；值班会话长时间空闲；操作员同时输入时来事件；`workspaceId` 与会话标题；Docker 演示环境里的 sentinel 容器。
   - 观察（原因未查）：告警是矿井时间 03:23 的“自燃阶段推进为缓慢氧化”，自动暂停有轮询延迟，约 40 矿井分钟后智能体研判时阶段回到 no_sign、等级无。阶段升高目前立即告警；是否改为连续确认，查清原因后定。token 用量没有统计。
-- #26 值班会话的工作区与标题（第三版 P5，2026-11-06，DSH 0.2.1-rc.4）：
+- #41 值班会话的工作区与标题（第三版 P5，2026-11-06，DSH 0.2.1-rc.4）：
   - 通过：插件在值班目录上用 `ctx.workspaceController.create({ path })` 建工作区（已有则复用，返回 `{ workspace: { workspaceId, … }, created }`），`sessionController.create({ workspaceId, agentPreset })`（与 `cwd` 互斥），会话出现在侧栏该工作区下，不再进折叠的 Ungrouped；创建后 `sessionController.rename({ sessionId, title })` 写入 `session/title` 事件，来源 `user`（显式标题固定，之后不再自动生成）。`create` 本身没有标题参数。
   - 此前（#24）值班会话的标题由模型生成，会话日志里查不到标题事件，侧栏按标题找不到；固定标题后演示脚本和操作员都能直接找到。
   - 整条故事线（`make story`）在这套环境上走通一次：监听器 → 无人唤醒 → 研判与人工确认 → 封闭方案下发 → 跟踪计划到点唤醒 → 复盘。
   - 没有验证：值班会话长时间空闲；操作员同时输入时又来事件；无人会话里等人批准超过很长时间。
-- #27 审批等待写事件与批准超时升级（第三版遗留项，2026-11-06，DSH 0.2.1-rc.4）：
+- #42 审批等待写事件与批准超时升级（第三版遗留项，2026-11-06，DSH 0.2.1-rc.4）：
   - 通过：`ctx.on('approval/request', async (req, next) => …)` 能包住人工确认的等待——请求里带 `toolName`、`callId`（与 `tools/pre-execute` 的 `exec.callId` 一致），插件在 `next()` 前后写 `approval_pending`、`approval_decided`（结果 allowed-once / rejected / cancelled / unavailable）。Docker 里一次故事线共写 4 对。临时把 publish_warning 的批准超时设为 1 分钟，故意不点确认：60 秒后监听器写 `approval_escalated` 和 `approval_timeout` 告警，唤醒插件把告警投递到值班会话。
   - 网页端（中文界面）确认按钮是“允许一次”“拒绝”；提问卡片是逐题的（“下一题”，有同名的图标按钮，答完才可用），评测运行器和故事线脚本已适配。
   - 没有验证：确认被多个人同时看到时的行为；确认长时间无人理（小时级）之后值班会话的状态。

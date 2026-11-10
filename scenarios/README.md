@@ -11,6 +11,10 @@
 | `s5-sealed-fire-area.yaml` | 封闭火区演化与启封（含复燃） | 火区管理、启封条件、复燃报警 |
 | `s6-sensor-faults.yaml` | 传感器故障与误报 | 数据质量检测 |
 
+## 演示分支剧本
+
+`scenarios/demo/flow.yaml` 不是场景（放在子目录，免得被当成场景加载），是演示导演（`mcp/mine-data-sim/src/rescue_mine_data_sim/director.py`）的分支剧本：用哪个事故场景（缺省 s3-accelerating）、每一级预警的跳进和步进、按所选处置的累计个数走哪条分支。分支参数（如 `k_ox` 乘 0.64 让预警回落到黄色）是占位值，是演示剧本，不是模型预测；改 s3 场景参数后要重扫。设计见 `docs/design-v5-demo-flow.md`。
+
 ## 字段
 
 - `start`、`duration_h`：模拟起止时间。

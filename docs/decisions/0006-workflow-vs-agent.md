@@ -30,7 +30,7 @@
 3. **用“研判快照”把工作流和指令发布串起来。** 工作流生成不可变、带编号的快照；方案、预警、升级都引用快照编号；actions 发布前（以及审批插件预检时）按编号重算并核对现场条件和等级，不一致就拒绝。这样，“数值只来自代码”从提示词约束变成代码里的强制检查。
 4. **工作流在新增的 `mcp/workflow` 服务里实现（Python，端口 8107）**，直接复用 `rescue_fire_model`、`rescue_ventnet`、`rescue_dispatch` 的计算函数，数据仍经 `MineData` 客户端读取。
 5. **不采用 DSH 自带工作流**（`dsh-workflow-ptc` + `dsh-tool-workflow`）。理由见下文“考虑过的方案”。
-6. 具体设计、实施顺序和验收标准见 `docs/workflow-design.md`。
+6. 具体设计、实施顺序和验收标准曾写在 `docs/workflow-design.md`（第一版的工作流设计，随第一版 Python 服务一起于 2026-11-10 删除，需要时用提交历史查看）。
 
 ## 考虑过的方案
 

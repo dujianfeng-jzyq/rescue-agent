@@ -4,10 +4,10 @@
 
 开发和试运行都对着**模拟矿井**进行；接入真实矿井时只替换 mine-data 适配器，其余不动。
 
-> 方案文档：[docs/implementation-plan.md](docs/implementation-plan.md)。
+> 方案文档：[docs/implementation-plan.md](docs/implementation-plan.md)（总体方案和路线）；现行结构见 [docs/architecture.md](docs/architecture.md)，各阶段的实施记录见 [docs/progress-log.md](docs/progress-log.md)。
 >
-> 状态：第三版（`docs/design-v3.md`，已合入 `main`）：rescue-agent（专家型智能体）+ rescue-mine（矿井接口）+ guard（对外动作的唯一通道）+ 常驻监听器 sentinel（不经模型，发现异常写事件并唤醒值班会话）。
-> 数据契约、红线引擎、模拟矿井（含演示模式与控制台）、mine_data 与 actions（guard）两个 MCP 服务、监听器、DSH bundle（证据/固定流程/知识库/审批/审计/事件/唤醒插件）、技能和评测都能运行并有测试；
+> 状态：第二至第五版都已实施并合入 `main`：rescue-agent（专家型智能体）+ rescue-mine（矿井接口）+ guard（对外动作的唯一通道）+ 常驻监听器 sentinel（不经模型，发现异常写事件并唤醒值班会话）+ 通风图地图界面与撤人路线（第四版）+ 按预警等级的演示导演、处置选项卡片、批准超时自动处理（第五版，`docs/design-v5-demo-flow.md`）。
+> 数据契约、红线引擎、模拟矿井（含演示导演与控制台）、mine_data 与 actions（guard）两个 MCP 服务、监听器、DSH bundle（证据/固定流程/知识库/审批/审计/事件/唤醒/地图插件）、技能和评测都能运行并有测试；
 > 预警阈值、场景参数、技能内容都是**开发占位**，必须经专家审定后才能用于任何正式场合。
 
 ## 架构一览
@@ -25,23 +25,23 @@
           actions:8106（guard：校验 → 经 rescue-mine 执行 → 写台账）
 ```
 
-三道防线（对外动作）：① rescue-approval 调 guard 预检，不可达则拒绝；② 按动作分级表（C 级）人工确认；③ guard 服务端再按同一红线引擎、记录引用和数据时效校验一次。详见 [docs/architecture.md](docs/architecture.md) 与 [docs/design-v3.md](docs/design-v3.md)。
+三道防线（对外动作）：① rescue-approval 调 guard 预检，不可达则拒绝；② 按动作分级表（C 级）人工确认，批准超时后按表处理（只有低风险的加密监测自动放行，其余只升级提醒、不自动执行）；③ guard 服务端再按同一红线引擎、记录引用和数据时效校验一次。详见 [docs/architecture.md](docs/architecture.md)、[docs/design-v3.md](docs/design-v3.md) 与 [ADR 0009](docs/decisions/0009-demo-director-and-operator-cards.md)。
 
 ## 目录
 
 | 路径 | 内容 | 负责人（建议） |
 | --- | --- | --- |
 | `mcp/contract/` | 数据契约（pydantic）、红线引擎、方案校验、一致性测试、服务启动公共代码 | 架构 |
-| `mcp/mine-data-sim/` | 模拟矿井（rescue-mine 接口的一个实现）：采空区自燃过程模型、传感器故障、处置响应、加速时钟、演示模式与控制台 `/console` | 模拟矿井 |
+| `mcp/mine-data-sim/` | 模拟矿井（rescue-mine 接口的一个实现）：采空区自燃过程模型、传感器故障、处置响应、加速时钟、演示模式与控制台 `/console`、演示导演（按预警等级分段推进） | 模拟矿井 |
 | `mcp/sentinel/` | 常驻监听器：按矿井时钟检测、写事件库、批准超时升级，不经模型 | 后端 |
 | `skills/` | 专家经验与算法的唯一来源：SKILL.md、纯函数脚本、模板、参数、自检样例（规范见 `skills/README.md`） | 专家 + 智能体 |
 | `mcp/actions/` | guard 守卫服务：发布预警、下发方案/调度单/撤人通知、升级、启封审批；指令台账 | 后端 |
-| `dsh-bundle/` | DSH bundle：人工确认与红线预检插件、审计插件、主预设 rescue-commander | 智能体 |
-| `scenarios/` | 6 个标准场景（演示脚本 = 评测集 = 回归集） | 模拟矿井 + 专家 |
-| `eval/` | 确定性基线评测、智能体端到端评测（`eval/agent/`）、演示故事线脚本 `story.py` | 测试 |
+| `dsh-bundle/` | DSH bundle：证据、固定流程（含处置选项和现场条件卡片）、知识库、事件与唤醒、人工确认与红线预检（含批准超时处理）、审计、地图插件，主预设 rescue-commander | 智能体 |
+| `scenarios/` | 6 个标准场景（演示脚本 = 评测集 = 回归集）；`scenarios/demo/flow.yaml` 是演示导演的分支剧本 | 模拟矿井 + 专家 |
+| `eval/` | 确定性基线评测、智能体端到端评测（`eval/agent/`）、演示故事线脚本 `story.py`、导演驱动的演示脚本 `demo_run.py` | 测试 |
 | `profiles/` | 可选配置：本地大模型、真实矿井环境变量模板 | 运维 |
 | `scripts/` | 安装、启动、冒烟、模拟控制台、patch 离线校验 | — |
-| `docs/` | 实施方案（`implementation-plan.md`，带图版 PDF）、架构说明、设计决策（ADR）、真实 DSH 验证清单 | — |
+| `docs/` | 实施方案、现行架构（`architecture.md`）、进度日志（`progress-log.md`）、各版本设计、设计决策（ADR 0001–0009）、真实 DSH 验证清单、评测方案与结果 | — |
 
 ## 快速开始
 
@@ -55,9 +55,10 @@ make demo-up        # 构建并启动 4 个容器（mine-sim、actions、sentine
 ```
 
 - 网页端 `http://<主机>:13080`；演示控制台 `http://<主机>:13090/console`，登录令牌是 `var/demo/tokens.env` 里的 `RESCUE_SIM_CONTROL_TOKEN`。
-- 矿井默认连续运行在常态。在控制台注入事故（如 s3、s4 场景）并推进时钟：监听器告警 → 唤醒值班会话 → 智能体研判；对外动作（预警、升级、撤人、封闭/防灭火方案、启封）弹人工确认，演示中出现提权确认一律拒绝。
-- `make demo-reset` 清空 `var/demo/` 的演示数据并回到常态，`make demo-down` 停止，`make demo-logs` 看日志。
-- 整条故事线（黄 → 橙 → 红 → 封闭 → 复评 → 启封 → 复盘 → 关闭事件）可由脚本扮演操作员自动走一遍：`make story`（本机用 `make dev-story`，Docker 见 `eval/agent/story.py` 的说明），约 12 分钟、14 项检查。
+- 矿井默认连续运行在常态，可以先讲解设计思路和界面、点地图让智能体研判。**在控制台“演示导演”区块点一次“开始演示”**，之后导演自己推进：监听器告警 → 唤醒值班会话 → 智能体研判；黄色自动提交加密监测，橙色弹**处置选项卡片**（勾选追加注浆、堵漏，不追加点跳过），红色智能体撤人、封闭（封闭方案先答**现场条件卡片**）。你在网页端回答卡片、点审批弹窗的 Allow once；走向由所选处置决定（橙色累计 3 项回落到黄色，只做 1 项升到红色），走完自动结束。演示中出现提权确认一律拒绝。
+- 带地图包（`var/map/`）时工作面名要对应：`DEMO_PANEL=211016 make demo-up`。
+- `make demo-reset`（同样要带 `DEMO_PANEL`）清空 `var/demo/` 的演示数据并回到常态，是重来一遍最干净的做法；`make demo-down` 停止，`make demo-logs` 看日志。
+- 整条故事线（黄 → 橙 → 红 → 封闭 → 复评 → 启封 → 复盘 → 关闭事件）可由脚本扮演操作员自动走一遍：`make story`（本机用 `make dev-story`，Docker 见 `eval/agent/story.py` 的说明），约 12 分钟、14 项检查；`eval/agent/demo_run.py` 是上面“点一次开始演示”那套流程的脚本版（约 5 分钟）。
 
 ### 本机开发
 
@@ -79,7 +80,7 @@ make skills-check   # 技能自检
 make check          # 提交前全套检查
 ```
 
-智能体端到端评测：`make dev-eval` 后 `make eval-agent ARGS="--url '<DSH 地址带 token>' --model deepseek-official/deepseek-flash --repeat 3"`，见 [docs/eval-consistency.md](docs/eval-consistency.md) 与 `CLAUDE.md`。
+智能体端到端评测：`make dev-eval` 后 `make eval-agent ARGS="--url '<DSH 地址带 token>' --model deepseek-official/deepseek-flash --repeat 3"`，见 [eval/README.md](eval/README.md) 与 [docs/eval-consistency.md](docs/eval-consistency.md)。
 
 切换本地化部署的大模型（OpenAI 兼容接口，不限 DeepSeek）：在 `.env` 填 `RESCUE_LLM_*`，然后 `scripts/dev.sh --local-llm`。
 
