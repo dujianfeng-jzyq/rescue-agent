@@ -224,3 +224,12 @@
 - 已验证（真实 DSH，deepseek-flash，导演推到黄色后故意不点确认）：智能体按技能提交 `start_monitoring`；确认卡片弹出，`approval_pending` 带 `on_timeout: approve`；**5 分钟整**后时间线写 `approval_decided`（`outcome: allowed-once, auto: timeout`），guard 执行并写台账（矿井回执 completed、模拟矿井处置日志有 monitor），会话继续下一轮；智能体的回答如实写“超时没人回应时系统自动放行，已提醒总工程师”，没有重复提交。监听器没有重复升级。
 - **发现的问题与处理**：只让插件返回 `allowed-once`，网页端的确认卡片和侧栏会话上的 “Approval” 标记**不会消失**（卡片绑在请求的 `signal` 上，`next()` 一直挂着）。处理：自动处理的动作在调用 `next()` 前把 `req.signal` 换成“原信号 + 插件自己的信号”，到点中止后者。重跑后卡片撤掉、会话回到 Idle、输入框恢复；原信号（会话的）不受影响（单元测试检查）。
 - 没验证：人在超时前点了确认的真实界面路径（单元测试覆盖）；`on_timeout: reject` 的真实界面（单元测试覆盖）；多个会话同时等确认。`req.signal` 可被替换依赖 DSH 0.2.1-rc.4 的请求对象可写，升级 DSH 要重核（不可写时插件退回“卡片留着”，自动处理本身不受影响）。
+
+### #38 处置选项卡片与导演衔接（第五版，2026-11-09，Docker 演示环境，deepseek-flash）
+
+- 做法：共用的处置选项表（`rescue_contract.response_options`，导出 `dsh-bundle/data/response-options.json`）；智能体橙色研判后 `get_response_options('orange')` → `ask_user` 把返回的 `card` 原样问操作员（多选：注浆、堵漏；必做的注氮写在说明里）→ 按答案 `draft_firefighting_plan(selected_options=[…])`（代码强制可选步骤正好是所选，模型不能增减）→ 合规审核 → `issue_firefighting_plan` 审批下发。导演不再自己施加处置：看模拟矿井处置日志里 guard 经 rescue-mine 执行的处置（来源 action），按步骤类型认出选项，静默 3 秒后按累计个数走分支。控制台复选框保留为没有智能体时的人工通道。
+- 已验证（真实 DSH，只在控制台点一次“开始演示”，Playwright 扮演操作员回答卡片、点确认）：
+  - 橙色卡片选“注浆、堵漏”（累计 3 项）：会话里依次 `get_response_options` → `ask_user_question`（多选，选项只有注浆、堵漏）→ `draft_firefighting_plan(selected_options=["grout","leak_seal"])` → `issue_firefighting_plan`；导演记“矿井执行了 注氮、注浆、堵漏”，走“回落到黄色”分支，结束。
+  - 橙色卡片一项都不选（累计 1 项，点“跳过”）：导演记“矿井执行了 注氮”，走“发展到红色”分支，跳到红色后智能体按流程撤人、封闭，导演结束。
+- **发现的问题与处理**：① 多选卡片在没选任何项时“Submit”是灰的，只能点“Skip”，卡片上原来写的“不选则只做必做项”没法兑现——卡片文字改为“不追加、只做必做项就点跳过”，工具说明告诉智能体把“跳过”当作只做必做项（selected_options 传空列表）；② 红色只识别到“撤人”就结束，与“已撤人并封闭”的结果文字不符——红色分支改为撤人和封闭两项都执行了才结束，只做了一项时继续等（`again`）。
+- 没验证：橙色选 1 项（累计 2 项，“效果有限，追加”）的真实路径（单元测试覆盖）；红色“两项都做完才结束”的真实路径只在最后一次重跑里看（见下）；智能体在卡片上点选之后自己改主意或回答格式异常的情况；多个会话同时在等；评测用例和故事线里依赖“智能体自己选处置”的检查没有重跑。

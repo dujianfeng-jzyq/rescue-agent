@@ -26,6 +26,7 @@ import type RescueEvidence from '../evidence/index.ts'
 import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
+import { describeOptions, loadResponseOptions, planKeysFor } from './response-options.ts'
 import { draftFirefightingPlan, draftSealingPlan, FIREFIGHTING, type HumanInput, type PlanFlow, type Redline, SEALING } from './sealing.ts'
 import { IncidentStore } from '../incident/store.ts'
 import { noteOnIncident } from '../incident/timeline.ts'
@@ -74,6 +75,7 @@ export function apply(ctx: Context, config: Config) {
   const evidence = (c.rescueEvidence as RescueEvidence).evidence
   const knowledge = (c.rescueKnowledge as RescueKnowledge).knowledge
   const stageChildren = new Set<string>()
+  const responseOptions = loadResponseOptions()
   const incidents = config.incidentDir ? new IncidentStore(config.incidentDir) : undefined
   const logToIncident = async (panel: string, type: string, out: any) => {
     try {
@@ -232,6 +234,19 @@ export function apply(ctx: Context, config: Config) {
     return { ok: v.ok, problems: (v.problems ?? []).map(String), notes: (v.notes ?? []).map(String) }
   }
 
+  // 处置选项（第五版）：每一级预警操作员可以选哪些处置，取自代码里的处置选项表，智能体不自己编选项
+  c.tools.register(
+    defineTool({
+      name: 'get_response_options',
+      description:
+        '查某一级预警的处置选项（代码给出，不要自己编）。level 取 yellow / orange / red（或 黄色 / 橙色 / 红色）。返回选项、给操作员的提问卡片内容（card，标签原样用）和下一步说明（note）。' +
+        '橙色预警：研判之后先调它，把 card 用 ask_user 原样问给操作员（多选），按 note 的指引继续。黄色、红色没有卡片，处置由对应流程落实。',
+      parameters: { level: { type: 'string', required: true, description: 'yellow / orange / red，或 黄色 / 橙色 / 红色' } },
+      output: { schema: { type: 'json' as const }, render: (_args: unknown, v: any) => [{ type: 'text' as const, text: JSON.stringify(v) }] },
+      execute: async (args: { level: string }) => toJson(describeOptions(responseOptions, String(args.level))),
+    }),
+  )
+
   const registerPlanFlow = (flow: PlanFlow, description: string, parameters: any, draft: typeof draftSealingPlan) =>
   c.tools.register(
     defineTool({
@@ -248,7 +263,9 @@ export function apply(ctx: Context, config: Config) {
         ],
       },
       execute: async (raw: unknown, exec: any) => {
-        const args = raw as { panel: string; human_inputs?: HumanInput[]; leak_m3_min?: number; target_o2_pct?: number }
+        const args = raw as { panel: string; human_inputs?: HumanInput[]; leak_m3_min?: number; target_o2_pct?: number; selected_options?: string[] }
+        // 防灭火方案：操作员在处置选项卡片上选的选项编号 → 方案的可选步骤 key（代码校验，不认识的报错）
+        const forcedSteps = flow === FIREFIGHTING && Array.isArray(args.selected_options) ? planKeysFor(responseOptions, 'orange', args.selected_options.map(String)) : undefined
         const parent = exec.agent
         if (!parent) throw new Error(`${flow.name} 需要调用方会话`)
         const workspace: string = await c.workingDirectory.ensure(parent, exec.signal)
@@ -266,6 +283,7 @@ export function apply(ctx: Context, config: Config) {
             origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
             signal: exec.signal,
             maxRounds: config.sealingMaxRounds,
+            ...(forcedSteps ? { forcedOptionalSteps: forcedSteps } : {}),
             ...(config.disableStage ? {} : { stage: stageRunner(parent, runId) }),
             precheck: (plan) => precheck(exec, plan, ++n, flow.issueTool),
             getArticles: (document, articles) => knowledge.getArticles(document, articles).results,
@@ -341,6 +359,7 @@ export function apply(ctx: Context, config: Config) {
       panel: { type: 'string', required: true, description: '工作面编号，如 1201' },
       leak_m3_min: { type: 'number', description: '采空区漏风量（m³/min），指挥人员给出时才填；与 target_o2_pct 一起用于由代码估算注氮流量' },
       target_o2_pct: { type: 'number', description: '注氮的目标氧浓度（%），指挥人员给出时才填' },
+      selected_options: { type: 'array', items: { type: 'string' }, description: '操作员在处置选项卡片（get_response_options 给出）上选的选项编号；给了就以它为准，方案的可选步骤正好是这些，不要自己增减。没有选就不传（由你按证据选）' },
     },
     draftFirefightingPlan,
   )

@@ -1,0 +1,65 @@
+{
+  "$comment": "由 rescue_contract.response_options 导出；占位值，待专家审定",
+  "levels": {
+    "yellow": [
+      {
+        "id": "monitor",
+        "label": "观察跟进（加密监测）",
+        "step": "monitor",
+        "how": "start_monitoring",
+        "plan_key": null,
+        "always": false,
+        "choosable": false
+      }
+    ],
+    "orange": [
+      {
+        "id": "inert",
+        "label": "注氮",
+        "step": "inert_injection",
+        "how": "draft_firefighting_plan → issue_firefighting_plan",
+        "plan_key": "inert_injection",
+        "always": true,
+        "choosable": true
+      },
+      {
+        "id": "grout",
+        "label": "注浆",
+        "step": "grouting",
+        "how": "draft_firefighting_plan → issue_firefighting_plan",
+        "plan_key": "grouting",
+        "always": false,
+        "choosable": true
+      },
+      {
+        "id": "leak_seal",
+        "label": "堵漏",
+        "step": "leak_sealing",
+        "how": "draft_firefighting_plan → issue_firefighting_plan",
+        "plan_key": "leak_sealing",
+        "always": false,
+        "choosable": true
+      }
+    ],
+    "red": [
+      {
+        "id": "evacuate",
+        "label": "撤人",
+        "step": "evacuate",
+        "how": "notify_evacuation",
+        "plan_key": null,
+        "always": false,
+        "choosable": false
+      },
+      {
+        "id": "seal",
+        "label": "封闭火区",
+        "step": "temporary_seal",
+        "how": "draft_sealing_plan → issue_sealing_plan",
+        "plan_key": null,
+        "always": false,
+        "choosable": false
+      }
+    ]
+  }
+}

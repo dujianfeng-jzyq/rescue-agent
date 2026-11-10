@@ -51,6 +51,14 @@ describe('防灭火方案：方案编写', () => {
   })
 })
 
+describe('防灭火方案：操作员选定的步骤', () => {
+  it('写作提示词要求正好是选定的步骤；没有选定时照常由模型选', () => {
+    const base = { skillName: 'firefighting-plan', skillVersion: '0.1.0', skillBody: '# 防灭火方案', skeleton: SK, comments: [], flow: FIREFIGHTING.name }
+    assert.ok(writePrompt({ ...base, forcedOptionalSteps: ['grouting'] }).includes('操作员已选定，必须正好是 [grouting]'))
+    assert.ok(writePrompt(base).includes('从“可选步骤清单”里选需要的'))
+  })
+})
+
 describe('防灭火方案：合规审核范围', () => {
   it('审核项是防灭火方案专用的四项', () => {
     assert.deepEqual(SC.items.map((i) => i.id), ['basis', 'context', 'no_entry', 'ventilation'])

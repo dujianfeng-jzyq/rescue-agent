@@ -43,8 +43,11 @@ const stage: StageRunner = async ({ label, schema }) => {
   }
 }
 
+// 环境变量 RESCUE_FORCED_OPTIONAL_STEPS（逗号分隔的方案可选步骤 key）：模拟操作员在处置选项卡片上的选择，写死的“模型”回答不能改变它
+const forced = process.env.RESCUE_FORCED_OPTIONAL_STEPS
 const out = await draftFirefightingPlan(ev, {
   panel,
+  ...(forced !== undefined ? { forcedOptionalSteps: forced.split(',').filter(Boolean) } : {}),
   origin: { channel: 'eval', trigger: 'chat' },
   stage,
   precheck: async () => ({ ok: true, problems: [], notes: [] }),

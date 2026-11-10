@@ -282,3 +282,20 @@ def test_ts_effect_flow_matches_python(sim_s4_60, tmp_path):
     # 台账里没有下发记录、也没给 since：返回说明（不抛错）
     out = subprocess.run(["node", "tools/effect.ts", str(SKILLS), str(tmp_path / "r2"), "1201", sim_s4_60], cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=60)
     assert out.returncode != 0 and "请问指挥人员处置是什么时候开始的" in out.stderr
+
+
+@NEED_NODE
+def test_operator_selected_steps_override_the_model(sim_s3_39, tmp_path):
+    """处置选项卡片：操作员选定的可选步骤以代码为准。命令行里写死的“模型”选了 leak_sealing、monitor_after，
+    操作员选的是 grouting：方案里的可选步骤正好是 grouting（注氮、检测观测是必备步骤），不是模型选的。"""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RESCUE_MCP_")}
+    env["RESCUE_SKILL_PYTHON"] = sys.executable
+    env["RESCUE_FORCED_OPTIONAL_STEPS"] = "grouting"
+    out = subprocess.run(["node", "tools/firefighting-plan.ts", str(SKILLS), str(tmp_path / "records"), "1201", sim_s3_39], cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=180)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    compose = [r for r in got["records"].values() if r["source"].get("script") == "compose"][-1]
+    steps = compose["content"]["result"]["plan"]["steps"]
+    assert [s["type"] for s in steps if s["type"] not in ("monitor", "inert_injection")] == ["grouting"]
+    assert "leak_sealing" not in [s["type"] for s in steps]
+    assert got["plan"]["result"]["verdict"] == "pass"

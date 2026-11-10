@@ -2,7 +2,7 @@
 # 阶段名 = 预警等级；每个阶段：到该等级暂停，操作员选处置；按所选个数走分支（goto 下一级 / end 跑 run_h 矿井小时后结束）。
 # jump_h：从上一段结束一次跳过多少矿井小时（要小于到达该等级所需的时间）；step_h：之后每步推进多少，每步等监听器检测完。
 incident: s3-accelerating
-apply_options: true   # 过渡期：导演自己把所选操作施加到模拟矿井；智能体经 guard 下发后改为 false
+settle_s: 3           # 认出操作员的选择（矿井执行了对应处置）后静默多久再走分支（真实秒）
 step_h: 0.5
 end_step_h: 2.0
 
@@ -10,8 +10,6 @@ stages:
   黄色:
     jump_h: 33
     prompt: 黄色预警：自燃有加速氧化迹象。选择处置。
-    options:
-      - {id: monitor, label: 观察跟进（加密监测）, step: monitor}
     branches:
       - when: {min: 1}
         goto: 橙色
@@ -22,10 +20,6 @@ stages:
   橙色:
     jump_h: 0
     prompt: 橙色预警：采取注氮、注浆、堵漏等处置。处置越不足，越容易发展到红色。
-    options:
-      - {id: inert, label: 注氮, step: inert_injection, params: {gas: N2, rate_m3_h: 600}}
-      - {id: grout, label: 注浆, step: grouting}
-      - {id: leak_seal, label: 堵漏, step: leak_sealing, params: {reduction: 0.5}}
     branches:
       - when: {min: 3}
         end: true
@@ -43,14 +37,15 @@ stages:
           interventions:
             - {type: leak_change, params: {factor: 3}}
 
+  # 红色：撤人和封闭都由智能体按流程落实（通知、封闭方案经审批下发，间隔可能几分钟），导演等两项都执行了才结束；只做了一项时提示并继续等。
   红色:
     jump_h: 20
     prompt: 红色预警：撤人、封闭火区。
-    options:
-      - {id: evacuate, label: 撤人, step: evacuate}
-      - {id: seal, label: 封闭火区, step: temporary_seal}
     branches:
-      - when: {min: 1}
+      - when: {min: 2}
         end: true
         run_h: 72
         message: 已撤人并封闭，火区进入封闭监测
+      - when: {max: 1}
+        again: true
+        note: 已处置 1 项，红色预警需要撤人并封闭，继续等待

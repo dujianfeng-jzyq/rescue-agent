@@ -138,13 +138,15 @@ export function skeletonText(sk: Skeleton): string {
   ].join('\n')
 }
 
-export function writePrompt(opts: { skillName: string; skillVersion: string; skillBody: string; skeleton: Skeleton; comments: string[]; flow?: string }): string {
+export function writePrompt(opts: { skillName: string; skillVersion: string; skillBody: string; skeleton: Skeleton; comments: string[]; flow?: string; forcedOptionalSteps?: string[] }): string {
   const l = opts.skeleton.limits
   return [
     ROLE(WRITE_STAGE, opts.flow ?? 'draft_sealing_plan'),
     '',
     '本阶段要求：',
-    '- optional_steps：从“可选步骤清单”里选需要的（可以不选）；',
+    opts.forcedOptionalSteps
+      ? `- optional_steps：操作员已选定，必须正好是 [${opts.forcedOptionalSteps.join('、')}]（不得增减；没有选就是空）；只给这些步骤写补充说明；`
+      : '- optional_steps：从“可选步骤清单”里选需要的（可以不选）；',
     ...(opts.skeleton.seal_roadway_options.length ? ['- seal_roadways：从“密闭巷道清单”里选要封闭的巷道（至少一条）；'] : []),
     `- step_notes：给需要补充执行要点的步骤各写一句（key 用必备步骤或所选可选步骤的 key，不超过 ${l.max_note_chars} 字），可以不写；`,
     `- summary：一句方案概述（不超过 ${l.max_summary_chars} 字）。`,

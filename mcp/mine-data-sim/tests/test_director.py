@@ -36,7 +36,7 @@ def make(tmp_path):
     sim = SimHolder(mode="demo")
     store = IncidentStore(tmp_path / "inc")
     hb = tmp_path / "inc" / "sentinel" / "heartbeat.json"
-    d = Director(sim, FLOW, store, hb, wait_s=0.0)
+    d = Director(sim, FLOW, store, hb, wait_s=0.0, settle_s=0.0)
     return sim, store, hb, d
 
 
@@ -56,7 +56,7 @@ def test_level_of():
 
 
 def test_flow_valid_and_rejects_bad():
-    bad = {"incident": "x", "stages": {"橙色": {"options": [{"id": "a"}], "branches": [{"goto": "不存在"}]}}}
+    bad = {"incident": "x", "stages": {"橙色": {"options": [{"id": "a"}], "branches": [{"goto": "不存在"}]}}}  # 选项不在流程文件里写
     with pytest.raises(ValueError):
         validate_flow(bad)
 
@@ -118,6 +118,77 @@ def test_two_options_ask_for_more_then_recede(tmp_path):
     d.choose(["leak_seal"])  # 累计 3 项 → 回落
     assert d.state == "ending"
     assert sum(1 for iv in sim.engine.action_log if iv.source == "demo-operator" and iv.type == "inert_injection") == 1
+
+
+def guard_executes(sim, *types):
+    """模拟 guard 经 rescue-mine 下发处置：矿井处置日志里来源是 action。"""
+    for t in types:
+        sim.engine.apply(t, {}, [], "action")
+
+
+def test_red_waits_for_both_evacuation_and_seal(tmp_path):
+    """红色：撤人和封闭由智能体按流程落实，两项都执行了才结束；只做了一项继续等。"""
+    sim, store, hb, d = make(tmp_path)
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5, "红色": 60})
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["monitor"])
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["inert"])  # 只选 1 项 → 红色
+    drive(d, fake, lambda: d.state == "holding" and d.stage == "红色")
+    guard_executes(sim, "evacuate")
+    d.tick()
+    assert d.state == "holding" and d.stage == "红色"  # 只撤人，还要等封闭
+    guard_executes(sim, "temporary_seal", "permanent_seal")
+    d.tick()
+    assert d.state == "ending" and "封闭" in d.status()["outcome"]
+
+
+def test_director_recognizes_what_the_guard_executed(tmp_path):
+    """没有控制台点选：操作员在智能体的卡片上选、批准下发后，矿井执行了处置，导演据此认出选项并走分支。"""
+    sim, store, hb, d = make(tmp_path)
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5})
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    d.tick()
+    assert d.state == "holding"  # 没有处置就一直等
+    guard_executes(sim, "monitor")
+    d.tick()
+    assert d.state == "running" and d.stage == "橙色"
+    drive(d, fake, lambda: d.state == "holding")
+    # 防灭火方案下发：检测观测、注氮、注浆（2 项）→ 效果有限，仍停在橙色；monitor 不属于橙色选项，不计
+    guard_executes(sim, "monitor", "inert_injection", "grouting")
+    d.tick()
+    assert d.state == "holding" and d.stage == "橙色"
+    assert [o["id"] for o in d.status()["options"] if o["done"]] == ["inert", "grout"]
+    guard_executes(sim, "leak_sealing")  # 追加堵漏，累计 3 项
+    d.tick()
+    assert d.state == "ending"
+    assert not any(iv.source == "demo-operator" for iv in sim.engine.action_log)  # 导演没有自己施加
+
+
+def test_old_actions_before_the_hold_are_ignored(tmp_path):
+    sim, store, hb, d = make(tmp_path)
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5})
+    d.start()
+    guard_executes(sim, "monitor")  # 进入等待之前的处置不算
+    drive(d, fake, lambda: d.state == "holding")
+    d.tick()
+    assert d.state == "holding" and d.stage == "黄色"
+
+
+def test_settle_waits_for_the_whole_package(tmp_path):
+    sim, store, hb, d = make(tmp_path)
+    d.settle_s = 60.0
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5})
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    guard_executes(sim, "monitor")
+    d.tick()
+    assert d.state == "holding"  # 静默期没过，还在等同一批处置的其余部分
+    d._last_match -= 61
+    d.tick()
+    assert d.state == "running"
 
 
 def test_choose_validation(tmp_path):

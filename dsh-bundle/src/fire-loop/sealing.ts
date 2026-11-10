@@ -88,6 +88,8 @@ export interface SealingOptions {
   getArticles: (document: string, articles: string[]) => { document: string; article: string; content: string | null; source: string }[]
   /** 方案编写与合规审核的轮数上限（占位 2） */
   maxRounds?: number
+  /** 操作员选定的可选步骤 key（防灭火方案：从处置选项卡片来）：给了就以它为准，模型不能增减 */
+  forcedOptionalSteps?: string[]
 }
 
 export interface HumanInputRequest {
@@ -167,6 +169,14 @@ export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFl
   if (opts.targetO2Pct !== undefined) skOptions.target_o2_pct = opts.targetO2Pct
   const skeletonRec = await step('skeleton', () => script(SP, 'skeleton', skInputs, skOptions))
   const sk = content(skeletonRec) as Skeleton
+  // 操作员选定的可选步骤（处置选项卡片）：必须都在清单里，按清单顺序；以它为准，模型不能增减
+  let forced: string[] | undefined
+  if (opts.forcedOptionalSteps) {
+    const have = new Set(sk.optional_steps.map((x) => x.key))
+    const bad = opts.forcedOptionalSteps.filter((k) => !have.has(k))
+    if (bad.length) throw new Error(`操作员选定的步骤不在方案的可选步骤清单里：${bad.join('、')}`)
+    forced = sk.optional_steps.map((x) => x.key).filter((k) => opts.forcedOptionalSteps!.includes(k))
+  }
   const material0 = [skeletonText(sk), JSON.stringify(sk), JSON.stringify(content(explosion)), ...(personnel ? [JSON.stringify(content(personnel))] : [])].join('\n')
 
   const [spSkill, pcSkill] = await Promise.all([ev.skill(SP), ev.skill(PC)])
@@ -193,11 +203,13 @@ export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFl
       if (opts.stage) {
         const run = await opts.stage({
           label: WRITE_STAGE,
-          prompt: writePrompt({ skillName: spSkill.name, skillVersion: spSkill.version, skillBody: spSkill.body, skeleton: sk, comments, flow: flow.name }),
+          prompt: writePrompt({ skillName: spSkill.name, skillVersion: spSkill.version, skillBody: spSkill.body, skeleton: sk, comments, flow: flow.name, ...(forced ? { forcedOptionalSteps: forced } : {}) }),
           schema: writeSchema(sk),
           ...sig,
         })
-        const checked = run.ok ? checkSelection(run.structured, sk, material0 + '\n' + comments.join('\n')) : { ok: false as const, problems: [run.error] }
+        const checked = run.ok
+          ? checkSelection(forced && run.structured && typeof run.structured === 'object' ? { ...(run.structured as object), optional_steps: forced } : run.structured, sk, material0 + '\n' + comments.join('\n'))
+          : { ok: false as const, problems: [run.error] }
         if (checked.ok) selection = checked.selection
         else problem = checked.problems.join('；')
       }
@@ -206,6 +218,7 @@ export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFl
         emit(`${WRITE_STAGE}#${round}`, 'failed', [], problem)
         stageNotes.push(`第 ${round} 轮“${WRITE_STAGE}”未完成（${problem}），按缺省选择组装（${sk.seal_roadway_options.length ? '封闭全部候选巷道、' : ''}不加可选步骤）`)
         selection = defaultSelection(sk)
+        if (forced) selection = { ...selection, optional_steps: forced }
       }
       planRec = await step(`compose#${round}`, () => script(SP, 'compose', { skeleton: skeletonRec.record_id, evidence: E }, { selection }), 'compose')
       const plan = content(planRec).plan as Record<string, unknown>

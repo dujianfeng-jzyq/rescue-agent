@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from rescue_contract.response_options import ResponseOption, options_for
 
 LEVELS = ("黄色", "橙色", "红色")
 LEVEL_RE = re.compile(r"升为\s*(黄色|橙色|红色)")
@@ -45,9 +46,10 @@ def validate_flow(flow: dict[str, Any]) -> None:
     for name, st in stages.items():
         if name not in LEVELS:
             raise ValueError(f"阶段名必须是预警等级：{name}")
-        ids = [o["id"] for o in st["options"]]
-        if len(set(ids)) != len(ids):
-            raise ValueError(f"{name} 的选项编号重复")
+        if "options" in st:
+            raise ValueError(f"{name}：选项取自处置选项表（rescue_contract.response_options），不在流程文件里写")
+        if not options_for(name):
+            raise ValueError(f"{name} 在处置选项表里没有选项")
         if not st.get("branches"):
             raise ValueError(f"{name} 没有分支")
         for b in st["branches"]:
@@ -62,8 +64,9 @@ def validate_flow(flow: dict[str, Any]) -> None:
 class Director:
     """状态：idle（常态，没开始）、running（推进中等某级告警）、holding（暂停，等操作员选）、ending（跑结束段）、finished。"""
 
-    def __init__(self, sim, flow: dict[str, Any], store=None, heartbeat: Path | None = None, wait_s: float = 12.0) -> None:
+    def __init__(self, sim, flow: dict[str, Any], store=None, heartbeat: Path | None = None, wait_s: float = 12.0, settle_s: float | None = None) -> None:
         self.sim, self.flow, self.store, self.heartbeat = sim, flow, store, heartbeat
+        self.settle_s = float(flow.get("settle_s", 3.0)) if settle_s is None else settle_s  # 认出操作员的选择后静默多久再走分支（真实秒）
         self.wait_s = wait_s  # 等监听器检测一步的上限（真实秒）；没有监听器时超时就继续
         self.lock = threading.RLock()
         self.state = "idle"
@@ -71,6 +74,9 @@ class Director:
         self.log: list[dict[str, Any]] = []
         self.chosen: list[dict[str, Any]] = []
         self._done: list[str] = []  # 本阶段已下发的选项（追加处置时累计）
+        self._log_idx = 0  # 进入等待时处置日志的长度：只看之后执行的处置
+        self._matched: set[str] = set()  # 等待期间矿井执行的处置对应的选项
+        self._last_match = 0.0
         self._seen: set[str] = set()
         self._start_wall = 0.0
         self._phase = "advance"
@@ -88,7 +94,7 @@ class Director:
             return {
                 "state": self.state,
                 "stage": self.stage,
-                "options": [{"id": o["id"], "label": o["label"], "done": o["id"] in self._done} for o in st["options"]] if st else [],
+                "options": [{"id": o.id, "label": o.label, "done": o.id in self._done} for o in self._options()] if st else [],
                 "prompt": (st or {}).get("prompt"),
                 "chosen": self.chosen,
                 "outcome": self._outcome,
@@ -120,51 +126,84 @@ class Director:
             self._begin_running("黄色", first=True)
             self._note("开始演示：注入事故，等预警")
 
+    def _options(self) -> tuple[ResponseOption, ...]:
+        return options_for(self.stage or "")
+
     def choose(self, option_ids: list[str]) -> dict[str, Any]:
+        """控制台的人工通道：没有智能体时，导演自己把所选操作施加到模拟矿井。"""
         with self.lock:
             if self.state != "holding":
                 raise ValueError("现在不在等待选择")
-            st = self.flow["stages"][self.stage]
-            known = {o["id"]: o for o in st["options"]}
+            known = {o.id: o for o in self._options()}
             bad = [i for i in option_ids if i not in known]
             if bad:
                 raise ValueError(f"未知选项：{bad}")
             ids = [i for i in dict.fromkeys(option_ids) if i not in self._done]  # 追加处置时已下发的不再重复
             if not ids:
                 raise ValueError("没有新的处置可下发")
-            total = self._done + ids
-            branch = self._pick_branch(st, len(total))
-            if self.flow.get("apply_options", True):
-                for i in ids:
-                    o = known[i]
-                    self.sim.engine.apply(o["step"], dict(o.get("params") or {}), list(o.get("roadways") or []), "demo-operator")
-            self.chosen.append({"stage": self.stage, "options": ids})
-            names = "、".join(known[i]["label"] for i in ids)
-            if "again" in branch:
-                self._done = total
-                self._note(f"{self.stage}：选择 {names}；{branch.get('note', '效果有限，需要追加处置')}")
-                return self.status()
-            fx = branch.get("effect") or {}
-            if fx:
-                self.sim.engine.set_params(fx.get("params"), fx.get("scale"))
-            for iv in fx.get("interventions") or []:
-                self.sim.engine.apply(iv["type"], dict(iv.get("params") or {}), [], "demo-script")
-            self._done = []
-            self._note(f"{self.stage}：选择 {names}；{branch.get('note', '')}".rstrip("；"))
-            self.sim.resumed_wall = time.time()
-            if "goto" in branch:
-                self._begin_running(branch["goto"], first=False)
-            else:
-                self._outcome = branch.get("message", "")
-                self._end_at_h = self.sim.engine.now_h() + float(branch["run_h"])
-                self.state, self.stage = "ending", None
+            for i in ids:
+                self.sim.engine.apply(known[i].step, {}, [], "demo-operator")
+            return self._decide(ids)
+
+    def _decide(self, ids: list[str]) -> dict[str, Any]:
+        """按累计选中的个数走分支（ids 是这一次新增的选项，已经执行）。"""
+        st = self.flow["stages"][self.stage]
+        known = {o.id: o for o in self._options()}
+        total = self._done + ids
+        branch = self._pick_branch(st, len(total))
+        self.chosen.append({"stage": self.stage, "options": ids})
+        names = "、".join(known[i].label for i in ids)
+        if "again" in branch:
+            self._done = total
+            self._reset_wait()
+            self._note(f"{self.stage}：选择 {names}；{branch.get('note', '效果有限，需要追加处置')}")
             return self.status()
+        fx = branch.get("effect") or {}
+        if fx:
+            self.sim.engine.set_params(fx.get("params"), fx.get("scale"))
+        for iv in fx.get("interventions") or []:
+            self.sim.engine.apply(iv["type"], dict(iv.get("params") or {}), [], "demo-script")
+        self._done = []
+        self._note(f"{self.stage}：选择 {names}；{branch.get('note', '')}".rstrip("；"))
+        self.sim.resumed_wall = time.time()
+        if "goto" in branch:
+            self._begin_running(branch["goto"], first=False)
+        else:
+            self._outcome = branch.get("message", "")
+            self._end_at_h = self.sim.engine.now_h() + float(branch["run_h"])
+            self.state, self.stage = "ending", None
+        return self.status()
+
+    def _reset_wait(self) -> None:
+        self._log_idx = len(self.sim.engine.action_log)
+        self._matched, self._last_match = set(), 0.0
+
+    def _tick_holding(self) -> None:
+        """看矿井执行了哪些处置（guard 经 rescue-mine 下发，来源 action），认出对应的选项；静默 settle_s 秒后按所选个数走分支。"""
+        log = self.sim.engine.action_log
+        by_step: dict[str, list[str]] = {}
+        for o in self._options():
+            by_step.setdefault(o.step, []).append(o.id)
+        for iv in log[self._log_idx :]:
+            if iv.source == "action":
+                new = set(by_step.get(iv.type, ())) - set(self._done) - self._matched
+                if new:
+                    self._matched |= new
+                    self._last_match = time.time()
+        self._log_idx = len(log)
+        if self._matched and time.time() - self._last_match >= self.settle_s:
+            ids = [o.id for o in self._options() if o.id in self._matched]
+            self._matched = set()
+            self._note(f"{self.stage}：矿井执行了 {'、'.join(o.label for o in self._options() if o.id in ids)}")
+            self._decide(ids)
 
     def tick(self) -> None:
         """导演线程每秒调一次。"""
         with self.lock:
             if self.state == "running":
                 self._tick_running()
+            elif self.state == "holding":
+                self._tick_holding()
             elif self.state == "ending":
                 self._tick_ending()
 
@@ -241,6 +280,8 @@ class Director:
             if LEVELS.index(lv) >= want:
                 self.stage = lv if lv in self.flow["stages"] else self.stage
                 self.state = "holding"
+                self._done = []
+                self._reset_wait()
                 eng.clock.set_paused(True)
                 self._note(f"出现{lv}预警，暂停，等操作员选择处置")
                 return

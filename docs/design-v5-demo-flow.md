@@ -110,3 +110,13 @@
 - 黄色的处置落成 guard 工具 `start_monitoring(record_id)`（C 级，确认人值班长，5 分钟，升级对象总工程师，`on_timeout: approve`）：引用 `run_fire_assessment` 的预警等级记录，经 rescue-mine `submit_treatment`（monitor 步骤）执行，矿井有记录。**唯一设为 approve 的动作**；橙、红的所有动作保持 escalate（测试固定）。
 - 技能 `fire-incident-management`、主预设、用例 `v3-yellow-observe`、故事线黄色检查随之改为“提交加密监测并经确认下发”。
 - 还没做：选项卡片接入 DSH、导演与 guard 下发的衔接（`apply_options: false`）、人设里“研判后给出推荐、操作员点选”。
+
+### 9.2 选项卡片与导演衔接（2026-11-09，已做，方案 A）
+
+- 选了方案 A：智能体用 DSH 自带的提问卡片（`ask_user`，多选）把代码给出的选项问操作员，再提交下发工具，弹一次审批确认（点两次，全用 DSH 原生界面，批准仍走审批插件，模型伪造不了）。没做“点选即批准”的地图面板（方案 B）。
+- 共用的处置选项表 `rescue_contract.response_options`：每级有哪些选项、对应的矿井处置步骤、落实用的工具；橙色的选项就是防灭火方案的步骤（注氮必备，注浆、堵漏可选），表和 `plan.yaml` 的一致性有测试。工具 `get_response_options` 把选项和卡片内容给智能体。
+- 防灭火方案流程接受 `selected_options`，代码强制方案的可选步骤正好是操作员选的（模型多选少选都不改变），命令行 `tools/firefighting-plan.ts` 加了环境变量 `RESCUE_FORCED_OPTIONAL_STEPS` 做一致性测试。
+- 导演：选项取自共用表，不再在 `flow.yaml` 里写；暂停等待时按矿井执行的处置认选项，静默 `settle_s` 秒后按累计个数走分支。红色要撤人和封闭两项都做了才结束。
+- 技能 `fire-incident-management` 与主预设：向人提问由“三种情况”改为“四种”（加“橙色研判后选处置”，每次研判最多一次）；黄色仍直接提交加密监测（不问），红色由智能体按流程自己撤人、封闭（不问）。
+- 脚本 `eval/agent/demo_run.py`：点一次“开始演示”后扮演操作员（回答卡片、点确认），判定看导演记录和事件时间线；`STORY_ORANGE_OPTIONS` 控制橙色卡片选什么。
+- 没做：控制台“开始演示”的前置检查（智能体、监听器在线）；故事线 `story.py` 还是旧的按等级脚本推进，没有改成用导演；智能体评测用例没有按“橙色先问卡片”重写。
