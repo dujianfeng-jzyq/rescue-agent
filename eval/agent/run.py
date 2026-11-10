@@ -289,6 +289,16 @@ def run_one(page: Page, case: dict, model: str | None, timeout_s: float, quiet_s
             status = "no_wake"
         else:
             root, status = wait_settled(root_id, page, timeout_s, quiet_s, case.get("approvals"))
+    if status == "asked_user" and case.get("operator_cards"):
+        # 第五版：智能体用代码给出的卡片（处置选项、封闭方案现场条件）问操作员：运行器扮演操作员，用故事线那套答题逻辑作答
+        # （多题卡片逐题答、多选逐项点、点跳过），答完等智能体继续；最多 4 轮，用例不指望智能体提别的问题
+        from story import answer_questions  # noqa: PLC0415  story 反过来 import run，放在函数里避免循环导入
+
+        for _ in range(4):
+            if status != "asked_user" or answer_questions(page) == 0:
+                break
+            time.sleep(5)
+            root, status = wait_settled(root_id, page, timeout_s, quiet_s, case.get("approvals"))
     while status == "asked_user" and answers:
         option = answers.pop(0)
         if not answer_question(page, option):

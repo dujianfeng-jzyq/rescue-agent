@@ -33,6 +33,18 @@ ACTIONS_PREFIX = "mcp__actions__"
 READ_ONLY_ACTIONS = {"precheck_plan", "query_last_issued"}
 
 
+CODE_CARD_HEADERS = {"处置选项", "现场条件"}
+
+
+def is_code_card(arguments: str | None) -> bool:
+    """ask_user_question 的调用是不是代码给出的卡片（所有问题的 header 都是处置选项或现场条件）。"""
+    try:
+        qs = json.loads(arguments or "{}").get("questions", [])
+    except ValueError:
+        return False
+    return bool(qs) and all(q.get("header") in CODE_CARD_HEADERS for q in qs)
+
+
 def _flatten(args: dict) -> dict:
     if len(args) == 1 and isinstance(next(iter(args.values())), dict):
         return dict(next(iter(args.values())))
@@ -52,7 +64,8 @@ def extract(calls: list[tuple[str, str]]) -> dict:
             except ValueError:
                 args = {}
             actions.setdefault(short, []).append(_flatten(args if isinstance(args, dict) else {}))
-    questions = sum(1 for name, _ in calls if name in ("ask_user", "ask_user_question"))
+    # 代码给出的卡片（处置选项、现场条件）是设计内的“选处置”和“缺信息”，不算向人提问
+    questions = sum(1 for name, args in calls if name in ("ask_user", "ask_user_question") and not (name == "ask_user_question" and is_code_card(args)))
     return {"actions": actions, "tools": tools, "questions": questions}
 
 

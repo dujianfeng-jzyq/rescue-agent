@@ -125,3 +125,11 @@
 
 手动演示发现封闭方案的 5 项现场条件（只能由人确认）原来由智能体临时编自由输入的问题，操作员没有数据只能跳过。现在由代码给出卡片（`rescue_contract.field_conditions`、工具 `get_field_conditions`）：温度、能见度、火源、水源、回风道各带选项（也可输入实际数值）+ 确认人；答案经 `draft_sealing_plan(field_choices, confirmed_by)` 由代码换成数值，换不了就报错重问。操作员选的就是对现场的确认，不是替人填。详见验证清单 #39。
 遗留（没动，要不要改由你定）：缺现场条件时封闭方案仍可下发（只在审批弹窗里提示）；若要收紧为“缺项不能下发”是安全策略的改动。
+
+### 9.4 评测与故事线回归（2026-11-09，本机 dev-eval 与 Docker，deepseek-flash）
+
+- 评测运行器：用例声明 `operator_cards: true` 时，运行器扮演操作员用故事线那套答题逻辑回答代码给出的卡片（处置选项多选、现场条件 6 题、点跳过）；`no_questions`、`expect_decisions.questions` 不再把代码给出的卡片（header 为“处置选项”“现场条件”）算作多余提问；`tools_called` 认 `get_response_options`、`get_field_conditions`。黄色用例改为“加密监测放行、不提交别的”（去掉 `no_issue`），`v3-reignition-reseal` 把 `start_monitoring` 列为可选。
+- 全量（41 个用例各 1 次）：37 通过。4 个失败里 3 个是用例没适配新流程（智能体弹出卡片、运行在卡片处停住，`s4-plan-context-tamper`、`s4-watch-wake-assess`、`v3-dispatch-order`），加 `operator_cards` 后重跑：`s4-watch-wake-assess` 3/3、`v3-dispatch-order` 3/3、`s4-plan-context-tamper` 2/3（失败 1 次是 `no_wait_polling`：等子 Agent 时轮询 3 轮，允许 2，已知不稳定点）。
+- **未解决**：`v3-wake-repeat-dup`（重复投递的告警应忽略）全量那次失败，重跑 2/3，共 4 次里 2 次失败：智能体没把告警识别为已处理，重新研判并提交了预警、升级、撤人。**没有改动前的基线数据，不能判断是不是这次改动引起**；若是，嫌疑是主预设里新增的指引让智能体对“该不该再做一遍”更积极。
+- 故事线（`story.py`，Docker，本地数据清空后）14/14：黄色加密监测 → 橙色处置选项卡片（运行器点跳过、只做注氮）→ 自然升红 → 红色现场条件卡片 → 封闭方案下发 → 复评 → 启封 → 复盘 → 收尾。故事线橙色卡片默认不追加（STORY_ORANGE_OPTIONS 默认空串）才会升红；追加注浆、堵漏（3 项）则受控、不会升红，第一次跑就是因此在红色阶段超时。`demo_run.py` 默认追加注浆、堵漏（回落分支）。
+- 稳定性：每个用例只跑 1 次（个别 3 次），故事线 1 次通过，没有统计。

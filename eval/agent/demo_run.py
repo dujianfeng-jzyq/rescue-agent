@@ -23,6 +23,7 @@ from pathlib import Path
 from playwright.sync_api import Page, sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+os.environ.setdefault("STORY_ORANGE_OPTIONS", "注浆|堵漏")  # 演示脚本默认追加注浆、堵漏（累计 3 项，走回落分支）；story 模块读取这个环境变量
 import run as runner  # noqa: E402
 import story  # noqa: E402
 from rescue_contract.incidents import IncidentStore  # noqa: E402

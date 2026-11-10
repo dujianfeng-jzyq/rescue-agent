@@ -36,6 +36,7 @@
 - watch_asked: true         持续检测的后台任务结束（job/settled）后，智能体用 ask_user_question 问过操作员
 - record_referenced: true   每次 actions 调用的参数里都有 record_id，且都是本次运行中固定流程返回过的记录（第三版 P2：第一版的 snapshot_id 已删除）
 - no_questions: <N>         （第三版 P4 决策评测）总指挥协调向人提问（ask_user、ask_user_question）不超过 N 次；写 true 即 0 次。
+                            代码给出的卡片（header 为“处置选项”“现场条件”）不计。
                             对外动作的人工确认不算提问（那是 approval/asked）
 - tools_not_called: [<工具>]  这些工具整次运行都没有调用（如不该启封、不该下发）
 - incident_read: true       调用过 get_incident（读事件）
@@ -492,7 +493,7 @@ DEFAULT_CHECKS = {"numbers_grounded": True, "cited_tools_called": True}
 
 # 固定流程和检测是 DSH 插件工具（不是 MCP），结果结构见 dsh-bundle/src/fire-loop、src/evidence/check.ts。
 # DSH 进程内的工具（不是 MCP 工具，名字里没有 mcp__ 前缀），tools_called 也认
-NATIVE_TOOLS = {"map_view"}
+NATIVE_TOOLS = {"map_view", "get_response_options", "get_field_conditions"}  # 代码给出卡片内容的只读工具
 FLOW_TOOLS = {"run_fire_assessment", "check_mine", "draft_sealing_plan", "draft_firefighting_plan", "review_effect", "review_timeline", "assess_unsealing"}
 
 
@@ -548,6 +549,9 @@ def _map_view_calls(sessions: list[Session]) -> list[dict]:
             res = results[i] if i < len(results) else ""
             out.append({"args": args, "raw": res, "result": res, "ok": '"ok": true' in res or '"names"' in res})
     return out
+
+
+_is_code_card = decisions.is_code_card
 
 
 def grade(root: Session, checks: dict) -> dict:
@@ -703,6 +707,9 @@ def grade(root: Session, checks: dict) -> dict:
     if (limit := checks.get("no_questions")) is not None and limit is not False:
         limit = 0 if limit is True else int(limit)
         asked = [n for n in all_calls if n in ("ask_user", "ask_user_question")]
+        # 代码给出的卡片（get_response_options 的处置选项、get_field_conditions 的现场条件）是设计内的“选处置”和“缺信息”，不算多余提问
+        cards = sum(_is_code_card(e["data"].get("arguments")) for s in sessions for e in s.events if e["type"] == "tool/call" and e["data"]["name"] == "ask_user_question")
+        asked = asked[: max(len(asked) - cards, 0)]
         results["no_questions"] = {"ok": len(asked) <= limit, "detail": [f"提问 {len(asked)} 次，允许 {limit} 次"] if len(asked) > limit else []}
 
     if checks.get("tools_not_called"):
