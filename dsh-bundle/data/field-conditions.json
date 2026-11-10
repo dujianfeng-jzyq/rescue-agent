@@ -1,0 +1,94 @@
+{
+  "$comment": "由 rescue_contract.field_conditions 导出；占位值，待专家审定",
+  "note": "按现场实际选择；表里没有的数值（温度、能见度）在“其他”里直接输入。选项只是常用档位，不是建议。",
+  "confirmers": [
+    "总指挥",
+    "总工程师",
+    "救护队带队指挥员"
+  ],
+  "fields": [
+    {
+      "field": "area_temperature_c",
+      "value_type": "number",
+      "question": "灾区温度（℃）：现场测定值是多少？",
+      "choices": [
+        {
+          "label": "30 ℃",
+          "value": 30.0
+        },
+        {
+          "label": "45 ℃",
+          "value": 45.0
+        },
+        {
+          "label": "60 ℃",
+          "value": 60.0
+        }
+      ]
+    },
+    {
+      "field": "visibility_m",
+      "value_type": "number",
+      "question": "能见度（米）：现场测定值是多少？",
+      "choices": [
+        {
+          "label": "20 米",
+          "value": 20.0
+        },
+        {
+          "label": "5 米",
+          "value": 5.0
+        },
+        {
+          "label": "0.5 米",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "field": "fire_source_confirmed",
+      "value_type": "bool",
+      "question": "火源是否明确？",
+      "choices": [
+        {
+          "label": "是",
+          "value": true
+        },
+        {
+          "label": "否",
+          "value": false
+        }
+      ]
+    },
+    {
+      "field": "water_supply_sufficient",
+      "value_type": "bool",
+      "question": "水源、人力和物力是否充足？",
+      "choices": [
+        {
+          "label": "是",
+          "value": true
+        },
+        {
+          "label": "否",
+          "value": false
+        }
+      ]
+    },
+    {
+      "field": "return_airway_clear",
+      "value_type": "bool",
+      "question": "回风道是否畅通？",
+      "choices": [
+        {
+          "label": "是",
+          "value": true
+        },
+        {
+          "label": "否",
+          "value": false
+        }
+      ]
+    }
+  ]
+}

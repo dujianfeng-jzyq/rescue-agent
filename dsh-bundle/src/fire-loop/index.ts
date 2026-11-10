@@ -26,6 +26,7 @@ import type RescueEvidence from '../evidence/index.ts'
 import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
+import { describeFieldCard, loadFieldConditions, resolveFieldChoices } from './field-conditions.ts'
 import { describeOptions, loadResponseOptions, planKeysFor } from './response-options.ts'
 import { draftFirefightingPlan, draftSealingPlan, FIREFIGHTING, type HumanInput, type PlanFlow, type Redline, SEALING } from './sealing.ts'
 import { IncidentStore } from '../incident/store.ts'
@@ -76,6 +77,7 @@ export function apply(ctx: Context, config: Config) {
   const knowledge = (c.rescueKnowledge as RescueKnowledge).knowledge
   const stageChildren = new Set<string>()
   const responseOptions = loadResponseOptions()
+  const fieldConditions = loadFieldConditions()
   const incidents = config.incidentDir ? new IncidentStore(config.incidentDir) : undefined
   const logToIncident = async (panel: string, type: string, out: any) => {
     try {
@@ -247,6 +249,19 @@ export function apply(ctx: Context, config: Config) {
     }),
   )
 
+  // 封闭方案的人工确认项（第五版）：预设选项卡片，由代码给出；智能体不自己编问题，也不替人填
+  c.tools.register(
+    defineTool({
+      name: 'get_field_conditions',
+      description:
+        '取封闭方案的现场条件确认卡片（灾区温度、能见度、火源是否明确、水源人力物力是否充足、回风道是否畅通、确认人）：这些只能由人在现场确认，系统没有数据。' +
+        '编制封闭方案（draft_sealing_plan）之前先调它，用 ask_user 把返回的 questions 原样问给操作员，再按 note 把答案交给 draft_sealing_plan。常用值已做成选项，操作员也可以输入实际数值；不要替人选，也不要追问“确定吗”。',
+      parameters: {},
+      output: { schema: { type: 'json' as const }, render: (_args: unknown, v: any) => [{ type: 'text' as const, text: JSON.stringify(v) }] },
+      execute: async () => toJson(describeFieldCard(fieldConditions)),
+    }),
+  )
+
   const registerPlanFlow = (flow: PlanFlow, description: string, parameters: any, draft: typeof draftSealingPlan) =>
   c.tools.register(
     defineTool({
@@ -263,7 +278,10 @@ export function apply(ctx: Context, config: Config) {
         ],
       },
       execute: async (raw: unknown, exec: any) => {
-        const args = raw as { panel: string; human_inputs?: HumanInput[]; leak_m3_min?: number; target_o2_pct?: number; selected_options?: string[] }
+        const args = raw as { panel: string; human_inputs?: HumanInput[]; leak_m3_min?: number; target_o2_pct?: number; selected_options?: string[]; field_choices?: { field: string; choice: string }[]; confirmed_by?: string }
+        // 封闭方案：卡片上的答案原文 → 人工输入（换不成数值的报错让智能体重问）；已经用 human_inputs 给了的字段不重复
+        const given = new Set((args.human_inputs ?? []).map((h) => h.field))
+        const humanInputs: HumanInput[] = [...(args.human_inputs ?? []), ...resolveFieldChoices(fieldConditions, (args.field_choices ?? []).filter((x) => !given.has(x.field)), args.confirmed_by)]
         // 防灭火方案：操作员在处置选项卡片上选的选项编号 → 方案的可选步骤 key（代码校验，不认识的报错）
         const forcedSteps = flow === FIREFIGHTING && Array.isArray(args.selected_options) ? planKeysFor(responseOptions, 'orange', args.selected_options.map(String)) : undefined
         const parent = exec.agent
@@ -277,7 +295,7 @@ export function apply(ctx: Context, config: Config) {
         try {
           const out: any = await draft(evidence, {
             panel: String(args.panel),
-            humanInputs: args.human_inputs ?? [],
+            humanInputs,
             ...(typeof args.leak_m3_min === 'number' ? { leakM3Min: args.leak_m3_min } : {}),
             ...(typeof args.target_o2_pct === 'number' ? { targetO2Pct: args.target_o2_pct } : {}),
             origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
@@ -343,6 +361,12 @@ export function apply(ctx: Context, config: Config) {
     },
     leak_m3_min: { type: 'number', description: '采空区漏风量（m³/min），指挥人员给出时才填；与 target_o2_pct 一起用于由代码估算注氮流量' },
     target_o2_pct: { type: 'number', description: '注氮的目标氧浓度（%），指挥人员给出时才填' },
+    field_choices: {
+      type: 'array',
+      description: '现场条件卡片（get_field_conditions）上的答案：[{field: 问题 id, choice: 答案原文}]，原文是操作员选的标签或输入的文字，不要改写；由代码换成数值或 true/false。被跳过的题不要传',
+      items: { type: 'object', additionalProperties: false, properties: { field: { type: 'string', required: true }, choice: { type: 'string', required: true } } },
+    },
+    confirmed_by: { type: 'string', description: '现场条件的确认人：卡片里“确认人”那题的答案；给了 field_choices 时必填' },
       },
     draftSealingPlan,
   )

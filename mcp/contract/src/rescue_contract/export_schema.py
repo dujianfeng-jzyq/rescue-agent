@@ -11,7 +11,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import action_policy, models, response_options
+from . import action_policy, field_conditions, models, response_options
 from .redlines import RULES
 
 # 红线规则所依据的规程（RULES 的条号都指这部规程）
@@ -84,6 +84,7 @@ def render_bundle_data() -> dict[str, str]:
     return {
         "action-policy.json": json.dumps(action_policy.export(), ensure_ascii=False, indent=2) + "\n",
         "response-options.json": json.dumps(response_options.export(), ensure_ascii=False, indent=2) + "\n",
+        "field-conditions.json": json.dumps(field_conditions.export(), ensure_ascii=False, indent=2) + "\n",
     }
 
 

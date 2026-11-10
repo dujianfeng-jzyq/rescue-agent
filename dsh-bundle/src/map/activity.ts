@@ -19,6 +19,7 @@ const TOOL_LABEL: Record<string, string> = {
   draft_sealing_plan: '编制封闭方案',
   draft_firefighting_plan: '编制防灭火方案',
   get_response_options: '查处置选项',
+  get_field_conditions: '查现场条件确认卡片',
   review_effect: '处置效果复评',
   review_timeline: '事件复盘',
   assess_unsealing: '启封评估',

@@ -140,7 +140,7 @@ def open_duty_session(page: Page) -> None:
 
 
 # 现场条件的回答（操作员替总指挥确认）：按问题里的关键词给答案；选择题点包含答案文字的选项，填空题填进输入框
-FIELD_ANSWERS = [("温度", "28"), ("能见度", "20"), ("火源", "已明确"), ("水源", "充足"), ("回风", "畅通"), ("谁确认", "总指挥"), ("指挥部决定", "决定封闭"), ("复评起点", "本次跟踪观测起点"), ("处置选项", os.environ.get("STORY_ORANGE_OPTIONS", "注浆|堵漏"))]  # 后两项是选择题：智能体就是否封闭向指挥部请示（操作员代表指挥部决定封闭）；还没有下发处置时复评起点按推荐项
+FIELD_ANSWERS = [("温度", "28"), ("能见度", "20"), ("火源", "是"), ("水源", "是"), ("回风", "是"), ("谁确认", "总指挥"), ("指挥部决定", "决定封闭"), ("复评起点", "本次跟踪观测起点"), ("处置选项", os.environ.get("STORY_ORANGE_OPTIONS", "注浆|堵漏"))]  # 后两项是选择题：智能体就是否封闭向指挥部请示（操作员代表指挥部决定封闭）；还没有下发处置时复评起点按推荐项
 
 OPTION_KEYS = ("指挥部决定", "复评起点", "处置选项")  # 这些问题是选择题：点选项（输入框一直在，填进去会被当成自定义文字）
 
@@ -193,7 +193,9 @@ def _answer_questions(page: Page, max_questions: int) -> int:
                     card.get_by_text(part, exact=False).first.click(timeout=5000)
             else:
                 (option if option.count() else card.get_by_text(re.compile(r"^1$"))).first.click(timeout=5000)
-        elif box.count() and box.first.is_visible():
+        elif (exact := card.get_by_text(answer, exact=True)).count():  # 卡片上有这个选项（是/否、确认人、数值档位）：点选项
+            exact.first.click(timeout=5000)
+        elif box.count() and box.first.is_visible():  # 没有对应选项（如温度 28）：在“其他”里输入
             box.first.fill(answer, timeout=5000)
         elif option.count():
             option.first.click(timeout=5000)
