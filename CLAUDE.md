@@ -6,6 +6,7 @@
 - **第三版设计（已实施并合入 `main`，2026-11-06）**：`docs/design-v3.md`（rescue-agent + rescue-mine、常驻监听与事件、专家型智能体）
 - **第二版设计（已实施，已包含在 `main`）**：`docs/design-v2.md`，决策见 `docs/decisions/0007-skills-plugins-fixed-flows.md`
 - **第四版设计（草案，P0 验证完成 2026-11-08）：通风图地图界面**：`docs/design-v4-map.md`（下层通风立体图、上层半透明悬浮的 DSH 界面、智能体定位/标记地图；浏览器端插件、验证清单 #25–#27）
+- **第五版设计（草案，2026-11-09）：按预警等级的演示流程与统一的人工确认**：`docs/design-v5-demo-flow.md`（暂停即冻结时钟、导演驱动、选项分支、下发前一律确认、动作分级表加 `on_timeout`：黄色超时自动放行，橙/红只升级）
 - 第四版撤人路线与受威胁人员标注（E1–E5 已实现，本机和 Docker 演示里渲染过，见验证清单 #36）：`docs/design-v4-evacuation.md`
 - **rescue-mine 接口说明（代码生成，`make interface-doc`）**：`docs/rescue-mine-interface.md`；第三版 rescue-mine/guard/动作分级的决策：`docs/decisions/0008-guard-and-rescue-mine.md`
 - 架构（怎么连起来）：`docs/architecture.md`（第二版；第 8 节是过渡期）；设计决策：`docs/decisions/`

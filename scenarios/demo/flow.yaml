@@ -1,0 +1,56 @@
+# 演示流程（第五版，docs/design-v5-demo-flow.md）：导演按它推进。全部是演示剧本的占位值，不是模型预测，待调参和专家审定。
+# 阶段名 = 预警等级；每个阶段：到该等级暂停，操作员选处置；按所选个数走分支（goto 下一级 / end 跑 run_h 矿井小时后结束）。
+# jump_h：从上一段结束一次跳过多少矿井小时（要小于到达该等级所需的时间）；step_h：之后每步推进多少，每步等监听器检测完。
+incident: s3-accelerating
+apply_options: true   # 过渡期：导演自己把所选操作施加到模拟矿井；智能体经 guard 下发后改为 false
+step_h: 0.5
+end_step_h: 2.0
+
+stages:
+  黄色:
+    jump_h: 33
+    prompt: 黄色预警：自燃有加速氧化迹象。选择处置。
+    options:
+      - {id: monitor, label: 观察跟进（加密监测）, step: monitor}
+    branches:
+      - when: {min: 1}
+        goto: 橙色
+        note: 继续观察，温度仍在上升
+
+  # 橙色按所选（累计）个数分支：3 项全做 → 受控回落；只做 1 项 → 发展到红色；做了 2 项 → 效果有限，要求追加（仍停在橙色）。
+  # 参数是按 s3-accelerating 在 36.5 矿井小时左右调出来的占位值（eval 用 baseline 的预警判据扫描）：k_ox 乘 0.64 时预警在黄色区间停留约 50 小时。
+  橙色:
+    jump_h: 0
+    prompt: 橙色预警：采取注氮、注浆、堵漏等处置。处置越不足，越容易发展到红色。
+    options:
+      - {id: inert, label: 注氮, step: inert_injection, params: {gas: N2, rate_m3_h: 600}}
+      - {id: grout, label: 注浆, step: grouting}
+      - {id: leak_seal, label: 堵漏, step: leak_sealing, params: {reduction: 0.5}}
+    branches:
+      - when: {min: 3}
+        end: true
+        run_h: 36
+        message: 三项处置全部到位，火情受控，预警回落到黄色
+        effect:
+          scale: {k_ox: 0.64}
+      - when: {min: 2, max: 2}
+        again: true
+        note: 已处置 2 项，效果有限，建议追加
+      - when: {max: 1}
+        goto: 红色
+        note: 处置不足，漏风增大，发展到红色
+        effect:
+          interventions:
+            - {type: leak_change, params: {factor: 3}}
+
+  红色:
+    jump_h: 20
+    prompt: 红色预警：撤人、封闭火区。
+    options:
+      - {id: evacuate, label: 撤人, step: evacuate}
+      - {id: seal, label: 封闭火区, step: temporary_seal}
+    branches:
+      - when: {min: 1}
+        end: true
+        run_h: 72
+        message: 已撤人并封闭，火区进入封闭监测

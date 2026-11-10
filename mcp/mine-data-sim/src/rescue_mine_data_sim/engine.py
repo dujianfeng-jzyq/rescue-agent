@@ -14,7 +14,7 @@ import math
 import random
 import time
 import zlib
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta
 
 from rescue_contract.models import (
@@ -211,6 +211,22 @@ class SimEngine:
         rec = {"scenario": incident.id, "name": incident.name, "at_h": t, "at": self.at(t).isoformat()}
         self.injected.append(rec)
         return rec
+
+    def set_params(self, overrides: dict | None = None, scale: dict | None = None) -> ProcessParams:
+        """从现在起换一套过程参数（演示分支用）：overrides 给绝对值，scale 在当前值上乘系数。物理状态连续。"""
+        t = self.now_h()
+        self._advance_to(t)
+        t = self._history[-1].t_h
+        cur = self.params_at(t)
+        changes = dict(overrides or {})
+        for name, factor in (scale or {}).items():
+            changes[name] = getattr(cur, name) * float(factor)
+        unknown = set(changes) - {f.name for f in fields(ProcessParams)}
+        if unknown:
+            raise ValueError(f"未知过程参数：{sorted(unknown)}")
+        new = replace(cur, **changes)
+        self._params.append((t, new))
+        return new
 
     def set_override(self, sensor_id: str, measurand: Measurand | None, mode: str, value: float | None = None, minutes: float | None = None, fault: str | None = None) -> Override | None:
         """设置读数；mode=follow 取消该测点（该参数）现有的设置、恢复跟随模型。返回新设置（follow 时为 None）。"""

@@ -35,6 +35,12 @@
 </header>
 <main>
   <div>
+    <section id="directorBox" style="display:none">
+      <h2>演示导演 <span id="dirState" class="tag"></span></h2>
+      <div class="row"><button class="primary" id="dirStart" onclick="dirStart()">开始演示</button></div>
+      <div id="dirPick"></div>
+      <ul id="dirLog" class="muted"></ul>
+    </section>
     <section>
       <h2>运行状态</h2>
       <div class="kv" id="status"></div>
@@ -165,6 +171,27 @@ async function drawChart() {
     `<path d="${line('model')}" fill="none" stroke="#9ca3af" stroke-width="1.5"/><path d="${line('output')}" fill="none" stroke="#2563eb" stroke-width="2"/>${dots}`
 }
 
+
+let picked = new Set(), pickedFor = ''
+const DIR_NAME = { idle: '待开始', running: '推进中', holding: '等待选择处置', ending: '收尾', finished: '已结束', unavailable: '' }
+const dirStart = () => act(() => api('/sim/demo/start', {}), '演示开始')
+const dirChoose = () => act(async () => { await api('/sim/demo/choose', { options: [...picked] }); picked = new Set() }, '已选择，继续推进')
+function togglePick(id) { picked.has(id) ? picked.delete(id) : picked.add(id); renderDirector(state.director) }
+function renderDirector(d) {
+  const box = $('directorBox')
+  if (!d || d.state === 'unavailable') { box.style.display = 'none'; return }
+  box.style.display = ''
+  $('dirState').textContent = DIR_NAME[d.state] + (d.stage ? `（${d.stage}）` : ''); $('dirState').className = `tag ${d.state === 'holding' ? 'warn' : ''}`
+  $('dirStart').disabled = ['running', 'holding', 'ending'].includes(d.state) || state.mode !== 'demo'
+  $('dirStart').textContent = d.state === 'finished' ? '再来一次' : '开始演示'
+  if (d.state !== 'holding') picked = new Set()
+  $('dirPick').innerHTML = d.state === 'holding'
+    ? `<div class="warn" style="margin:6px 0">${esc(d.prompt || '')}</div>` + d.options.map((o) => `<label style="display:block;margin:3px 0"><input type="checkbox" ${picked.has(o.id) || o.done ? 'checked' : ''} ${o.done ? 'disabled' : ''} onchange="togglePick('${o.id}')"> ${esc(o.label)}${o.done ? '（已下发）' : ''}</label>`).join('') +
+      `<div class="row"><button class="primary" onclick="dirChoose()">确认下发所选（${picked.size} 项）</button></div>`
+    : d.state === 'finished' ? `<div class="ok" style="margin:6px 0">${esc(d.outcome || '演示结束')}</div>` : ''
+  $('dirLog').innerHTML = d.log.slice().reverse().map((l) => `<li>${esc(l.at.replace('T', ' '))} ${esc(l.text)}</li>`).join('')
+}
+
 async function refresh() {
   try { state = await api('/sim/state') } catch (e) { say(`读不到状态：${e.message}（检查控制令牌）`, 'bad'); return }
   const phase = state.mode !== 'demo' ? `场景 ${state.scenario.id}` : state.injected.length ? `已注入 ${state.injected.map((i) => `${i.name}（${i.at.replace('T', ' ')}）`).join('；')}` : '常态'
@@ -179,6 +206,7 @@ async function refresh() {
     `<div class="muted" style="margin-top:6px">场景剧本事件</div><ul>${script.join('') || '<li class="muted">无</li>'}</ul>` +
     `<div class="muted" style="margin-top:6px">已执行的处置（来自 actions 或控制台）</div><ul>${actions.join('') || '<li class="muted">无</li>'}</ul>` +
     `<div class="muted" style="margin-top:6px">当前的读数设置（记入模拟器日志，复盘时可区分）</div><ul>${ovs.join('') || '<li class="muted">无</li>'}</ul>`
+  renderDirector(state.director)
   renderIncidents(state.incident_store)
   const t = state.truth
   kv($('truth'), [['高温点温度', `${t.temperature_c} ℃`], ['高温点氧浓度', `${t.o2_pct} %`], ['距工作面', `${t.depth_m} m`], ['注氮', `${t.n2_m3_h} m³/h`], ['已封闭', t.sealed ? '是' : '否'], ['明火', t.open_fire ? '<span class="bad">是</span>' : '否']])

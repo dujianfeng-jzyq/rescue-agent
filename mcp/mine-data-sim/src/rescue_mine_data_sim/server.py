@@ -56,9 +56,10 @@ from rescue_contract.models import (
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 
+from .director import Director, DirectorThread, load_flow
 from .engine import SimEngine, all_sensor_ids
 from .mine import EQUIPMENT, INVENTORY, MINE_ID, MINE_NAME, NETWORK, PANELS, RESCUE_TEAMS, SENSOR_BY_ID, SENSORS
-from .scenarios import load_all
+from .scenarios import load_all, scenario_dir
 
 INSTRUCTIONS = (
     "rescue-mine 接口（模拟矿井实现）。提供接口自描述、通风网络、测点清单（含语义角色）、监测数据（含数据质量标记）、"
@@ -482,6 +483,7 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
             {
                 "incident_store": incident_state(),
                 "mode": sim.mode,
+                "director": director.status() if director else None,
                 "injected": e.injected,
                 "auto_pause": sim.auto_pause,
                 "anomalies": sim.anomalies,
@@ -572,6 +574,37 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         sim.resumed_wall = time.time()
         sim.engine.clock.set_paused(False)
         return JSONResponse({"ok": True, "now": sim.engine.now().isoformat(), "speed": sim.engine.clock.speed})
+
+    flow_path = Path(os.environ.get("RESCUE_DEMO_FLOW", scenario_dir() / "demo" / "flow.yaml"))
+    director = Director(sim, load_flow(flow_path), incidents, incidents.dir / "sentinel" / "heartbeat.json" if incidents else None) if flow_path.is_file() else None
+    if holder is None and director is not None:
+        DirectorThread(director).start()
+
+    @server.custom_route("/sim/demo/director", methods=["GET"])
+    async def demo_director(_req: Request) -> JSONResponse:
+        return JSONResponse(director.status() if director else {"state": "unavailable"})
+
+    @server.custom_route("/sim/demo/start", methods=["POST"])
+    async def demo_start(_req: Request) -> JSONResponse:
+        """开始演示：注入事故，由导演按预警等级推进（常态下点一次）。"""
+        if director is None:
+            return bad("没有演示流程（scenarios/demo/flow.yaml）")
+        try:
+            director.start()
+        except ValueError as exc:
+            return bad(str(exc))
+        return JSONResponse({"ok": True, **director.status()})
+
+    @server.custom_route("/sim/demo/choose", methods=["POST"])
+    async def demo_choose(req: Request) -> JSONResponse:
+        """操作员选择处置（选项编号列表）；之后导演按分支继续。"""
+        if director is None:
+            return bad("没有演示流程")
+        body = await req.json()
+        try:
+            return JSONResponse({"ok": True, **director.choose([str(x) for x in body.get("options", [])])})
+        except ValueError as exc:
+            return bad(str(exc))
 
     @server.custom_route("/sim/demo/auto-pause", methods=["POST"])
     async def demo_auto_pause(req: Request) -> JSONResponse:
