@@ -97,7 +97,10 @@ def main(argv: list[str]) -> int:
     acts = story.actions(store, iid)
     check("导演走完", d["state"] == "finished")
     check("黄色：加密监测已下发", ("start_monitoring", "issued") in acts)
-    check("橙色：防灭火方案已下发", ("issue_firefighting_plan", "issued") in acts)
+    if os.environ["STORY_ORANGE_OPTIONS"].strip() == "不采取处置":  # 明确不处置：不编方案、不下发，导演走 declined 分支
+        check("橙色：操作员不采取处置，没有下发防灭火方案", ("issue_firefighting_plan", "issued") not in acts and any(c.get("declined") for c in d.get("chosen", [])))
+    else:
+        check("橙色：防灭火方案已下发", ("issue_firefighting_plan", "issued") in acts)
     check("橙色：处置选项卡片问过操作员（get_response_options 之后）", any(c["stage"] == "橙色" for c in d.get("chosen", [])))
     print("\n".join(f"  {t} {s}" for t, s in acts))
     print("== 结果")

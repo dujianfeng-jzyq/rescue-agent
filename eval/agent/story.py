@@ -203,7 +203,12 @@ def _answer_questions(page: Page, max_questions: int) -> int:
         elif option.count():
             option.first.click(timeout=5000)
         for label in ("下一题", "提交", "Next", "Submit"):
-            btn = page.locator("button:not([disabled])").filter(has_text=label)  # 卡片上还有同名的图标按钮（aria-label，没有文字，答完才可用），要点带文字的那个
+            # 卡片上还有同名的图标按钮（aria-label，没有文字，答完才可用），要点带文字的那个；先在提问卡片里按文字整段匹配找，
+            # 找不到再找全页：聊天记录里工具活动的标题按钮也会含“提交”二字（如“提交预警”），按包含匹配会点到它、点不动
+            exact = re.compile(rf"^\s*{label}\s*$")
+            btn = card.locator("button:not([disabled])").filter(has_text=exact)
+            if not btn.count():
+                btn = page.locator("button:not([disabled])").filter(has_text=exact)
             if btn.count():
                 btn.first.click(timeout=5000)
                 break
