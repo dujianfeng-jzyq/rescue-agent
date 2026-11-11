@@ -11,14 +11,23 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && apt-get update && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl fonts-wqy-microhei fonts-dejavu-core && rm -rf /var/lib/apt/lists/* \
     # pnpm 直接装进镜像，不用 corepack：corepack 没有 packageManager 字段时每次都联网查 latest，运行期网络不通就装不上 bundle（见 dsh-entrypoint.sh）
     && npm i -g @deepseek-ai/dsh@0.2.1-rc.4 pnpm@12.18.0 && npm cache clean --force
-# 技能脚本只能用 skills/requirements.txt 里的包；技能自检用 rescue_contract
+# 依赖和代码分开装，依赖层全部放在代码层前面：只改代码时第三方包、node_modules 都复用（任何一层变了，它后面的层都要重做）。
+# 1) Python 第三方包：技能脚本只能用 skills/requirements.txt 里的包；技能自检用 rescue_contract，
+#    这里只按 contract 的 pyproject.toml 装它的依赖和构建后端 hatchling，contract 本身在后面装。
 COPY skills/requirements.txt /tmp/skills-requirements.txt
+COPY mcp/contract/pyproject.toml /tmp/contract-pyproject.toml
+RUN python -c "import tomllib; d = tomllib.load(open('/tmp/contract-pyproject.toml', 'rb')); print('\n'.join(d['project']['dependencies'] + d['build-system']['requires']))" > /tmp/contract-requirements.txt \
+    && pip install --no-cache-dir -r /tmp/skills-requirements.txt -r /tmp/contract-requirements.txt
+# 2) bundle 的 node 依赖：只按 package.json 和锁文件装（node_modules、lib 不进构建上下文，见 .dockerignore）
+WORKDIR /app/dsh-bundle
+COPY dsh-bundle/package.json dsh-bundle/pnpm-lock.yaml dsh-bundle/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile && rm -rf /root/.cache /root/.local/share/pnpm/store
+# 3) 代码：contract（--no-deps --no-build-isolation，不联网）、bundle 构建（构建后装进 rescue 配置档：配置档在入口脚本里建，DSH_HOME 是数据卷）
 COPY mcp/contract /tmp/contract
-RUN pip install --no-cache-dir -r /tmp/skills-requirements.txt /tmp/contract
-# bundle：构建后装进 rescue 配置档（配置档在入口脚本里建，DSH_HOME 是数据卷）
+RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/contract
+COPY dsh-bundle ./
+RUN pnpm build
 WORKDIR /app
-COPY dsh-bundle /app/dsh-bundle
-RUN cd /app/dsh-bundle && rm -rf node_modules lib && pnpm install --frozen-lockfile && pnpm build && rm -rf /root/.cache /root/.local/share/pnpm/store
 # 技能（运行时只读挂载覆盖这里的副本；镜像构建时跑一遍自检）
 COPY skills /app/skills
 RUN PYTHONDONTWRITEBYTECODE=1 python -m rescue_contract.skills check /app/skills
