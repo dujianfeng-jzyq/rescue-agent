@@ -128,7 +128,7 @@ export interface MapState {
   alarms: { items: MineAlarmRow[]; error?: string }
   /** 火区台账（矿井人工登记的事实） */
   fireAreas: { items: FireAreaRow[]; error?: string }
-  records: { id: string; kind: string; kindName: string; panel: string | null; asOf: string; createdAt: string }[]
+  records: { id: string; kind: string; kindName: string; title: string; panel: string | null; asOf: string; createdAt: string }[]
   agent: {
     state: 'idle' | 'working' | 'waiting_approval' | 'waiting_question' | 'alert_pending' | 'degraded'
     label: string
@@ -292,12 +292,102 @@ async function latestRecords(dir: string): Promise<MapState['records']> {
   for (const { n } of newest) {
     try {
       const r = JSON.parse(await readFile(join(dir, n), 'utf8')) as Record<string, any>
-      out.push({ id: String(r.record_id), kind: String(r.kind), kindName: KIND_NAME[String(r.kind)] ?? String(r.kind), panel: r.panel ?? null, asOf: String(r.as_of ?? ''), createdAt: String(r.created_at ?? '') })
+      out.push({ id: String(r.record_id), kind: String(r.kind), kindName: KIND_NAME[String(r.kind)] ?? String(r.kind), title: recordTitle(r), panel: r.panel ?? null, asOf: String(r.as_of ?? ''), createdAt: String(r.created_at ?? '') })
     } catch {
       /* 坏文件跳过 */
     }
   }
   return out
+}
+
+const SKILL_NAME: Record<string, string> = {
+  'fire-assessment': '研判', 'effect-review': '效果复评', 'sealing-plan': '封闭方案', 'firefighting-plan': '防灭火方案', 'plan-compliance': '合规审核',
+  'explosion-triangle': '爆炸危险性', 'emergency-escalation': '升级建议', 'unsealing-plan': '启封评估', 'fire-incident-management': '事件',
+}
+const PART_NAME: Record<string, string> = {
+  warning: '预警等级', stage: '自燃阶段', alarms: '实时报警', trend: '趋势', personnel: '受威胁人员', check: '风险检测', explanation_options: '研判说明',
+  explosion_triangle: '爆炸三角形', escalation: '升级建议', effect: '复评结果', skeleton: '方案骨架', compose: '方案', scope: '审核范围', review: '审核结论',
+  unsealing_plan: '启封评估', brief: '要点', report: '报告', plan: '方案', assessment: '研判',
+}
+
+const COLLECT_NAME: Record<string, string> = { assessment: '研判取数', check: '检测取数', effect: '复评取数', plan: '方案取数', unseal: '启封取数' }
+
+/** 记录的中文名：技能 + 脚本/模板/采集清单（如“效果复评 · 复评结果”“研判 · 要点”） */
+export function recordTitle(r: Record<string, any>): string {
+  const s = r.source ?? {}
+  const skill = SKILL_NAME[String(s.skill)] ?? String(s.skill ?? '')
+  const part = s.script ?? (s.template ? String(s.template).replace(/^templates\//, '').replace(/\.md$/, '') : s.collect_kind ? `${s.collect_kind}` : '')
+  if (r.kind === 'evidence') return [skill, `证据（${COLLECT_NAME[String(part)] ?? part}）`].filter(Boolean).join(' · ')
+  return [skill, PART_NAME[String(part)] ?? String(part)].filter(Boolean).join(' · ') || String(r.record_id)
+}
+
+export interface RecordView {
+  id: string
+  kind: string
+  kindName: string
+  title: string
+  panel: string | null
+  asOf: string
+  createdAt: string
+  parents: string[]
+  /** 报告：Markdown 原文；结果：标量字段；证据：各测点组的测点数和读数条数 */
+  /** 报告：Markdown 原文（结果记录显示按它生成的报告时 from 是报告编号）；结果：标量字段；证据：各测点组的测点数和读数条数 */
+  body: { type: 'markdown'; text: string; from?: string } | { type: 'fields'; rows: { key: string; value: string }[]; warnings: string[] }
+}
+
+const shown = (v: unknown): string | null => {
+  if (v === null || v === undefined || v === '') return null
+  if (typeof v === 'boolean') return v ? '是' : '否'
+  if (typeof v === 'number' || typeof v === 'string') return String(v)
+  if (Array.isArray(v) && v.every((x) => ['string', 'number'].includes(typeof x))) return v.length ? v.join('、') : null
+  return null
+}
+
+/** 一条记录的只读视图（大屏点“最近记录”弹窗用）。编号不合格式或读不到返回 null。证据记录很大，只给汇总。 */
+export async function recordView(dir: string, id: string): Promise<RecordView | null> {
+  if (!/^(EV|RS|RP)-\d{8}T\d{6}-[a-z0-9]{6}$/.test(id)) return null
+  let r: Record<string, any>
+  try {
+    r = JSON.parse(await readFile(join(dir, `${id}.json`), 'utf8'))
+  } catch {
+    return null
+  }
+  const head = {
+    id, kind: String(r.kind), kindName: KIND_NAME[String(r.kind)] ?? String(r.kind), title: recordTitle(r), panel: r.panel ?? null,
+    asOf: String(r.as_of ?? ''), createdAt: String(r.created_at ?? ''), parents: Array.isArray(r.parent_ids) ? r.parent_ids.map(String) : [],
+  }
+  const c = r.content
+  if (typeof c === 'string') return { ...head, body: { type: 'markdown', text: c } }
+  if (r.kind === 'evidence') {
+    const rows: { key: string; value: string }[] = []
+    for (const [name, g] of Object.entries<any>(c?.groups ?? {})) rows.push({ key: `测点组 ${name}`, value: `${(g.sensors ?? []).length} 个测点，最新值 ${(g.latest ?? []).length} 条，历史读数 ${(g.readings ?? []).length} 条${g.window_h ? `（${g.window_h} 小时）` : ''}` })
+    for (const m of c?.missing ?? []) rows.push({ key: `缺 ${m.group}`, value: String(m.reason ?? '') })
+    for (const k of ['fire_areas', 'inventory', 'events', 'mine_alarms'] as const) if (Array.isArray(c?.[k])) rows.push({ key: { fire_areas: '火区台账', inventory: '物资台账', events: '安全监控事件', mine_alarms: '矿井报警平台' }[k], value: `${c[k].length} 条` })
+    if (c?.personnel) rows.push({ key: '人员定位', value: '有' })
+    if (c?.network) rows.push({ key: '通风网络', value: `${(c.network.roadways ?? []).length} 条巷道` })
+    if (c?.since) rows.push({ key: '处置开始', value: String(c.since) })
+    return { ...head, body: { type: 'fields', rows, warnings: [] } }
+  }
+  // 结果记录：有按它生成的报告（同一时刻、上级是它）就显示报告原文（中文、照模板），要点优先；没有才列字段
+  const stamp = id.slice(3, 18)
+  const reports: { text: string; brief: boolean; id: string }[] = []
+  for (const n of await readdir(dir).catch(() => [] as string[])) {
+    if (!n.startsWith(`RP-${stamp}`)) continue
+    try {
+      const x = JSON.parse(await readFile(join(dir, n), 'utf8'))
+      if (Array.isArray(x.parent_ids) && x.parent_ids.includes(id) && typeof x.content === 'string') reports.push({ text: x.content, brief: /brief/.test(String(x.source?.template)), id: String(x.record_id) })
+    } catch {
+      /* 坏文件跳过 */
+    }
+  }
+  const rep = reports.find((x) => x.brief) ?? reports[0]
+  if (rep) return { ...head, body: { type: 'markdown', text: rep.text, from: rep.id } }
+  const res = c?.result ?? {}
+  const rows = Object.entries<any>(res).flatMap(([k, v]) => {
+    const t = shown(v)
+    return t === null ? [] : [{ key: k, value: t }]
+  })
+  return { ...head, body: { type: 'fields', rows, warnings: Array.isArray(c?.warnings) ? c.warnings.map(String) : [] } }
 }
 
 /** MCP 对返回列表的工具包一层 {result: [...]}（与证据插件的 unwrap 相同）。 */

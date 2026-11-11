@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 
 import { FIREFIGHTING, SEALING } from '../src/fire-loop/sealing.ts'
-import { checkSelection, defaultSelection, reviewPrompt, type Scope, type Skeleton, skeletonText, writePrompt, writeSchema } from '../src/fire-loop/plan-stages.ts'
+import { checkSelection, defaultSelection, reviewPrompt, type Scope, type Skeleton, skeletonText, writePrompt, writeSchema, writeWithRetry } from '../src/fire-loop/plan-stages.ts'
 
 // 骨架、审核范围取自防灭火方案的技能样例（s3-accelerating 第 39 小时，橙色）
 const skills = new URL('../../skills/', import.meta.url)
@@ -67,5 +67,27 @@ describe('防灭火方案：合规审核范围', () => {
   it('提示词用本流程的名字', () => {
     const p = reviewPrompt({ skillName: 'plan-compliance', skillVersion: '0.1.0', skillBody: '# 审核', scope: SC, planText: '方案', redline: { ok: true, problems: [] }, articles: [], flow: FIREFIGHTING.name })
     assert.ok(p.includes('draft_firefighting_plan') && p.includes('no_entry'))
+  })
+})
+
+describe('方案编写：输出不合格时重做一次', () => {
+  const good = { optional_steps: ['leak_sealing'], step_notes: [], summary: '先注惰降氧，不封闭火区' }
+  const check = (x: unknown) => checkSelection(x, SK, MATERIAL)
+  it('第一次概述超长：带着问题重做，第二次合格就用第二次的', async () => {
+    const fixes: string[][] = []
+    const outs = [{ ...good, summary: '长'.repeat(150) }, good]
+    const r = await writeWithRetry(async (fix) => (fixes.push(fix), { ok: true as const, structured: outs[fixes.length - 1] }), check)
+    assert.deepEqual(r.selection?.optional_steps, ['leak_sealing'])
+    assert.deepEqual(fixes[0], [])
+    assert.match(fixes[1]![0]!, /上一次的输出不合格：.*超过/)
+  })
+  it('两次都不合格：返回 null 和问题；子 Agent 没跑成不重做', async () => {
+    let n = 0
+    const bad = await writeWithRetry(async () => (n++, { ok: true as const, structured: { ...good, summary: '长'.repeat(150) } }), check)
+    assert.equal(bad.selection, null)
+    assert.equal(n, 2)
+    n = 0
+    const failed = await writeWithRetry(async () => (n++, { ok: false as const, error: '超时' }), check)
+    assert.deepEqual([failed.selection, failed.problem, n], [null, '超时', 1])
   })
 })

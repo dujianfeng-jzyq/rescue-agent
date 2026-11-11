@@ -51,10 +51,12 @@
   "additionalProperties": false,
   "properties": {
     "order_id": {
+      "default": "",
       "title": "Order Id",
       "type": "string"
     },
     "purpose": {
+      "default": "",
       "title": "Purpose",
       "type": "string"
     },
@@ -62,16 +64,22 @@
       "items": {
         "$ref": "#/$defs/DispatchLine"
       },
-      "minItems": 1,
       "title": "Lines",
       "type": "array"
+    },
+    "record_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Record Id"
     }
   },
-  "required": [
-    "order_id",
-    "purpose",
-    "lines"
-  ],
   "title": "DispatchOrder",
   "type": "object",
   "$comment": "rescue-contract 0.12.0"

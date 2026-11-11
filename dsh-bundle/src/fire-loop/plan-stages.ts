@@ -55,6 +55,26 @@ const NUMBERS =
 
 const show = (v: unknown) => (v === null || v === undefined ? '缺失' : v === true ? '是' : v === false ? '否' : String(v))
 
+/**
+ * 方案编写阶段：子 Agent 输出不合格（如概述超长）时，带着问题重做一次（2026-11-10 演示复看：第 2 轮概述超长，退回缺省选择，可选步骤全丢了）。
+ * 子 Agent 本身没跑成（超时、取消）不重做。返回合格的选择，或 null 和最后的问题。
+ */
+export async function writeWithRetry(
+  run: (fix: string[]) => Promise<{ ok: true; structured: unknown } | { ok: false; error: string }>,
+  check: (structured: unknown) => { ok: true; selection: Selection } | { ok: false; problems: string[] },
+  attempts = 2,
+): Promise<{ selection: Selection | null; problem: string }> {
+  let problem = ''
+  for (let i = 0; i < attempts; i++) {
+    const r = await run(i > 0 ? [`上一次的输出不合格：${problem}。按要求改正后重新输出。`] : [])
+    if (!r.ok) return { selection: null, problem: r.error }
+    const c = check(r.structured)
+    if (c.ok) return { selection: c.selection, problem: '' }
+    problem = c.problems.join('；')
+  }
+  return { selection: null, problem }
+}
+
 /** 默认选择：阶段失败时用（封闭全部候选巷道——没有密闭巷道的方案就没有——不加可选步骤），报告注明 */
 export function defaultSelection(sk: Skeleton): Selection {
   return { optional_steps: [], seal_roadways: sk.seal_roadway_options.map((o) => o.roadway_id), step_notes: [], summary: '' }

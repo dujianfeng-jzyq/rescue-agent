@@ -295,6 +295,10 @@ INVENTORY = [
     ResourceItem(item_type="grout_material_t", name="注浆材料（黄泥/粉煤灰）", quantity=300, unit="t", depot_node="N1"),
     ResourceItem(item_type="inhibitor_t", name="阻化剂", quantity=8, unit="t", depot_node="N2"),
     ResourceItem(item_type="temporary_seal_kit", name="快速密闭材料", quantity=6, unit="套", depot_node="N2"),
+    # 永久密闭砌墙材料（2026-11-10 补上，演示物资调运单用；数量为占位值）
+    ResourceItem(item_type="brick_pcs", name="标准砖", quantity=12000, unit="块", depot_node="N1"),
+    ResourceItem(item_type="cement_t", name="水泥", quantity=3, unit="t", depot_node="N1"),
+    ResourceItem(item_type="sand_m3", name="砂", quantity=6, unit="m³", depot_node="N1"),
     ResourceItem(item_type="self_rescuer", name="隔绝式自救器", quantity=120, unit="台", depot_node="N1"),
     ResourceItem(item_type="fire_extinguisher", name="干粉灭火器", quantity=40, unit="具", depot_node="N2"),
 ]

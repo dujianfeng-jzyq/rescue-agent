@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { describe, it } from 'node:test'
 
 import { IncidentStore } from '../src/incident/store.ts'
-import { buildState, timelineOf } from '../src/map/state.ts'
+import { buildState, recordTitle, recordView, timelineOf } from '../src/map/state.ts'
 import type { MineCaller } from '../src/map/state.ts'
 
 const SENSORS = [
@@ -312,5 +312,35 @@ describe('timelineOf', () => {
     const t = timelineOf(entries)
     assert.equal(t.length, 14)
     assert.equal(t[0]!.at, 't39')
+  })
+})
+
+describe('recordView（最近记录弹窗）', () => {
+  const base = { panel: '211016', as_of: '2026-11-05T09:00:00', created_at: 'x', origin: {}, content_sha256: 'x', files: [] }
+  it('报告给 Markdown 原文，结果列标量字段，证据只给汇总；名称来自技能和脚本', async () => {
+    const f = await fixture()
+    const rp = { ...base, record_id: 'RP-20261105T090000-aaaaaa', kind: 'report', source: { skill: 'effect-review', template: 'templates/brief.md' }, content: '【效果评估要点】\n- 结论：已受控', parent_ids: ['RS-20261105T080000-eeeeee'] }
+    const rs = { ...base, record_id: 'RS-20261105T090000-bbbbbb', kind: 'result', source: { skill: 'effect-review', script: 'effect' }, content: { warnings: ['占位值'], result: { overall_name: '已受控', observed_h: 14, points: [{ a: 1 }], sealed_off: ['SM-1'], escalation_suggested: false } }, parent_ids: [] }
+    const ev = { ...base, record_id: 'EV-20261105T090000-cccccc', kind: 'evidence', source: { skill: 'effect-review', collect_kind: 'effect' }, content: { groups: { tubes: { sensors: [1, 2], latest: [1], readings: [1, 2, 3], window_h: 24 } }, missing: [], inventory: [1] }, parent_ids: [] }
+    for (const r of [rp, rs, ev]) await writeFile(join(f.recordDir, `${r.record_id}.json`), JSON.stringify(r))
+    assert.equal(recordTitle(rp), '效果复评 · 要点')
+    const a: any = await recordView(f.recordDir, rp.record_id)
+    assert.deepEqual([a.body.type, a.body.text, a.parents], ['markdown', rp.content, rp.parent_ids])
+    const b: any = await recordView(f.recordDir, rs.record_id)
+    assert.deepEqual(b.body.rows, [{ key: 'overall_name', value: '已受控' }, { key: 'observed_h', value: '14' }, { key: 'sealed_off', value: 'SM-1' }, { key: 'escalation_suggested', value: '否' }])
+    assert.deepEqual(b.body.warnings, ['占位值'])
+    const c: any = await recordView(f.recordDir, ev.record_id)
+    assert.equal(c.title, '效果复评 · 证据（复评取数）')
+    // 有按结果生成的报告：显示报告
+    const brief = { ...rp, record_id: 'RP-20261105T090000-dddddd', parent_ids: [rs.record_id], content: '【要点】' }
+    await writeFile(join(f.recordDir, `${brief.record_id}.json`), JSON.stringify(brief))
+    const d: any = await recordView(f.recordDir, rs.record_id)
+    assert.deepEqual(d.body, { type: 'markdown', text: '【要点】', from: brief.record_id })
+    assert.match(c.body.rows[0].value, /2 个测点.*历史读数 3 条/)
+  })
+  it('编号不合格式或读不到：null（不按任意路径读文件）', async () => {
+    const f = await fixture()
+    assert.equal(await recordView(f.recordDir, '../../etc/passwd'), null)
+    assert.equal(await recordView(f.recordDir, 'RS-20261105T090000-zzzzzz'), null)
   })
 })

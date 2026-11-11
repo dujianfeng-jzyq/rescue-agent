@@ -269,6 +269,30 @@ def evacuation_from_record(notice: dict[str, Any], records: RecordStore | None) 
     return {**notice, "persons": persons, "routes": routes} if persons else notice
 
 
+def dispatch_from_record(order: dict[str, Any], records: RecordStore | None) -> dict[str, Any]:
+    """调度单明细留空、给了方案的审核记录（或方案记录）时，按方案记录的 dispatch_lines 填编号、用途和明细。
+    明细已给出，或读不到记录、方案没有需调运的物资时原样返回（之后的核对会拦下空明细）。"""
+    if order.get("lines") or not order.get("record_id") or records is None:
+        return order
+    try:
+        rec = records.get(str(order["record_id"]))
+        pr = _result(rec)
+        if "dispatch_lines" not in pr:  # 审核记录：方案在它的输入里
+            pr = _result(records.get(str((rec.source.get("inputs") or {}).get("plan"))))
+    except (RecordNotFound, RecordTampered, ValueError, KeyError):
+        return order
+    lines = [{k: ln[k] for k in ("item_type", "quantity", "unit", "from_node", "to_node")} for ln in pr.get("dispatch_lines") or []]
+    if not lines:
+        return order
+    plan = pr.get("plan") or {}
+    return {
+        **order,
+        "order_id": order.get("order_id") or f"DO-{plan.get('plan_id', '')}",
+        "purpose": order.get("purpose") or f"{plan.get('title', '方案')}（{plan.get('plan_id', '')}）物资调运",
+        "lines": lines,
+    }
+
+
 def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) -> list[str]:
     """审批弹窗的要点：确认人要批的到底是什么。全部由代码从记录（或撤人、调度的指令参数）取，不经模型改写；
     取不到就不给（要点只是给人看的摘要，核对仍按 checks）。"""
@@ -380,6 +404,8 @@ __all__ = [
     "check_escalation_record",
     "check_monitoring_record",
     "check_warning_record",
+    "dispatch_from_record",
+    "evacuation_from_record",
     "plan_from_record",
     "precheck",
     "validate_plan",

@@ -398,9 +398,12 @@ class DispatchLine(_Model):
 
 
 class DispatchOrder(_Model):
-    order_id: str
-    purpose: str
-    lines: list[DispatchLine] = Field(min_length=1)
+    # 给方案的审核记录（record_id，draft_sealing_plan 的 issue_record_id）而明细留空时，由 guard 按方案记录的“需调运”填写
+    # 编号、用途和明细（dispatch_from_record）：明细不用智能体抄（2026-11-10 演示物资调运单）
+    order_id: str = ""
+    purpose: str = ""
+    lines: list[DispatchLine] = Field(default_factory=list)
+    record_id: str | None = None
 
 
 class EvacuationNotice(_Model):

@@ -37,6 +37,39 @@ ITEM_NAMES = {
 }
 
 
+def dispatch_lines(rows, stock, seals, network, cfg):
+    """需调运的明细：dispatch.items 里列的物资，台账有多少就调多少（不超过需要量），按密闭巷道平均分到各密闭处
+    （进风侧巷道取起点、其余取终点，即巷道靠外的一端）；存放点就在密闭处的不调。数量为计算结果，到点时间不估。"""
+    items = set(cfg.get("items") or [])
+    roads = {r["id"]: r for r in network["roadways"]}
+    sites = []
+    for rid in seals:
+        r = roads.get(rid)
+        if r:
+            sites.append(r["from_node"] if r["kind"] == "intake" else r["to_node"])
+    if not sites:
+        return []
+    out = []
+    for row in rows:
+        if row["item_type"] not in items or not row["in_ledger"] or row["continuous"]:
+            continue
+        need = min(row["required"], row["on_hand"])
+        integer = float(row["required"]).is_integer()
+        for k, site in enumerate(sites):
+            share = need / len(sites)
+            share = (int(need) // len(sites) + (1 if k < int(need) % len(sites) else 0)) if integer else round(share, 3)
+            for depot in [s for s in stock if s["item_type"] == row["item_type"]]:
+                if share <= 0:
+                    break
+                if depot["depot_node"] == site:
+                    share = 0
+                    break
+                qty = min(share, depot["quantity"])
+                out.append({"item_type": row["item_type"], "label": row["label"], "quantity": qty, "unit": row["unit"], "from_node": depot["depot_node"], "to_node": site})
+                share -= qty
+    return out
+
+
 def _unique(values, what):
     if len(set(values)) != len(values):
         raise ValueError(f"{what}有重复")
@@ -137,6 +170,7 @@ def run(data, _args):
         r["label"] = ITEM_NAMES.get(r["item_type"], r["item_type"])
         r["continuous"] = r["item_type"] in continuous  # 持续供应：总量照算，不算缺口
     shortages = [r for r in rows if not r["sufficient"] and not r["continuous"]]
+    dispatch = dispatch_lines(rows, stock, seals, ev["network"], cfg.get("dispatch") or {})
 
     plan = {
         "plan_id": sk["plan_id"],
@@ -159,6 +193,9 @@ def run(data, _args):
         "seal_walls_text": "、".join(seals),
         "materials": materials,
         "supply": rows,
+        "dispatch_lines": dispatch,  # 需调运：台账里有的物资从存放点运到各密闭处（调度单按它下发，由 guard 从记录取）
+        "dispatch_count": len(dispatch),
+        "has_dispatch": bool(dispatch),
         "shortages": shortages,
         "shortage_count": len(shortages),
         "has_shortages": bool(shortages),

@@ -59,7 +59,7 @@ from rescue_contract.models import (
 )
 from rescue_contract.records import RecordNotFound, RecordStore
 from rescue_contract.redlines import RULES
-from rescue_contract.validation import PLAN_TOOLS, evacuation_from_record, plan_from_record, precheck, validate_plan
+from rescue_contract.validation import PLAN_TOOLS, dispatch_from_record, evacuation_from_record, plan_from_record, precheck, validate_plan
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -331,6 +331,8 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
 
     async def dispatch_problems(order: DispatchOrder) -> list[str]:
         """调度单按矿井数据核对：节点存在、物资在台账里、数量不超过台账库存。取不到矿井数据时不通过（fail closed）。"""
+        if not order.lines:
+            return ["调度单没有明细：给出方案的审核记录（方案里有需调运的物资）或明细"]
         try:
             nodes = {n.id for n in (await md.network()).nodes}
             stock: dict[str, float] = {}
@@ -354,10 +356,13 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
 
     @server.tool()
     async def issue_dispatch_order(order: DispatchOrder) -> ActionReceipt:
-        """下发物资调度单（确认人：指挥部指定负责人）。明细按矿井的网络和物资台账核对（节点存在、物资在台账里、不超库存）。"""
-        await reject_if("issue_dispatch_order", order, await dispatch_problems(order), [])
+        """下发物资调度单（确认人：指挥部指定负责人）。明细按矿井的网络和物资台账核对（节点存在、物资在台账里、不超库存）。
+        封闭方案有“需调运”时：record_id 照抄 draft_sealing_plan 的 issue_record_id，order_id、purpose、lines 都留空，由本服务按方案记录填写。"""
+        order = DispatchOrder.model_validate(dispatch_from_record(order.model_dump(mode="json"), record_store))
+        refs = [order.record_id] if order.record_id else []
+        await reject_if("issue_dispatch_order", order, await dispatch_problems(order), refs)
         request = DispatchRequest(purpose=order.purpose, lines=order.lines, idempotency_key=idempotency_key("issue_dispatch_order", order))
-        return await deliver("issue_dispatch_order", order, [], [lambda: md.dispatch_order(request)])
+        return await deliver("issue_dispatch_order", order, refs, [lambda: md.dispatch_order(request)])
 
     async def issue_plan_record(tool: str, record_id: str) -> ActionReceipt:
         class PlanRef(BaseModel):
@@ -444,10 +449,10 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
             return JSONResponse({"ok": False, "problems": [NO_CLOCK], "notes": []})
         result = precheck(tool, body.get("arguments") or {}, now, record_store)
         args = body.get("arguments") or {}
-        if tool == "notify_evacuation":  # 名单按人员记录填好再核对、再给确认弹窗算人数（与工具执行时同一规则）
-            key = "notice" if "notice" in args else None
-            filled = evacuation_from_record(args.get("notice", args), record_store)
-            args = {**args, "notice": filled} if key else filled
+        if tool in ("notify_evacuation", "issue_dispatch_order"):  # 名单、明细按记录填好再核对、再给确认弹窗（与工具执行时同一规则）
+            key, fill = ("notice", evacuation_from_record) if tool == "notify_evacuation" else ("order", dispatch_from_record)
+            filled = fill(args.get(key, args), record_store)
+            args = {**args, key: filled} if key in args else filled
             result = precheck(tool, args, now, record_store)
         if tool in ("issue_dispatch_order", "notify_evacuation") and result["ok"]:  # 按矿井数据核对（人工确认之前就拦住）
             try:

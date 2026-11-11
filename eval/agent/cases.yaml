@@ -528,14 +528,14 @@
     cited_tools_called: true
 
 - id: v3-wake-mine-alarm
-  description: 矿井自带报警平台的报警（mine_alarm）：先 check_mine 再按结果研判（s4 第 45 小时，橙色）
+  description: 矿井自带报警平台的报警（mine_alarm）：完整研判（是否先 check_mine 由智能体定；s4 第 45 小时，橙色；2026-11-10 起）
   scenario: s4-escalation
   at_h: 45
   incident: {panel: "1201", cause: mine_alarm, summary: "矿井报警平台：1201 回风巷 CO 报警"}
   prompt: |-
     【值守事件 {incident_id}】1201（火情，监测中）。以下告警由监听器发现，不经模型：
     - 告警 {alert_id}（矿井时间 {mine_now}）：矿井报警平台：1201 回风巷 CO 报警
-    这是矿井自己的报警平台发来的报警。请先做一次风险检测（check_mine，mode=once），异常则立即做完整研判，并把结果告知操作员。
+    这是矿井自己的报警平台发来的越限报警（不是规程红线报警）。请对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。
     （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
   approvals: {}
   checks:
@@ -548,7 +548,7 @@
           publish_warning: {level: orange}
           notify_evacuation: {}
           issue_firefighting_plan: {}
-      flows_called: [check_mine, run_fire_assessment]
+      flows_called: [run_fire_assessment]
       incident_ops:
         forbidden: [close_incident]
     incident_read: true

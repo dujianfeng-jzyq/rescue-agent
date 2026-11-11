@@ -35,6 +35,16 @@
 - {{label}}：{{#continuous}}总量 {{required}}，台账现有 {{on_hand}}，持续供应（按注浆站能力连续制浆，不算缺口）{{/continuous}}{{^continuous}}需要 {{required}}，台账现有 {{on_hand}}{{^sufficient}}，缺口 {{shortage}}{{/sufficient}}{{/continuous}}
 {{/compose.result.supply}}
 
+{{#compose.result.has_dispatch}}
+需调运（计算结果，下发方案后按此提交调度单）：
+
+{{/compose.result.has_dispatch}}
+{{#compose.result.dispatch_lines}}
+- {{label}}：{{quantity}}，{{from_node}} → {{to_node}}
+{{/compose.result.dispatch_lines}}
+{{#compose.result.has_dispatch}}
+
+{{/compose.result.has_dispatch}}
 {{#compose.result.has_shortages}}
 有缺口的物资 {{compose.result.shortage_count}} 项，需人工联系外部来源。
 

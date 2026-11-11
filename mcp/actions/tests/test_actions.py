@@ -255,6 +255,28 @@ def test_dispatch_is_checked_against_the_mine_inventory_and_network(world):
     assert world.holder.dispatches == []
 
 
+
+def test_dispatch_order_is_filled_from_the_plan_record(world):
+    """调度单只给方案的审核记录：编号、用途、明细由 guard 按方案记录的需调运填写，确认弹窗同一规则（2026-11-10 演示物资调运单）。"""
+    from starlette.testclient import TestClient
+
+    rid = world.plan_records()
+    compose = world.records.get(str(world.records.get(rid).source["inputs"]["plan"])).content["result"]
+    expected = [{k: ln[k] for k in ("item_type", "quantity", "unit", "from_node", "to_node")} for ln in compose["dispatch_lines"]]
+    assert expected, "样例方案应有需调运的物资"
+    args = {"order": {"record_id": rid}}
+    with TestClient(world.server.streamable_http_app()) as http:
+        pre = http.post("/redlines/check", json={"tool": "issue_dispatch_order", "arguments": args}).json()
+    assert pre["ok"], pre["problems"]
+    assert len(pre["summary"]["facts"]) == len(expected) and pre["summary"]["record_ids"] == [rid]
+    r = world.call("issue_dispatch_order", args)
+    assert not r.is_error, r.content[0].text
+    (sent,) = world.holder.dispatches
+    assert [{k: ln[k] for k in ("item_type", "quantity", "unit", "from_node", "to_node")} for ln in sent["lines"]] == expected
+    assert sent["purpose"].endswith("物资调运") and world.rows()[-1]["payload"]["order_id"].startswith("DO-")
+    # 没有记录也没有明细：拦下
+    assert world.call("issue_dispatch_order", {"order": {}}).is_error
+
 # ── 矿井执行失败、幂等 ──
 
 

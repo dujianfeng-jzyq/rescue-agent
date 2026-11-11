@@ -2,6 +2,7 @@
  * 大屏的自绘部分：顶栏、左栏（矿井信息）、右栏（智能体信息）。纯 DOM，每次拿到新状态就整块重画（数据量很小）。
  * 这里只显示：预警等级、阶段、读数都是 Node 侧从事件库和矿井原样取来的，前端不算、不判断。
  */
+import { openRecord } from './record-modal.ts'
 import type { StateData } from './state-types.ts'
 
 type Kid = Node | string | null | false | undefined
@@ -269,7 +270,21 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
     const rec = section(
       '最近记录',
       s && s.records.length
-        ? h('ul', { class: 'rm-list rm-records' }, ...s.records.slice(0, MAX_RECORDS).map((r) => h('li', null, h('span', { class: 'rm-kind' }, r.kindName), h('code', { title: r.id }, r.id), h('time', null, hm(r.asOf)))))
+        ? h(
+            'ul',
+            { class: 'rm-list rm-records' },
+            ...s.records.slice(0, MAX_RECORDS).map((r) => {
+              const li = h('li', { role: 'button', tabindex: '0', title: `${r.id}（点击查看）` }, h('span', { class: 'rm-kind' }, r.kindName), h('code', null, r.title || r.id), h('time', null, hm(r.asOf)))
+              li.addEventListener('click', () => void openRecord(r.id))
+              li.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  void openRecord(r.id)
+                }
+              })
+              return li
+            }),
+          )
         : empty('暂无记录'),
     )
     rec.classList.add('rm-sec-records')

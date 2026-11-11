@@ -25,7 +25,7 @@ import { Autopilot } from './autopilot.ts'
 import { MineMapLoader } from './mapping.ts'
 import { geometryInfo } from './names.ts'
 import type { Network } from './evacuation.ts'
-import { buildState } from './state.ts'
+import { buildState, recordView } from './state.ts'
 import type { DemoStatus } from './state.ts'
 import type { MapState } from './state.ts'
 
@@ -192,6 +192,15 @@ export function apply(ctx: Context, config: Config): void {
     }
     return cache.value
   }
+  // 一条记录的只读视图（大屏“最近记录”点开弹窗）：编号按格式核对，只读记录目录
+  route('/rescue-map/record', async (req, res) => {
+    if (!admitted(req, res)) return
+    const id = new URL(req.url ?? '', 'http://x').searchParams.get('id') ?? ''
+    const view = await recordView(config.recordDir, id).catch(() => null)
+    res.writeHead(view ? 200 : 404, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+    res.end(JSON.stringify(view ?? { error: `找不到记录 ${id}` }))
+  })
+
   route('/rescue-map/state', async (req, res) => {
     if (!admitted(req, res)) return
     try {

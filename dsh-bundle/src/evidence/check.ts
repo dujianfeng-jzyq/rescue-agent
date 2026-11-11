@@ -86,7 +86,8 @@ export async function checkMine(ev: Evidence, opts: { panels: string[]; origin: 
   return {
     card: {
       title: '风险检测',
-      summary: panels.map((p) => `${p.panel}：${p.anomaly ? `发现异常（${p.reasons.join('；')}）` : '未见异常'}`).join('\n'),
+      // 一次性检测没有事件的基线，是与正常状态比较：写明，免得“由 无 升为 橙色”被当成新的变化（2026-11-10 演示复看）
+      summary: panels.map((p) => `${p.panel}：${p.anomaly ? `与正常状态比较发现异常（${p.reasons.join('；')}）` : '与正常状态比较未见异常'}`).join('\n'),
       record_ids: panels.flatMap((p) => [p.result_id, p.report_id]),
       files: [],
       next_actions: flagged.map((p) => ({ label: `对 ${p.panel} 做完整研判`, tool: 'run_fire_assessment', arguments: { panel: p.panel } })),

@@ -34,6 +34,7 @@ import {
   WRITE_STAGE,
   writePrompt,
   writeSchema,
+  writeWithRetry,
 } from './plan-stages.ts'
 
 export const SEALING_FLOW = 'draft_sealing_plan'
@@ -192,6 +193,7 @@ export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFl
   let reviewRec: RescueRecord | null = null
   let rounds = 0
   const stageNotes: string[] = []
+  let lastSelection: Selection | null = null
 
   for (let round = 1; round <= maxRounds; round++) {
     rounds = round
@@ -201,25 +203,31 @@ export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFl
       let selection: Selection | null = null
       let problem = '没有配置阶段子 Agent'
       if (opts.stage) {
-        const run = await opts.stage({
-          label: WRITE_STAGE,
-          prompt: writePrompt({ skillName: spSkill.name, skillVersion: spSkill.version, skillBody: spSkill.body, skeleton: sk, comments, flow: flow.name, ...(forced ? { forcedOptionalSteps: forced } : {}) }),
-          schema: writeSchema(sk),
-          ...sig,
-        })
-        const checked = run.ok
-          ? checkSelection(forced && run.structured && typeof run.structured === 'object' ? { ...(run.structured as object), optional_steps: forced } : run.structured, sk, material0 + '\n' + comments.join('\n'))
-          : { ok: false as const, problems: [run.error] }
-        if (checked.ok) selection = checked.selection
-        else problem = checked.problems.join('；')
+        const stage = opts.stage
+        ;({ selection, problem } = await writeWithRetry(
+          (fix) =>
+            stage({
+              label: WRITE_STAGE,
+              prompt: writePrompt({ skillName: spSkill.name, skillVersion: spSkill.version, skillBody: spSkill.body, skeleton: sk, comments: [...comments, ...fix], flow: flow.name, ...(forced ? { forcedOptionalSteps: forced } : {}) }),
+              schema: writeSchema(sk),
+              ...sig,
+            }),
+          (structured) => checkSelection(forced && structured && typeof structured === 'object' ? { ...(structured as object), optional_steps: forced } : structured, sk, material0 + '\n' + comments.join('\n')),
+        ))
       }
       if (selection) emit(`${WRITE_STAGE}#${round}`, 'completed')
-      else {
+      else if (lastSelection) {
+        // 重做也不合格：沿用上一轮的选择（不退回缺省，免得丢掉已选的可选步骤）
+        emit(`${WRITE_STAGE}#${round}`, 'failed', [], problem)
+        stageNotes.push(`第 ${round} 轮“${WRITE_STAGE}”未完成（${problem}），沿用上一轮的选择`)
+        selection = lastSelection
+      } else {
         emit(`${WRITE_STAGE}#${round}`, 'failed', [], problem)
         stageNotes.push(`第 ${round} 轮“${WRITE_STAGE}”未完成（${problem}），按缺省选择组装（${sk.seal_roadway_options.length ? '封闭全部候选巷道、' : ''}不加可选步骤）`)
         selection = defaultSelection(sk)
         if (forced) selection = { ...selection, optional_steps: forced }
       }
+      lastSelection = selection
       planRec = await step(`compose#${round}`, () => script(SP, 'compose', { skeleton: skeletonRec.record_id, evidence: E }, { selection }), 'compose')
       const plan = content(planRec).plan as Record<string, unknown>
       emit(`redline#${round}`, 'started')
@@ -336,8 +344,9 @@ export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFl
     }),
   )
   const facts = [(planReport!.content as string).trimEnd(), reviewReport ? (reviewReport.content as string).trimEnd() : `【合规审核】未完成：${stageNotes.join('；')}`]
+  const dispatchNote = p.has_dispatch ? `方案下发后，再用 issue_dispatch_order 提交调度单（record_id 填同一个审核记录 ${reviewRec?.record_id ?? ''}，编号、用途、明细留空，由系统按方案的需调运 ${p.dispatch_count} 项填写）。` : ''
   const tail = passed
-    ? `下发：指挥人员确认后用 ${flow.issueTool} 提交审核记录 ${reviewRec!.record_id}（会弹出人工确认）。`
+    ? `下发：指挥人员确认后用 ${flow.issueTool} 提交审核记录 ${reviewRec!.record_id}（会弹出人工确认）。${dispatchNote}`
     : humanRequest
       ? '下发前需要先补充现场确认项（见问题清单），带着回答重新编制。'
       : `方案未通过合规审核，不能下发；请指挥人员决定如何处理。`
@@ -347,7 +356,12 @@ export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFl
       summary,
       record_ids: [planReport!.record_id, ...(reviewReport ? [reviewReport.record_id] : []), ...(reviewRec ? [reviewRec.record_id] : []), planRec!.record_id],
       files: [],
-      next_actions: passed ? [{ label: `下发${flow.label}（${flow.issueTool}，需人工确认）`, tool: flow.issueTool, arguments: { record_id: reviewRec!.record_id } }] : [],
+      next_actions: passed
+        ? [
+            { label: `下发${flow.label}（${flow.issueTool}，需人工确认）`, tool: flow.issueTool, arguments: { record_id: reviewRec!.record_id } },
+            ...(p.has_dispatch ? [{ label: `下发物资调度单（需调运 ${p.dispatch_count} 项，需人工确认）`, tool: 'issue_dispatch_order', arguments: { order: { record_id: reviewRec!.record_id } } }] : []),
+          ]
+        : [],
       warnings,
     },
     report_markdown: facts.join('\n\n'),
@@ -366,6 +380,7 @@ export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFl
       issue_record_id: passed ? reviewRec!.record_id : null,
       step_count: p.step_count,
       shortage_count: p.shortage_count,
+      dispatch_count: p.dispatch_count ?? 0,
       human_items: rv?.human_items ?? [],
     },
     human_input_request: humanRequest,

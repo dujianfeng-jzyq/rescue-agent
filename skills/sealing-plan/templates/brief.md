@@ -3,7 +3,7 @@
 
 - 步骤（共 {{compose.result.step_count}} 步）：{{steps_text}}
 - 密闭巷道：{{compose.result.seal_walls_text}}；爆炸危险性：{{compose.result.explosion.overall_name}}
-- 物资：{{#compose.result.has_shortages}}有缺口的物资 {{compose.result.shortage_count}} 项，需人工联系外部来源{{/compose.result.has_shortages}}{{^compose.result.has_shortages}}台账无缺口{{/compose.result.has_shortages}}
+- 物资：{{#compose.result.has_shortages}}有缺口的物资 {{compose.result.shortage_count}} 项，需人工联系外部来源{{/compose.result.has_shortages}}{{^compose.result.has_shortages}}台账无缺口{{/compose.result.has_shortages}}{{#compose.result.has_dispatch}}；需调运 {{compose.result.dispatch_count}} 项（下发方案后提交调度单）{{/compose.result.has_dispatch}}
 - 红线预检：{{redline_text}}；合规审核：{{verdict_text}}
 {{#human_count}}
 - 需要确认人把关的事项：{{.}} 项（见审核意见）

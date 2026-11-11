@@ -26,7 +26,15 @@
    },
    "continuous_supply": [
     "grout_material_t"
-   ]
+   ],
+   "dispatch": {
+    "items": [
+     "temporary_seal_kit",
+     "brick_pcs",
+     "cement_t",
+     "sand_m3"
+    ]
+   }
   }
  },
  "warnings": [],
@@ -311,37 +319,37 @@
    },
    {
     "item_type": "brick_pcs",
-    "name": null,
+    "name": "标准砖",
     "required": 9830,
-    "on_hand": 0,
-    "unit": null,
-    "shortage": 9830,
-    "sufficient": false,
-    "in_ledger": false,
+    "on_hand": 12000.0,
+    "unit": "块",
+    "shortage": 0.0,
+    "sufficient": true,
+    "in_ledger": true,
     "label": "砖（块）",
     "continuous": false
    },
    {
     "item_type": "cement_t",
-    "name": null,
+    "name": "水泥",
     "required": 1.862,
-    "on_hand": 0,
-    "unit": null,
-    "shortage": 1.862,
-    "sufficient": false,
-    "in_ledger": false,
+    "on_hand": 3.0,
+    "unit": "t",
+    "shortage": 0.0,
+    "sufficient": true,
+    "in_ledger": true,
     "label": "水泥（t）",
     "continuous": false
    },
    {
     "item_type": "sand_m3",
-    "name": null,
+    "name": "砂",
     "required": 4.7,
-    "on_hand": 0,
-    "unit": null,
-    "shortage": 4.7,
-    "sufficient": false,
-    "in_ledger": false,
+    "on_hand": 6.0,
+    "unit": "m³",
+    "shortage": 0.0,
+    "sufficient": true,
+    "in_ledger": true,
     "label": "砂（m³）",
     "continuous": false
    },
@@ -370,46 +378,69 @@
     "continuous": false
    }
   ],
-  "shortages": [
+  "dispatch_lines": [
+   {
+    "item_type": "temporary_seal_kit",
+    "label": "快速密闭材料（套）",
+    "quantity": 1,
+    "unit": "套",
+    "from_node": "N2",
+    "to_node": "N5"
+   },
    {
     "item_type": "brick_pcs",
-    "name": null,
-    "required": 9830,
-    "on_hand": 0,
-    "unit": null,
-    "shortage": 9830,
-    "sufficient": false,
-    "in_ledger": false,
     "label": "砖（块）",
-    "continuous": false
+    "quantity": 4915,
+    "unit": "块",
+    "from_node": "N1",
+    "to_node": "N2"
+   },
+   {
+    "item_type": "brick_pcs",
+    "label": "砖（块）",
+    "quantity": 4915,
+    "unit": "块",
+    "from_node": "N1",
+    "to_node": "N5"
    },
    {
     "item_type": "cement_t",
-    "name": null,
-    "required": 1.862,
-    "on_hand": 0,
-    "unit": null,
-    "shortage": 1.862,
-    "sufficient": false,
-    "in_ledger": false,
     "label": "水泥（t）",
-    "continuous": false
+    "quantity": 0.931,
+    "unit": "t",
+    "from_node": "N1",
+    "to_node": "N2"
+   },
+   {
+    "item_type": "cement_t",
+    "label": "水泥（t）",
+    "quantity": 0.931,
+    "unit": "t",
+    "from_node": "N1",
+    "to_node": "N5"
    },
    {
     "item_type": "sand_m3",
-    "name": null,
-    "required": 4.7,
-    "on_hand": 0,
-    "unit": null,
-    "shortage": 4.7,
-    "sufficient": false,
-    "in_ledger": false,
     "label": "砂（m³）",
-    "continuous": false
+    "quantity": 2.35,
+    "unit": "m³",
+    "from_node": "N1",
+    "to_node": "N2"
+   },
+   {
+    "item_type": "sand_m3",
+    "label": "砂（m³）",
+    "quantity": 2.35,
+    "unit": "m³",
+    "from_node": "N1",
+    "to_node": "N5"
    }
   ],
-  "shortage_count": 3,
-  "has_shortages": true,
+  "dispatch_count": 7,
+  "has_dispatch": true,
+  "shortages": [],
+  "shortage_count": 0,
+  "has_shortages": false,
   "missing_inputs": [
    {
     "field": "visibility_m",

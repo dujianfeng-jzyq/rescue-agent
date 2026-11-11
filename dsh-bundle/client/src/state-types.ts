@@ -71,7 +71,7 @@ export interface StateData {
   readings: { panel: string | null; rows: ReadingRow[]; error?: string }
   alarms: { items: { id: string; sensorId: string | null; sensor: string; measurand: string | null; level: string; value: number | null; threshold: number | null; unit: string; message: string; raisedAt: string; anchor: string | null }[]; error?: string }
   fireAreas: { items: { id: string; panel: string; name: string; status: string; sealedAt: string; anchor: string | null }[]; error?: string }
-  records: { id: string; kind: string; kindName: string; panel: string | null; asOf: string; createdAt: string }[]
+  records: { id: string; kind: string; kindName: string; title: string; panel: string | null; asOf: string; createdAt: string }[]
   agent: { state: 'idle' | 'working' | 'waiting_approval' | 'waiting_question' | 'alert_pending' | 'degraded'; label: string; doing: string[]; source: 'live' | 'inferred' }
   duty: { sessionId: string | null; lastDelivery: { id: string; wall: string; sessionId: string } | null }
 }

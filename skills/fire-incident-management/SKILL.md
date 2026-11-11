@@ -32,7 +32,7 @@ version: 0.1.0
    - 跟踪计划到点（followup_due）：做效果复评（`review_effect`）；
    - 监听降级（degraded）：见下面“数据不可信”。
 
-   处理告警时不要调 `check_mine`：它是给指挥人员手动查全矿的，没有事件的基线，会把已知的异常当成“由无升为…”的新异常；研判和复评已经够用。
+   告警的矿井时间离现在较久、想先看矿井最新状态时，可以先 `check_mine(mode=once)`；它没有事件的基线，结论是与正常状态比较的（“由 无 升为…”不是新变化），研判结论以 `run_fire_assessment` 为准。
 3. 研判结果出来后，把工具给的要点告诉操作员。结果建议升级、需要预警或需要处置方案时，直接准备并提交相应的对外动作，由人确认；不要先问“要不要”。
 4. 开始处置后用 `set_incident_status` 标为处置中；处置动作下发后、每次复评之后用 `add_followup` 登记复评（不给 after_h，到点时间由系统定：刚下发新处置用默认间隔，否则按复评给出的下次复评时刻）。
 5. 复评做完用 `complete_followup` 记结论。效果不达预期：调整方案（重新起草、必要时升级），仍按第三节的规则由人确认；达标且监测稳定：`set_incident_status` 标已稳定。
@@ -47,7 +47,7 @@ version: 0.1.0
 | --- | --- |
 | 黄色（及蓝色） | 告知操作员研判要点；提交加密监测（`start_monitoring`，观察跟进；record_id 照抄 `run_fire_assessment` 返回的 `record_ids.warning`）；用 `add_followup` 登记复评；**除加密监测外不提交对外动作**（预警广播、方案下发都不提交）。加密监测只增加观察、不改变现场，系统直接执行、不弹确认；同一事件里已经开始过就不用再提交（再提交系统也只返回原来那次）。 |
 | 橙色 | 先 `get_response_options('orange', panel)`，返回有 `card` 就用 `ask_user` 把它原样问给操作员（多选追加哪些处置；必做的注氮已包含）；按答案（标签按 `label_to_id` 换成编号）编制**防灭火处置方案**（`draft_firefighting_plan(panel, selected_options=[编号…])`：不封闭火区、不安排人员进入灾区，没有人工确认项；方案的可选步骤正好是操作员选的，不自己增减）经合规审核后用 `issue_firefighting_plan` 提交；同时提交预警（`publish_warning`）；登记复评。操作员点了“跳过”（什么都没选，只做必做项）时 `selected_options` 传空列表，不再追问。返回没有 `card`（本级方案已下发、之后复评没有恶化）就不问、不重新下发方案，登记复评即可；复评恶化后再调时会给追加卡片，这时点“跳过”就是不追加，不重新下发已有的方案。 |
-| 红色 | 红色的处置是**撤人和封闭火区**（`get_response_options('red')` 的两项，都由你落实，不问“要不要封闭”），在同一轮里做完：提交预警；研判建议升级就提交升级（`escalate_emergency`）；提交撤人通知（`notify_evacuation`，`record_id` 照抄研判返回的 `record_ids.personnel`，`persons` 留空：名单和避灾路线由系统按记录的受威胁人员填写；只有指挥人员另外点名时才填人员编号）；编制封闭方案（先 `get_field_conditions`，用 `ask_user` 把返回的 `questions` 原样问给操作员；再 `draft_sealing_plan(panel, field_choices, confirmed_by)`，题被跳过就不传那一项，不替人填），合规审核通过就用 `issue_sealing_plan` 提交——是否封闭由确认人在确认弹窗上决定，弹窗就是请示，不要停下来问“是否下发”；登记复评。物资缺口不是不提交的理由：按缺口和调度结果说明，需要调运就提交调度单。 |
+| 红色 | 红色的处置是**撤人和封闭火区**（`get_response_options('red')` 的两项，都由你落实，不问“要不要封闭”），在同一轮里做完：提交预警；研判建议升级就提交升级（`escalate_emergency`）；提交撤人通知（`notify_evacuation`，`record_id` 照抄研判返回的 `record_ids.personnel`，`persons` 留空：名单和避灾路线由系统按记录的受威胁人员填写；只有指挥人员另外点名时才填人员编号）；编制封闭方案（先 `get_field_conditions`，用 `ask_user` 把返回的 `questions` 原样问给操作员；再 `draft_sealing_plan(panel, field_choices, confirmed_by)`，题被跳过就不传那一项，不替人填），合规审核通过就用 `issue_sealing_plan` 提交——是否封闭由确认人在确认弹窗上决定，弹窗就是请示，不要停下来问“是否下发”；登记复评。物资缺口不是不提交的理由。方案有“需调运”时，下发方案后提交调度单（`issue_dispatch_order`，`record_id` 照抄同一个审核记录，编号、用途、明细都留空，由系统按方案填）；台账里没有的缺口物资需人工联系外部来源。 |
 | 稳定且满足条件 | 评估启封（`assess_unsealing`），具备条件才提交启封审批；事件稳定后复盘。 |
 
 - 以上对外动作（加密监测除外：它只增加观察，系统直接执行、不弹确认）下发前都要人确认；被拒绝就如实说明，不换名目再提交。批准超时没人回应时怎么办由系统的动作分级表决定（不自动执行，只升级提醒），你不要因为“没人确认”而自行改做别的动作或重复提交。

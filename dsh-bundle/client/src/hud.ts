@@ -83,7 +83,7 @@ ${ON} ${CENTER} [data-composer-seat] { background: linear-gradient(180deg, rgba(
 /* 卡片本身的布局不动（人工确认、提问卡片挂在它的 overlay 锚点上），只拉满宽度；工具都隐藏后那一行只剩发送按钮，挪到输入框右侧 */
 ${ON} ${CENTER} [data-composer-card] { align-self: stretch !important; width: auto !important; max-width: none !important; margin: 0 !important; background: rgba(12, 28, 52, 0.98) !important; border: 1px solid rgba(90, 160, 255, 0.3) !important; }
 ${ON} ${CENTER} [data-composer-card] [data-input-scroll] { padding-right: 44px; box-sizing: border-box; }
-${ON} ${CENTER} [data-composer-card] > [class$="_row"] { position: absolute !important; left: 0; right: 6px; bottom: 6px; width: auto !important; min-height: 0 !important; padding: 0 !important; display: flex !important; justify-content: flex-end; pointer-events: none; }
+${ON} ${CENTER} [data-composer-card] > [class$="_row"] { position: absolute !important; left: 0; right: 6px; top: 0; bottom: 0; width: auto !important; min-height: 0 !important; padding: 0 !important; display: flex !important; justify-content: flex-end; align-items: center !important; pointer-events: none; }
 ${ON} ${CENTER} [data-composer-card] > [class$="_row"] > * { flex: 0 0 auto !important; pointer-events: auto; }
 
 /* DSH 的会话列表：按钮呼出的抽屉 */
@@ -190,6 +190,24 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-list li em { margin-left: auto; font-style: normal; color: #ff8a1f; font-size: 11px; }
 .rm-records code { flex: 1 1 auto; min-width: 0; font: 11px ui-monospace, Menlo, Consolas, monospace; color: #9fc4ee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rm-records time { margin-left: auto; flex: 0 0 auto; white-space: nowrap; }
+.rm-records li { cursor: pointer; }
+.rm-records li:hover, .rm-records li:focus-visible { background: rgba(79, 209, 255, 0.08); outline: none; }
+.rm-modal-overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(3, 8, 18, 0.6); padding: 16px; box-sizing: border-box; }
+.rm-modal { width: min(720px, 100%); max-height: min(80vh, 100%); display: flex; flex-direction: column; background: rgba(12, 28, 52, 0.98); border: 1px solid rgba(90, 160, 255, 0.35); border-radius: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); color: #dbe7f5; font-size: 13px; }
+.rm-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px 6px; }
+.rm-modal-head b { font-size: 15px; color: #eaf4ff; }
+.rm-modal-close { border: 0; background: transparent; color: #9fb3cc; font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.rm-modal-close:hover { color: #eaf4ff; }
+.rm-modal-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 0 16px 10px; border-bottom: 1px solid rgba(120, 160, 210, 0.15); color: #7f93ab; font-size: 12px; }
+.rm-modal-meta code { font: 11px ui-monospace, Menlo, Consolas, monospace; color: #9fc4ee; }
+.rm-modal-link { border: 0; background: transparent; padding: 0; cursor: pointer; font: 11px ui-monospace, Menlo, Consolas, monospace; color: #4fd1ff; text-decoration: underline; }
+.rm-modal-body { padding: 12px 16px 16px; overflow: auto; }
+.rm-md h4 { margin: 4px 0 8px; font-size: 14px; color: #eaf4ff; }
+.rm-md p { margin: 6px 0; line-height: 1.6; }
+.rm-md ul { margin: 6px 0; padding-left: 18px; }
+.rm-md li { margin: 3px 0; line-height: 1.6; }
+.rm-modal-kv { grid-template-columns: max-content 1fr; }
+.rm-modal-kv dd { word-break: break-all; }
 .rm-kind { padding: 1px 6px; border-radius: 4px; background: rgba(79, 209, 255, 0.14); color: #4fd1ff; font-size: 11px; white-space: nowrap; }
 
 .rm-agent { display: flex; align-items: center; gap: 10px; font-size: 16px; padding: 2px 0 6px; }

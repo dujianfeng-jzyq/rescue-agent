@@ -178,8 +178,8 @@ describe('告警是否已处理（代码判断）与重复投递的唤醒消息'
     const text = composeMessage(await store.get(id), alerts, alertStatuses(entries))
     assert.match(text, new RegExp(`${alert.event_id}.*重复投递`))
     assert.doesNotMatch(text, new RegExp(`${b.event_id}.*重复投递`))
-    assert.match(text, /check_mine/) // 新告警（矿井报警）的要求还在
-    assert.doesNotMatch(text, /请立即对该工作面做完整研判/) // 旧告警（异常）的要求没了
+    assert.match(text, /矿井自己的报警平台发来的越限报警/) // 新告警（矿井报警）的要求还在
+    assert.doesNotMatch(text, /不要先问操作员“要不要研判”/) // 旧告警（异常）的要求没了
   })
 
   it('依据的数据比告警旧的处理记录不算已处理（上一轮用旧数据写的研判排在新告警之后）', async () => {
