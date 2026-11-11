@@ -4,10 +4,12 @@
  * 全局一份（不在预设里）：每 pollMs 扫描事件库（监听器写的），把未投递的告警投递到值班会话：
  * 取值班会话（编号记在事件库目录的 duty-session.json；没有或恢复失败就新建）→ resolveAgent → agent.followup(消息) → flush 落盘。
  * 没有任何网页端连接也能工作；操作员事后打开网页端，值班会话里已有智能体的研判。
+ * 值班会话正忙时不投递（见 wake.ts 文件头）：等它空闲再按时间线判断，已被处理覆盖的告警不再投递。
+ * 每次轮询把值班会话忙不忙写到事件库目录的 duty-status.json（{busy, wall}）：演示导演据此等智能体处理完再推进矿井时间。
  * 唤醒失败时，告警仍是“未确认”，控制台继续显示（design-v3 7.3 退路）。
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { Context } from '../adapter/dsh.ts'
@@ -49,6 +51,7 @@ export function apply(ctx: Context, config: Config): void {
   const c = ctx as any
   const store = new IncidentStore(config.incidentDir)
   const dutyFile = join(config.incidentDir, 'duty-session.json')
+  const statusFile = join(config.incidentDir, 'duty-status.json')
   mkdirSync(config.incidentDir, { recursive: true })
   mkdirSync(config.cwd, { recursive: true })
   let stopped = false
@@ -85,8 +88,19 @@ export function apply(ctx: Context, config: Config): void {
     return { agent: resolved.agent, sessionId }
   }
 
+  /** 值班会话正忙：正在跑（status 为 running，含等人工确认、回答卡片），或队列里还有没处理的消息。没有值班会话或恢复失败按不忙（投递时新建） */
+  async function dutyBusy(): Promise<boolean> {
+    if (!existsSync(dutyFile)) return false
+    const saved = JSON.parse(readFileSync(dutyFile, 'utf8')) as { sessionId: string }
+    const resolved = await c.sessionController.resolveAgent(saved.sessionId)
+    if ('error' in resolved) return false
+    const agent = resolved.agent
+    return agent.status !== 'idle' || (agent.inbox?.nextTurn?.length ?? 0) > 0 || (agent.inbox?.nextStep?.length ?? 0) > 0
+  }
+
   const waker = new Waker(store, {
     backoffS: config.backoffS,
+    busy: dutyBusy,
     log: (m) => ctx.logger.warn(`rescue-wake: ${m}`),
     deliver: async (text) => {
       const createUserMessage = await loadCreateUserMessage()
@@ -99,8 +113,18 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
 
+  /** 写值班会话状态（演示导演读）；查不到状态时不写，导演看文件过期就不等 */
+  async function writeStatus(): Promise<void> {
+    const busy = await dutyBusy()
+    const tmp = `${statusFile}.tmp`
+    writeFileSync(tmp, JSON.stringify({ busy, wall: Date.now() / 1000 }))
+    renameSync(tmp, statusFile)
+  }
+
   const timer = setInterval(() => {
-    if (!stopped) void waker.drain().catch((err) => ctx.logger.warn(`rescue-wake: ${(err as Error).message}`))
+    if (stopped) return
+    const warn = (err: unknown) => ctx.logger.warn(`rescue-wake: ${(err as Error).message}`)
+    void waker.drain().catch(warn).then(writeStatus).catch(warn)
   }, config.pollMs)
   c.on('dispose', () => {
     stopped = true

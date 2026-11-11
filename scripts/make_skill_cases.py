@@ -85,6 +85,7 @@ def build_inputs() -> dict[tuple[str, str, str], dict]:
     s4_45, s4_60 = evidence("s4-escalation", 45), evidence("s4-escalation", 60)
     s1_24, s6_36 = evidence("s1-normal", 24, "check"), evidence("s6-sensor-faults", 36, "check")
     s5_312 = evidence("s5-sealed-fire-area", 312, "check", unseal_at=240)
+    s5_24 = evidence("s5-sealed-fire-area", 24, "check")  # 火区封闭中：上隅角、回风巷测点在密闭内断电
     w = {k: run(FA, "warning", {"evidence": ev}) for k, ev in (("s4-60", s4_60), ("s1-24", s1_24), ("s5-312", s5_312))}
     st = {k: run(FA, "stage", {"warning": v}) for k, v in w.items()}
     al = {k: run(FA, "alarms", {"evidence": ev}) for k, ev in (("s4-60", s4_60), ("s1-24", s1_24), ("s5-312", s5_312))}
@@ -111,6 +112,7 @@ def build_inputs() -> dict[tuple[str, str, str], dict]:
         (FA, "check", "s6-sensor-faults-36h-failed"): {"evidence": s6_36},
         (FA, "check", "s4-escalation-60h-vs-45h"): {"evidence": s4_60, "baseline": run(FA, "check", {"evidence": s4_45})},
         (FA, "check", "s1-normal-24h-data-gap"): {"evidence": stale_evidence(s1_24, "tubes", "BT-1201-G2", 4)},
+        (FA, "check", "s5-sealed-24h-power-off-not-failed"): {"evidence": s5_24},
         (XT, "explosion_triangle", "s6-sensor-faults-36h-panel"): {"evidence": s6_36},
         (XT, "explosion_triangle", "s1-normal-24h-g1-zone-ii"): {"evidence": s1_24, "options": {"sensor_id": "BT-1201-G1"}},
         (XT, "explosion_triangle", "manual-sample"): {

@@ -130,6 +130,7 @@ describe('ApprovalSummary 生成确认提示', () => {
     const summary = {
       action: '发布 1201 工作面采空区 红色预警',
       tool: 'publish_warning',
+      facts: ['预警等级：红色（危险）', '触发条件：红色（危险）：乙烯(ppm) 2.09 ≥ 2.0'],
       record_ids: ['RS-20261104T200000-abc123'],
       checks: [
         { name: '引用记录', ok: true, detail: 'RS-20261104T200000-abc123（fire-assessment/warning）' },
@@ -142,10 +143,21 @@ describe('ApprovalSummary 生成确认提示', () => {
     const v = await precheck('publish_warning', { notice: { secret: 'x' } }, config, new AbortController().signal, fetch)
     assert.equal(v.kind, 'ask')
     if (v.kind !== 'ask') return
-    assert.match(v.reason, /^发布 1201 工作面采空区 红色预警：需由【通风部门负责人】确认后执行/)
-    assert.match(v.reason, /依据记录：RS-20261104T200000-abc123/)
-    assert.match(v.reason, /✓ 预警等级：与计算结果一致（红色）/)
-    assert.match(v.reason, /请确认人把关：与计算结果不一致/)
+    // 标题行是要做的事；接着确认人、要点、把关事项；通过的核对项只列名称，依据记录放最后
+    assert.equal(
+      v.reason,
+      [
+        '发布 1201 工作面采空区 红色预警',
+        '确认人：【通风部门负责人】；红线预检已通过',
+        '要点：',
+        '· 预警等级：红色（危险）',
+        '· 触发条件：红色（危险）：乙烯(ppm) 2.09 ≥ 2.0',
+        '请确认人把关：',
+        '· 与计算结果不一致：……',
+        '核对通过（2 项）：引用记录、预警等级',
+        '依据记录：RS-20261104T200000-abc123',
+      ].join('\n'),
+    )
     assert.doesNotMatch(v.reason, /secret/)
   })
 })

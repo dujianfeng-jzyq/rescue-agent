@@ -22,6 +22,10 @@
     "CH4"
    ]
   },
+  "sealed_exempt": [
+   "upper_corner",
+   "return"
+  ],
   "data_gap_h": {
    "tubes": 3,
    "upper_corner": 0.75,
@@ -52,6 +56,8 @@
   ],
   "missing_groups": [],
   "stale_required": [],
+  "sealed": false,
+  "sealed_exempt": [],
   "data_quality": [
    "SM-1201-RET/CO：25 个点缺数",
    "BT-1201-G2/CO：读数长时间不变，疑似卡值，已排除"

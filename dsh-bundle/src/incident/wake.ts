@@ -4,7 +4,11 @@
  *
  * - 投递是“至少一次”：flush 之后、写 delivered 之前崩溃会重复投递，消息里带告警编号，智能体按编号去重；
  * - 失败写 delivery_failed（带次数），按退避重试，超过次数放弃——告警仍是“未确认”，控制台继续显示；
- * - 消息正文只是事实和要求，判据不在这里。
+ * - 消息正文只是事实和要求，判据不在这里；
+ * - 值班会话正忙（在跑或队列里还有消息）时不投递，告警留在事件库里等它空闲（第五版，2026-11-10）：
+ *   原来忙时也投递，消息排在 DSH 队列里，等轮到它时上一轮往往已用更新的数据处理过（演示里橙色告警排队，智能体答“重复投递”）。
+ *   空闲后按当时的时间线判断（alertStatuses）：已被处理覆盖的告警不再投递，写 acked（by=plugin，带依据），只投新的。
+ *   告警不会因此更晚被处理：排队的消息本来也要等当前这一轮结束。
  */
 
 import { type AlertStatus, alertStatuses, type Entry, type IncidentStore, type IncidentView } from './store.ts'
@@ -17,6 +21,8 @@ export interface WakeOptions {
   /** 当前真实时间（毫秒），测试可替换 */
   now?: () => number
   log?: (msg: string) => void
+  /** 值班会话是否正忙（正在跑或队列里还有消息）；忙就先不投递。不给按不忙处理 */
+  busy?: () => Promise<boolean>
 }
 
 const CAUSE_TEXT: Record<string, string> = {
@@ -35,7 +41,8 @@ const REPEAT_TEXT = '这是重复投递：这些告警之后事件时间线里�
  */
 export function composeMessage(view: IncidentView, alerts: Entry[], statuses: AlertStatus[] = []): string {
   const head = `【值守事件 ${view.incident_id}】${view.panel ?? '全矿'}（${view.category === 'monitor' ? '监听降级' : '火情'}，${view.status_name}）。以下告警由监听器发现，不经模型：`
-  const handled = new Map(statuses.filter((s) => s.state === 'handled').map((s) => [s.alert_id, s]))
+  const inMessage = new Set(alerts.map((a) => a.event_id))
+  const handled = new Map(statuses.filter((s) => s.state === 'handled' && inMessage.has(s.alert_id)).map((s) => [s.alert_id, s]))
   const lines = alerts.map((a) => {
     const h = handled.get(a.event_id)
     return `- 告警 ${a.event_id}（矿井时间 ${a.at}）：${a.data.summary ?? ''}${h ? `【重复投递：之后已有${h.handled_by}记录，已处理】` : ''}`
@@ -53,6 +60,17 @@ export class Waker {
   constructor(store: IncidentStore, opts: WakeOptions) {
     this.store = store
     this.opts = opts
+  }
+
+  private async isBusy(): Promise<boolean> {
+    if (!this.opts.busy) return false
+    try {
+      return await this.opts.busy()
+    } catch (err) {
+      // 查不到状态时照常投递（DSH 自己会排队），不能因此让告警卡住
+      this.opts.log?.(`查询值班会话状态失败，照常投递：${(err as Error).message}`)
+      return false
+    }
   }
 
   /** 处理所有待投递告警；返回本次成功投递的告警编号 */
@@ -75,10 +93,20 @@ export class Waker {
           const wait = this.opts.backoffS[attempts - 1]! * 1000
           if ((this.opts.now?.() ?? Date.now()) < Date.parse(lastFail.wall) + wait) continue
         }
+        if (await this.isBusy()) continue
         const at = entries[entries.length - 1]!.at
-        const ids = alerts.map((a) => a.event_id)
+        // 已被之后的研判、处置覆盖的告警（依据的数据不早于告警）不再投递：记 acked，写明依据
+        const statuses = alertStatuses(entries, new Set(alerts.map((a) => a.event_id)))
+        const covered = statuses.filter((st) => st.state === 'handled')
+        for (const st of covered) {
+          await this.store.append(view.incident_id, at, 'acked', 'plugin', { alert_id: st.alert_id, handled_by: st.handled_by, reason: '投递前已有依据不早于该告警的处理记录，不再投递' })
+        }
+        if (covered.length) this.opts.log?.(`事件 ${view.incident_id}：${covered.length} 条告警投递前已被处理，不再投递（${covered.map((c) => c.alert_id).join('、')}）`)
+        const fresh = alerts.filter((a) => !covered.some((c) => c.alert_id === a.event_id))
+        if (fresh.length === 0) continue
+        const ids = fresh.map((a) => a.event_id)
         try {
-          const { sessionId } = await this.opts.deliver(composeMessage(view, alerts, alertStatuses(entries, new Set(ids))), { incidentId: view.incident_id, alertIds: ids })
+          const { sessionId } = await this.opts.deliver(composeMessage(view, fresh, statuses), { incidentId: view.incident_id, alertIds: ids })
           for (const id of ids) await this.store.append(view.incident_id, at, 'delivered', 'plugin', { alert_id: id, session_id: sessionId })
           delivered.push(...ids)
         } catch (err) {

@@ -125,3 +125,17 @@ def test_escalation_records(records):
 def test_malformed_arguments_still_have_summary(records):
     r = check("publish_warning", {"notice": {"level": "purple", "record_id": "RS-20261104T200000-aaaaaa"}}, records)
     assert not r["ok"] and r["summary"]["checks"][0]["ok"] is False
+
+
+def test_summary_facts_come_from_records_and_arguments(records):
+    """弹窗要点由代码从记录（或撤人名单的参数）取：确认人看得到要批的是什么。"""
+    rid = put(records, "fire-assessment", "warning", {"level": "red", "level_name": "红色（危险）", "triggered": ["红色（危险）：乙烯(ppm) 2.09 ≥ 2.0"]})
+    r = check("publish_warning", warn(records, record_id=rid), records)
+    assert r["summary"]["facts"] == ["预警等级：红色（危险）", "触发条件：红色（危险）：乙烯(ppm) 2.09 ≥ 2.0"]
+    esc = put(records, "emergency-escalation", "escalation", {"recommend": True, "reasons": ["预警等级 红色（危险），达到 红色（危险）"], "articles": [{"document": "矿山救援规程", "article": "第39条"}]})
+    r = check("escalate_emergency", {"escalation": {"reason": "x", "recommended_level": "应急响应", "record_id": esc}}, records)
+    assert r["summary"]["facts"] == ["升级理由：预警等级 红色（危险），达到 红色（危险）", "规程依据：第39条"]
+    evac = {"notice": {"reason": "x", "persons": ["P1", "P2", "P3"], "routes": {"P1": ["N1", "N8"], "P2": ["N2", "N8"]}}}
+    assert check("notify_evacuation", evac, records)["summary"]["facts"] == ["补充撤人名单 3 人", "撤往：N8"]
+    r = check("publish_warning", warn(records, record_id="RS-20261104T200000-zzzzzz"), records)
+    assert not r["ok"] and r["summary"]["facts"] == []  # 没通过预检的不给要点

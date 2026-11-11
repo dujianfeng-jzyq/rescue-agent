@@ -126,6 +126,11 @@ export interface MapState {
     /** live = 来自 DSH 的实时事件；inferred = 只能由事件库推断（没收到过事件） */
     source: 'live' | 'inferred'
   }
+  /**
+   * 值班会话：监听器的告警投递到这里（编号是唤醒插件记在事件库目录 duty-session.json 里的）。
+   * lastDelivery 是当前事件最近一次投递；浏览器看到新的投递就自动切到值班会话（操作员不用自己去会话列表里找）。
+   */
+  duty: { sessionId: string | null; lastDelivery: { id: string; wall: string; sessionId: string } | null }
 }
 
 const UNIT: Record<string, string> = { CO: 'ppm', CO2: '%', CH4: '%', O2: '%', N2: '%', C2H4: 'ppm', C2H2: 'ppm', C2H6: 'ppm', H2: 'ppm', TEMP: '℃', WIND: 'm/s' }
@@ -229,6 +234,23 @@ async function pickIncident(store: IncidentStore, views: IncidentView[]): Promis
   return withWall[0]?.v
 }
 
+async function readDutySession(dir: string): Promise<string | null> {
+  try {
+    const saved = JSON.parse(await readFile(join(dir, 'duty-session.json'), 'utf8')) as { sessionId?: unknown }
+    return typeof saved.sessionId === 'string' && saved.sessionId ? saved.sessionId : null
+  } catch {
+    return null
+  }
+}
+
+function lastDelivery(entries: Entry[]): MapState['duty']['lastDelivery'] {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]!
+    if (e.kind === 'delivered' && typeof e.data?.session_id === 'string') return { id: e.event_id, wall: e.wall, sessionId: e.data.session_id }
+  }
+  return null
+}
+
 async function readHeartbeat(dir: string, nowMs: number): Promise<MapState['sentinel']> {
   try {
     const hb = JSON.parse(await readFile(join(dir, 'sentinel', 'heartbeat.json'), 'utf8')) as { wall?: number; error?: string | null }
@@ -301,8 +323,10 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
   const main = await pickIncident(store, views)
 
   let incident: MapState['incident'] = null
+  let delivery: MapState['duty']['lastDelivery'] = null
   if (main) {
     const entries = await store.entries(main.incident_id).catch(() => [] as Entry[])
+    delivery = lastDelivery(entries)
     const chk = lastCheck(entries)
     incident = {
       id: main.incident_id,
@@ -421,5 +445,6 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
     fireAreas,
     records: await latestRecords(deps.recordDir),
     agent,
+    duty: { sessionId: (await readDutySession(deps.incidentDir)) ?? delivery?.sessionId ?? null, lastDelivery: delivery },
   }
 }

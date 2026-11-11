@@ -1,0 +1,96 @@
+{
+ "algorithm_version": "check/1.0.0",
+ "params": {
+  "anomaly": {
+   "new_alarm": true,
+   "level_up": true,
+   "stage_up": true,
+   "required_failed": true,
+   "data_gap": true
+  },
+  "required": {
+   "tubes": [
+    "CO",
+    "O2"
+   ],
+   "upper_corner": [
+    "CO",
+    "CH4"
+   ],
+   "return": [
+    "CO",
+    "CH4"
+   ]
+  },
+  "sealed_exempt": [
+   "upper_corner",
+   "return"
+  ],
+  "data_gap_h": {
+   "tubes": 3,
+   "upper_corner": 0.75,
+   "return": 0.75
+  },
+  "status": "placeholder",
+  "thresholds_status": "placeholder"
+ },
+ "warnings": [
+  "检测判据为开发初稿（占位值），待专家评审"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-03T08:00:00",
+  "level": "red",
+  "level_name": "红色（危险）",
+  "triggered": [
+   "红色（危险）：束管CO最大值(ppm) 1019.39 ≥ 1000；乙烯(ppm) 17.52 ≥ 2.0"
+  ],
+  "stage": "accelerating",
+  "stage_name": "加速氧化",
+  "stage_basis": [
+   "乙烯(ppm) 17.521 ≥ 0.05"
+  ],
+  "alarms": [],
+  "alarm_count": 0,
+  "failed_required": [],
+  "missing_groups": [],
+  "stale_required": [],
+  "sealed": true,
+  "sealed_exempt": [
+   "return",
+   "upper_corner"
+  ],
+  "data_quality": [
+   "BT-1201-G1/O2：1 个孤立尖峰，疑似干扰，已剔除"
+  ],
+  "notes": [
+   "火区已封闭：上隅角、回风巷安全监控测点在密闭内断电，不参与分级，按束管监测",
+   "BT-1201-G1 氮气浓度 95.2%，可能处于注氮影响范围，格雷哈姆系数偏低失真"
+  ],
+  "anomaly": true,
+  "escalated": true,
+  "reasons": [
+   "预警等级由 无 升为 红色（危险）",
+   "自燃阶段由 未见自燃征兆 推进为 加速氧化"
+  ],
+  "compared_with": "正常状态（没有基线）",
+  "baseline_state": {
+   "level": "none",
+   "stage": "no_sign",
+   "alarm_keys": [],
+   "failed": [],
+   "missing_groups": [],
+   "stale": [],
+   "nominal": true
+  },
+  "state": {
+   "level": "red",
+   "stage": "accelerating",
+   "alarm_keys": [],
+   "failed": [],
+   "missing_groups": [],
+   "stale": [],
+   "nominal": false
+  }
+ }
+}

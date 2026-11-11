@@ -248,9 +248,58 @@ def plan_from_record(
     return plan, [], [str(x) for x in r.get("human_items") or []], checks
 
 
+def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) -> list[str]:
+    """审批弹窗的要点：确认人要批的到底是什么。全部由代码从记录（或撤人、调度的指令参数）取，不经模型改写；
+    取不到就不给（要点只是给人看的摘要，核对仍按 checks）。"""
+    body = next((v for v in arguments.values() if isinstance(v, dict)), arguments) if arguments else {}
+    try:
+        if tool in ("publish_warning", "start_monitoring", "escalate_emergency"):
+            rid = body.get("record_id") or arguments.get("record_id")
+            if records is None or not isinstance(rid, str):
+                return []
+            r = _result(records.get(rid))
+            if tool == "escalate_emergency":
+                out = [f"升级理由：{'；'.join(r.get('reasons') or [])}"] if r.get("reasons") else []
+                arts = "、".join(str(a.get("article")) for a in r.get("articles") or [] if isinstance(a, dict))
+                return out + ([f"规程依据：{arts}"] if arts else [])
+            out = [f"预警等级：{r['level_name']}"] if r.get("level_name") else []
+            return out + [f"触发条件：{t}" for t in r.get("triggered") or []]
+        if tool in PLAN_TOOLS:
+            rid = arguments.get("record_id")
+            if records is None or not isinstance(rid, str):
+                return []
+            rec = records.get(rid)
+            if tool == "approve_unsealing":
+                plan = _result(rec).get("plan") or {}
+                return [f"步骤共 {len(plan.get('steps') or [])} 步"] if plan.get("steps") else []
+            pr = _result(records.get(str((rec.source.get("inputs") or {}).get("plan"))))
+            out = []
+            steps = [str(s.get("type_name") or s.get("type")) for s in pr.get("steps_view") or []]
+            if steps:
+                out.append(f"步骤：{' → '.join(steps)}")
+            if pr.get("seal_walls_text"):
+                out.append(f"密闭巷道：{pr['seal_walls_text']}")
+            short = [str(s.get("label") or s.get("item_type")) for s in pr.get("shortages") or []]
+            out.append(f"物资缺口 {len(short)} 项：{'、'.join(short)}" if short else "物资：台账无缺口")
+            missing = [str(m.get("label") or m.get("field")) for m in pr.get("missing_inputs") or []]
+            if missing:
+                out.append(f"待补充（下发时由确认人把关）：{'、'.join(missing)}")
+            return out
+        if tool == "notify_evacuation":
+            persons = body.get("persons") or []
+            dest = sorted({str(p[-1]) for p in (body.get("routes") or {}).values() if isinstance(p, list) and p})
+            return [f"补充撤人名单 {len(persons)} 人"] + ([f"撤往：{'、'.join(dest)}"] if dest else [])
+        if tool == "issue_dispatch_order":
+            return [f"调运：{ln.get('item_type')} {ln.get('quantity')} {ln.get('unit')}（{ln.get('from_node')} → {ln.get('to_node')}）" for ln in body.get("lines") or [] if isinstance(ln, dict)]
+    except (RecordNotFound, RecordTampered, ValueError, KeyError, TypeError, AttributeError):
+        return []
+    return []
+
+
 def _summary(
-    tool: str, arguments: dict[str, Any], problems: list[str], notes: list[str], checks: list[ApprovalCheck], action: str | None = None
-) -> dict[str, Any]:
+    tool: str, arguments: dict[str, Any], problems: list[str], notes: list[str], checks: list[ApprovalCheck], action: str | None = None,
+    records: RecordStore | None = None,
+) -> dict[str, Any]:  # fmt: skip
     """审批弹窗的结构化内容（ApprovalSummary）：要做什么、引用哪些记录、核对结果、需要确认人把关的事项。"""
     body = next((v for v in arguments.values() if isinstance(v, dict)), arguments) if arguments else {}
     action = action or ACTION_NAMES.get(tool, tool)
@@ -260,7 +309,7 @@ def _summary(
         checks = [ApprovalCheck(name="预检", ok=not problems, detail="；".join(problems) or None)]
     ids = [x for x in (body.get("record_id"),) if isinstance(x, str) and x]
     return ApprovalSummary(
-        action=action, tool=tool, record_ids=ids, checks=checks, human_items=notes,
+        action=action, tool=tool, facts=_facts(tool, arguments, records) if not problems else [], record_ids=ids, checks=checks, human_items=notes,
         override_reason=body.get("override_reason") if isinstance(body.get("override_reason"), str) else None,
     ).model_dump(mode="json")  # fmt: skip
 
@@ -298,7 +347,7 @@ def precheck(tool: str, arguments: dict[str, Any], now: datetime | None, records
     except Exception as exc:
         problems = [f"指令格式不符合数据契约：{exc}"]
         return {"ok": False, "problems": problems, "notes": [], "summary": _summary(tool, {}, problems, [], [])}
-    return {"ok": not problems, "problems": problems, "notes": notes, "summary": _summary(tool, arguments, problems, notes, checks, action)}
+    return {"ok": not problems, "problems": problems, "notes": notes, "summary": _summary(tool, arguments, problems, notes, checks, action, records)}
 
 
 __all__ = [

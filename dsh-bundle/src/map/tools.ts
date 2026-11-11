@@ -5,16 +5,16 @@
  *   - 名称只能是地图上有的（先用 list 查）；找不到时返回相近的名称，不猜；
  *   - 带 record_id 的标记，标签文字和颜色由代码从记录里取（等级、阶段、报警项数），模型不写数字；
  *   - 没有记录依据的标记只能是提示色，备注 note 只能从封闭词表里选（不是自由文字：AI 在图上写“这是撤人通道”之类的断言，操作员可能当真）；
- *   - 智能体的标记编号都是 agent:，最多 12 个；系统自动标的（auto:）智能体动不了。
+ *   - 智能体的标记编号都是 agent:，最多 12 个；系统自动标的（auto:）智能体动不了，也不能在同一位置再标（等级会过时、两个圈叠在一起）。
  * 预警等级、矿井报警、火区由系统自动标在图上（autopilot），不用智能体重复标。
  */
 
 import type { MapCommand, MapHub, MapMark } from './hub.ts'
-import { levelOf } from './autopilot.ts'
+import { AGENT_PREFIX, AUTO_PREFIX, levelOf } from './autopilot.ts'
 import { labelFromRecord } from './record-label.ts'
 import type { RecordLike } from './record-label.ts'
 
-export const AGENT_PREFIX = 'agent:'
+export { AGENT_PREFIX }
 export const MAX_AGENT_MARKS = 12
 /**
  * 备注的封闭词表：只说“看这里”，不对位置作任何断言（不说是撤人通道、不说该怎么处置、不带数值）。
@@ -102,6 +102,10 @@ export async function runMapView(args: MapViewArgs, deps: MapViewDeps): Promise<
       const note = args.note?.trim() ?? ''
       if (note && !(NOTES as readonly string[]).includes(note)) {
         throw new Error(`note 只能从这几个里选：${NOTES.join('、')}。不能自由写：对位置的判断（撤人路线、处置建议）和数值只来自记录，请给 record_id，标签由系统从记录里取，其余在回答里说明`)
+      }
+      const auto = hub.snapshot().marks.find((m) => m.id === `${AUTO_PREFIX}${name}`)
+      if (auto) {
+        throw new Error(`“${name}”已由系统自动标出（${auto.text}），随事件状态更新，不要再标：你按记录标的等级不会更新，会和系统的标记叠在一起。要让操作员看这里，用 action=focus`)
       }
       const id = `${AGENT_PREFIX}${name}`
       if (!mine().some((m) => m.id === id) && mine().length >= MAX_AGENT_MARKS) throw new Error(`你的标记已有 ${MAX_AGENT_MARKS} 个，先用 unmark 或 clear 清掉一些`)

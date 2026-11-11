@@ -27,13 +27,14 @@ import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
 import { describeFieldCard, loadFieldConditions, resolveFieldChoices } from './field-conditions.ts'
-import { describeOptions, loadResponseOptions, planKeysFor } from './response-options.ts'
+import { describeOptions, loadResponseOptions, planKeysFor, priorChoice } from './response-options.ts'
 import { draftFirefightingPlan, draftSealingPlan, FIREFIGHTING, type HumanInput, type PlanFlow, type Redline, SEALING } from './sealing.ts'
 import { IncidentStore } from '../incident/store.ts'
-import { noteOnIncident } from '../incident/timeline.ts'
+import { evidenceAsOf, noteOnIncident } from '../incident/timeline.ts'
 import { UNSEAL_FLOW, assessUnsealing } from './unsealing.ts'
 import { TIMELINE_FLOW, TimelineInputError, reviewTimeline } from './timeline.ts'
 import { EFFECT_FLOW, EffectInputError, type LastIssued, reviewEffect } from './effect.ts'
+import { unwrapToolValue } from './tool-value.ts'
 
 export const name = 'rescue-fire-loop'
 export const inject = ['tools', 'rescueEvidence', 'rescueKnowledge', 'workingDirectory', 'subagents']
@@ -81,7 +82,14 @@ export function apply(ctx: Context, config: Config) {
   const incidents = config.incidentDir ? new IncidentStore(config.incidentDir) : undefined
   const logToIncident = async (panel: string, type: string, out: any) => {
     try {
-      const id = await noteOnIncident(incidents, panel, { type, text: String(out.card?.summary ?? ''), record_ids: out.card?.record_ids ?? [] }, async () => String((await (c.rescueEvidence as RescueEvidence).mineData.call('get_clock', {})).now).slice(0, 19))
+      const ev = c.rescueEvidence as RescueEvidence
+      const recordIds: string[] = out.card?.record_ids ?? []
+      // 依据的数据时间（记录的 as_of）一并记下：告警是否已被这次处理覆盖按它判断，不按写入时间线的先后
+      const asOf = await evidenceAsOf(recordIds, (rid) => ev.evidence.getRecord(rid))
+      // 复评的结论和下次复评时刻也记下：add_followup 的缺省到点、get_response_options 要不要再问都按它判断
+      const review = type === 'effect_review' ? { overall: out.result?.overall, next_review_at: out.result?.next_review_at?.slice?.(0, 19) } : {}
+      const note = { type, text: String(out.card?.summary ?? ''), record_ids: recordIds, ...(asOf ? { as_of: asOf } : {}), ...Object.fromEntries(Object.entries(review).filter(([, v]) => typeof v === 'string')) }
+      const id = await noteOnIncident(incidents, panel, note, async () => String((await ev.mineData.call('get_clock', {})).now).slice(0, 19))
       if (id) out.incident_id = id
     } catch (err) {
       ctx.logger.warn(`${FLOW}: 记入事件时间线失败：${(err as Error).message}`)
@@ -242,10 +250,27 @@ export function apply(ctx: Context, config: Config) {
       name: 'get_response_options',
       description:
         '查某一级预警的处置选项（代码给出，不要自己编）。level 取 yellow / orange / red（或 黄色 / 橙色 / 红色）。返回选项、给操作员的提问卡片内容（card，标签原样用）和下一步说明（note）。' +
-        '橙色预警：研判之后先调它，把 card 用 ask_user 原样问给操作员（多选），按 note 的指引继续。黄色、红色没有卡片，处置由对应流程落实。',
-      parameters: { level: { type: 'string', required: true, description: 'yellow / orange / red，或 黄色 / 橙色 / 红色' } },
+        '橙色预警：研判之后先调它（带上 panel），返回有 card 就用 ask_user 原样问给操作员（多选），没有 card 就不问；都按 note 的指引继续。黄色、红色没有卡片，处置由对应流程落实。',
+      parameters: {
+        level: { type: 'string', required: true, description: 'yellow / orange / red，或 黄色 / 橙色 / 红色' },
+        panel: { type: 'string', description: '工作面编号：给了就按事件时间线判断这一级是不是已经选过处置（选过、复评没恶化就不再问）' },
+      },
       output: { schema: { type: 'json' as const }, render: (_args: unknown, v: any) => [{ type: 'text' as const, text: JSON.stringify(v) }] },
-      execute: async (args: { level: string }) => toJson(describeOptions(responseOptions, String(args.level))),
+      execute: async (args: { level: string; panel?: string }) => {
+        const out: any = describeOptions(responseOptions, String(args.level))
+        if (!out.card || !args.panel || !incidents) return toJson(out)
+        const inc = await incidents.findOpen('fire', String(args.panel))
+        if (!inc) return toJson(out)
+        const prior = priorChoice(await incidents.entries(inc.incident_id), String(args.level))
+        out.prior = prior
+        if (!prior.ask) {
+          out.card = null
+          out.note = `${prior.reason}：不再问操作员，也不重新下发同样的方案；继续按已下发的方案跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出追加处置的卡片。`
+        } else if (prior.issued_at) {
+          out.note = `${prior.reason}。${out.note} 操作员点了“跳过”就是不追加：不重新下发已有的方案。`
+        }
+        return toJson(out)
+      },
     }),
   )
 
@@ -336,7 +361,7 @@ export function apply(ctx: Context, config: Config) {
 
   registerPlanFlow(
     SEALING,
-    '编制采空区火区封闭方案（固定流程，指挥部决定封闭时一律调它，不要自己拼步骤）：按固定步骤采集证据，由代码生成现场条件' +
+    '编制采空区火区封闭方案（固定流程，红色预警或指挥部要求封闭时一律调它，不要自己拼步骤；审核通过后用 issue_sealing_plan 提交，由确认人在弹窗上决定）：按固定步骤采集证据，由代码生成现场条件' +
     '（甲烷、氧浓度、爆炸危险性、封闭时间、人工确认项）和必备步骤，“方案编写”阶段选可选步骤和密闭巷道，代码计算密闭材料、注浆量、注氮流量并与库存比较，' +
     '经 actions 红线预检和“合规审核”阶段（只引用条文索引给出的条文），不通过时自动修改重审，轮数有上限。' +
     '完整方案和审核意见已作为文件交付（网页端右侧预览）；回答时把 brief_markdown（方案要点）原样单独成段放进回答，不要改写、不要贴完整方案、不要另写分析；next_step 是给你的下一步说明，不用贴。' +
@@ -403,9 +428,7 @@ export function apply(ctx: Context, config: Config) {
   async function callJson(exec: any, name: string, args: Record<string, unknown>, tag: string): Promise<any> {
     const r = await c.tools.execute({ callId: `${exec.callId}:${tag}`, rootCallId: exec.rootCallId, name, arguments: args, agent: exec.agent, parent: exec.token, signal: exec.signal })
     if (r.isError) throw new Error(r.error?.message ?? `${name} 调用失败`)
-    if (r.value && typeof r.value === 'object' && !Array.isArray(r.value)) return r.value
-    const text = (r.content ?? []).find((b: any) => b.type === 'text')?.text
-    return text ? JSON.parse(text) : null
+    return unwrapToolValue(r)
   }
 
   c.tools.register(

@@ -55,7 +55,7 @@ export function describeOptions(levels: Levels, levelRaw: string) {
     card,
     note: card
       ? '用 ask_user 把 card 原样问给操作员（标签照抄，multiSelect 为 true）；把答案里选中的标签按 label_to_id 换成 id，调 draft_firefighting_plan 的 selected_options 传入（必做项不用传）；操作员点了“跳过”（没有选任何项）就是只做必做项，selected_options 传空列表 []，不要再追问。没有 card（选项由流程自己落实）时不用问。'
-      : '这一级的处置由对应流程自己落实（见各选项的 how），不用向操作员列选项。',
+      : '这一级的各项处置都要落实，由你按各选项的 how 在同一轮里提交（不问“要不要”，确认弹窗就是请示），不用向操作员列选项。',
   }
 }
 
@@ -71,4 +71,35 @@ export function planKeysFor(levels: Levels, level: string, ids: string[]): strin
     keys.push(o.plan_key)
   }
   return [...new Set(keys)]
+}
+
+/** 每一级“选过处置”的凭据：该级的方案经 guard 下发成功（事件时间线里 guard 写的 action note） */
+const PLAN_TOOL: Record<string, string> = { orange: 'issue_firefighting_plan' }
+const ISSUED = new Set(['issued', 'completed'])
+
+interface TimelineEntry {
+  at: string
+  kind: string
+  by: string
+  data?: Record<string, any>
+}
+
+/**
+ * 这一级是否已经选过处置、不用再问（代码判断，智能体照办）：该级方案下发之后，只要复评没有给出“恶化”就不再问；
+ * 下发之后最近一次复评是恶化 → 要问（追加处置）。没有下发过 → 照常问。
+ */
+export function priorChoice(entries: TimelineEntry[], levelRaw: string): { ask: boolean; issued_at?: string; review?: string; reason: string } {
+  const tool = PLAN_TOOL[normalizeLevel(levelRaw)]
+  if (!tool) return { ask: true, reason: '这一级不按卡片选处置' }
+  const i = entries.findLastIndex((e) => e.kind === 'note' && e.by === 'guard' && e.data?.type === 'action' && e.data?.tool === tool && ISSUED.has(String(e.data?.status)))
+  if (i < 0) return { ask: true, reason: '这一级还没有下发过方案' }
+  const issuedAt = entries[i]!.at
+  const review = entries.slice(i + 1).findLast((e) => e.kind === 'note' && e.data?.type === 'effect_review')
+  if (review?.data?.overall === 'worsening') return { ask: true, issued_at: issuedAt, review: review.at, reason: `${issuedAt} 下发方案后，${review.at} 的复评结论为恶化，问操作员追加哪些处置` }
+  return {
+    ask: false,
+    issued_at: issuedAt,
+    ...(review ? { review: review.at } : {}),
+    reason: review ? `${issuedAt} 已下发本级方案，之后的复评（${review.at}）没有恶化` : `${issuedAt} 已下发本级方案，之后还没有复评`,
+  }
 }

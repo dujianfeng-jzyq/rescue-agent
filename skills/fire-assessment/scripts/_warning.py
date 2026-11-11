@@ -30,6 +30,16 @@ STAGE_NAMES = {
     "accelerating": "加速氧化",
     "intense": "激烈氧化，接近明火",
 }
+# 火区封闭后，密闭内的安全监控测点（上隅角、回风巷）断电、读不到数，封闭前的读数也不再代表现状：不参与分级，按束管监测。
+# TODO(专家): 哪些测点在密闭内按本矿封闭范围定；目前按“工作面的上隅角、回风巷测点”处理。
+SEALED_NOTE = "火区已封闭：上隅角、回风巷安全监控测点在密闭内断电，不参与分级，按束管监测"
+
+
+def panel_sealed(ev: dict[str, Any]) -> bool:
+    """火区台账里本工作面有状态为已封闭的火区。没有台账按未封闭（照常要求上隅角、回风巷测点）。"""
+    return any(a.get("panel") == ev["panel"] and a.get("status") == "sealed" for a in ev.get("fire_areas") or [])
+
+
 METHOD = "阈值分级（references/thresholds.yaml）。阈值为演示占位值，需按本矿自然发火预测预报制度设定；自燃发展阶段与等级独立判定"
 
 
@@ -74,9 +84,13 @@ def assess(ev: dict[str, Any], thresholds: dict[str, Any], window_h: float, rate
         dq.extend(rep.flags)
         return rep.usable
 
-    # 上隅角 CO，用回风巷 CO 交叉校核
-    uc = usable(f"SM-{panel}-UC", "CO")
-    ret = usable(f"SM-{panel}-RET", "CO")
+    # 上隅角 CO，用回风巷 CO 交叉校核；火区已封闭时两者都在密闭内，不用
+    if panel_sealed(ev):
+        uc, ret = [], []
+        notes.append(SEALED_NOTE)
+    else:
+        uc = usable(f"SM-{panel}-UC", "CO")
+        ret = usable(f"SM-{panel}-RET", "CO")
     uc_co = uc[-1]["value"] if uc else None
     src: dict[str, dict[str, str]] = {}
     if uc_co is not None:

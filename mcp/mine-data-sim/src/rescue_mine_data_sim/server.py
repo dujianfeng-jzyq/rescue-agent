@@ -532,11 +532,21 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
     @server.custom_route("/sim/pause", methods=["POST"])
     async def sim_pause(req: Request) -> JSONResponse:
         body = await req.json()
+        if not body.get("paused", True) and (busy := directed()) is not None:
+            return busy
         sim.engine.clock.set_paused(bool(body.get("paused", True)))
         return JSONResponse({"ok": True, "paused": sim.engine.clock.paused})
 
+    def directed() -> JSONResponse | None:
+        """演示导演进行中时，时间只由导演推进：手动注入、继续、快进会和导演的分支剧本叠在一起（演示里误点注入 s4 后封闭了又升红）。"""
+        if director is not None and director.active:
+            return JSONResponse({"error": "演示导演正在推进，不能手动注入、继续或快进；要中止请“重置为常态”"}, status_code=409)
+        return None
+
     @server.custom_route("/sim/advance", methods=["POST"])
     async def sim_advance(req: Request) -> JSONResponse:
+        if (busy := directed()) is not None:
+            return busy
         body = await req.json()
         sim.engine.clock.advance(float(body["hours"]))
         return JSONResponse({"ok": True, "now": sim.engine.now().isoformat()})
@@ -558,6 +568,8 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
     @server.custom_route("/sim/demo/inject", methods=["POST"])
     async def demo_inject(req: Request) -> JSONResponse:
         """开始演示：把事故场景接到当前矿井时间上（只在常态连续运行时可用），可同时改倍速。"""
+        if (busy := directed()) is not None:
+            return busy
         body = await req.json()
         if sim.mode != "demo":
             return bad("只有常态连续运行时才能注入事故（先 POST /sim/demo/normal）")
@@ -572,6 +584,8 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
     @server.custom_route("/sim/demo/resume", methods=["POST"])
     async def demo_resume(req: Request) -> JSONResponse:
         """继续（自动暂停之后）：之后写入的异常检测记录才会再次触发暂停。可同时改倍速。"""
+        if (busy := directed()) is not None:
+            return busy
         body = await req.json() if (await req.body()) else {}
         if body.get("speed") is not None:
             sim.engine.clock.set_speed(float(body["speed"]))
@@ -580,7 +594,15 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
         return JSONResponse({"ok": True, "now": sim.engine.now().isoformat(), "speed": sim.engine.clock.speed})
 
     flow_path = Path(os.environ.get("RESCUE_DEMO_FLOW", scenario_dir() / "demo" / "flow.yaml"))
-    director = Director(sim, load_flow(flow_path), incidents, incidents.dir / "sentinel" / "heartbeat.json" if incidents else None) if flow_path.is_file() else None
+    director = (
+        Director(
+            sim, load_flow(flow_path), incidents,
+            incidents.dir / "sentinel" / "heartbeat.json" if incidents else None,
+            duty=incidents.dir / "duty-status.json" if incidents else None,  # 唤醒插件写的值班会话状态
+        )
+        if flow_path.is_file()
+        else None
+    )  # fmt: skip
     if holder is None and director is not None:
         DirectorThread(director).start()
 

@@ -43,8 +43,13 @@ export interface CheckOutcome {
   report_markdown: string
 }
 
-/** check_mine 缺省检测的工作面：技能 references/watch.yaml 的 panels */
-export async function defaultPanels(skillsDir: string): Promise<string[]> {
+/**
+ * check_mine 缺省检测的工作面：技能 references/watch.yaml 的 panels；环境变量 RESCUE_WATCH_PANELS（逗号分隔）覆盖，与监听器一致。
+ * 原来只读 watch.yaml：演示换了工作面名（DEMO_PANEL=211016）时 check_mine 还在查 1201，报“缺必需测点”，智能体去研判一个不存在的工作面。
+ */
+export async function defaultPanels(skillsDir: string, env: Record<string, string | undefined> = process.env): Promise<string[]> {
+  const fromEnv = (env.RESCUE_WATCH_PANELS ?? '').split(',').map((p) => p.trim()).filter(Boolean)
+  if (fromEnv.length) return fromEnv
   const watch = parseYaml(await readFile(join(skillsDir, CHECK_SKILL, 'references', 'watch.yaml'), 'utf8'))
   const panels = watch?.panels
   if (!Array.isArray(panels) || !panels.length) throw new Error(`${CHECK_SKILL}/references/watch.yaml 没有 panels`)

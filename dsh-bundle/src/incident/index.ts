@@ -69,6 +69,27 @@ export async function followupParams(skillsDir: string): Promise<FollowupParams>
   return { default_after_h: y.default_after_h, max_after_h: y.max_after_h }
 }
 
+const ISSUED = new Set(['issued', 'completed'])
+const hoursBetween = (a: string, b: string) => (Date.parse(`${b.slice(0, 19)}Z`) - Date.parse(`${a.slice(0, 19)}Z`)) / 3_600_000
+
+/**
+ * add_followup 不给 after_h 时的到点时间（代码定，不靠模型）：
+ * 最近一次复评之后没有新的对外动作下发 → 用复评给出的下次复评时刻（复评自己的节奏）；
+ * 否则（刚下发了新处置，或还没复评过）→ 技能规定的默认间隔。复评时刻已过或超出上限时也退回默认 / 上限。
+ */
+export function defaultFollowup(entries: Entry[], now: string, p: FollowupParams): { due_at: string; after_h: number; basis: string } {
+  const byDefault = (why: string) => ({ due_at: mineMsPlusHours(now, p.default_after_h), after_h: p.default_after_h, basis: `${why}，按默认间隔 ${p.default_after_h} 小时` })
+  const i = entries.findLastIndex((e) => e.kind === 'note' && e.data?.type === 'effect_review' && typeof e.data?.next_review_at === 'string')
+  if (i < 0) return byDefault('还没有复评')
+  const newAction = entries.slice(i + 1).some((e) => e.kind === 'note' && e.by === 'guard' && e.data?.type === 'action' && ISSUED.has(String(e.data?.status)))
+  if (newAction) return byDefault('最近一次复评之后下发了新的处置')
+  const next = String(entries[i]!.data.next_review_at).slice(0, 19)
+  const h = hoursBetween(now, next)
+  if (!(h > 0)) return byDefault(`复评给出的下次复评时刻 ${next} 已过`)
+  if (h > p.max_after_h) return { due_at: mineMsPlusHours(now, p.max_after_h), after_h: p.max_after_h, basis: `复评给出的下次复评时刻 ${next} 超出上限，按上限 ${p.max_after_h} 小时` }
+  return { due_at: next, after_h: Math.round(h * 100) / 100, basis: `最近一次复评之后没有新处置，按复评给出的下次复评时刻 ${next}` }
+}
+
 /** 注册工具（clock 返回矿井时间；单独成函数方便不起 DSH 测试） */
 export function registerTools(c: { tools: { register: (t: unknown) => void } }, store: IncidentStore, clock: () => Promise<string>, followups: () => Promise<FollowupParams>): void {
   const view = async (id: string, withTimeline: boolean) => {
@@ -144,22 +165,28 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
       name: 'add_followup',
       description:
         '登记跟踪计划：处置下发后，过一段矿井时间到点，监听器会唤醒你复评（review_effect）。到点时间由系统按矿井时钟算，你不要自己算。' +
-        'after_h 不给就用技能规定的默认间隔（返回里照抄）；指挥人员明确要求某个间隔时才填。expect 写一句话预期（如“注惰后上隅角 CO 应回落”）。',
+        'after_h 不给时由系统定：最近一次复评之后没有新处置，就用复评给出的下次复评时刻；刚下发了新处置或还没复评过，用技能规定的默认间隔（返回的 due_at、basis 照抄）。指挥人员明确要求某个间隔时才填 after_h。expect 写一句话预期（如“注惰后上隅角 CO 应回落”）。',
       parameters: {
         incident_id: { type: 'string', required: true, description: '事件编号' },
-        after_h: { type: 'number', description: '多少矿井小时后复评（大于 0）；缺省取技能规定的默认间隔' },
+        after_h: { type: 'number', description: '多少矿井小时后复评（大于 0）；缺省由系统定（见工具说明）' },
         expect: { type: 'string', required: true, description: '一句话预期' },
       },
       output: jsonOutput,
       execute: async (args: { incident_id: string; after_h?: number; expect: string }) => {
         const p = await followups()
-        const hours = args.after_h === undefined ? p.default_after_h : Number(args.after_h)
-        if (!Number.isFinite(hours) || hours <= 0 || hours > p.max_after_h) throw new Error(`after_h 应大于 0 且不超过 ${p.max_after_h} 个矿井小时`)
         const now = await clock()
-        const dueAt = mineMsPlusHours(now, hours)
+        let dueAt: string, hours: number, basis: string
+        if (args.after_h === undefined) {
+          ;({ due_at: dueAt, after_h: hours, basis } = defaultFollowup(await store.entries(String(args.incident_id)), now, p))
+        } else {
+          hours = Number(args.after_h)
+          if (!Number.isFinite(hours) || hours <= 0 || hours > p.max_after_h) throw new Error(`after_h 应大于 0 且不超过 ${p.max_after_h} 个矿井小时`)
+          dueAt = mineMsPlusHours(now, hours)
+          basis = '按给定间隔'
+        }
         const followupId = `FU-${now.slice(0, 19).replace(/[-:]/g, '')}-${Math.random().toString(36).slice(2, 6)}`
         await store.append(String(args.incident_id), now, 'followup_added', 'agent', { followup_id: followupId, due_at: dueAt, expect: String(args.expect) })
-        return toJson({ followup_id: followupId, due_at: dueAt, now, after_h: hours })
+        return toJson({ followup_id: followupId, due_at: dueAt, now, after_h: hours, basis })
       },
     }),
   )

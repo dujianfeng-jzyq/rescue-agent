@@ -22,6 +22,10 @@
     "CH4"
    ]
   },
+  "sealed_exempt": [
+   "upper_corner",
+   "return"
+  ],
   "data_gap_h": {
    "tubes": 3,
    "upper_corner": 0.75,
@@ -52,6 +56,8 @@
    "BT-1201-G2/CO",
    "BT-1201-G2/O2"
   ],
+  "sealed": false,
+  "sealed_exempt": [],
   "data_quality": [],
   "notes": [],
   "anomaly": true,

@@ -71,4 +71,5 @@ export interface StateData {
   fireAreas: { items: { id: string; panel: string; name: string; status: string; sealedAt: string; anchor: string | null }[]; error?: string }
   records: { id: string; kind: string; kindName: string; panel: string | null; asOf: string; createdAt: string }[]
   agent: { state: 'idle' | 'working' | 'waiting_approval' | 'waiting_question' | 'alert_pending' | 'degraded'; label: string; doing: string[]; source: 'live' | 'inferred' }
+  duty: { sessionId: string | null; lastDelivery: { id: string; wall: string; sessionId: string } | null }
 }

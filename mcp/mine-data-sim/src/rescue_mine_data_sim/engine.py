@@ -590,18 +590,22 @@ class SimEngine:
 
     def alarms(self, start_h: float, end_h: float) -> list[tuple[str, Measurand, datetime, datetime | None, float, float]]:
         """报警平台视角：每次越限一条 (传感器, 参数, 越限时间, 恢复时间或 None, 越限时读数, 报警值)。
-        缺数不算报警（那是 get_events 的测点故障）。窗口起点之前就已越限的报警从窗口第一个读数算起。"""
+        缺数不算报警（那是 get_events 的测点故障）。返回窗口内仍越限或在窗口内恢复的报警；
+        越限时间是真正开始越限的时刻（从场景开始扫，不从窗口起点算）：原来窗口起点之前就已越限的报警从窗口第一个读数算起，
+        窗口一滑动越限时间就变，报警编号跟着变，监听器每一步都当成新报警（封闭后测点断电、报警一直未恢复时尤其明显）。"""
         end_h = min(end_h, self.now_h())
+        start = self.at(max(0.0, start_h))
         out: list[tuple[str, Measurand, datetime, datetime | None, float, float]] = []
         for (sid, m), limit in ALARM_THRESHOLDS.items():
             open_: tuple[datetime, float] | None = None
-            for r in self.readings([sid], start_h, end_h, [m]):
+            for r in self.readings([sid], 0.0, end_h, [m]):
                 if r.quality == Quality.MISSING or r.value is None:
                     continue
                 if r.value > limit and open_ is None:
                     open_ = (r.ts, r.value)
                 elif r.value <= limit and open_ is not None:
-                    out.append((sid, m, open_[0], r.ts, open_[1], limit))
+                    if r.ts >= start:
+                        out.append((sid, m, open_[0], r.ts, open_[1], limit))
                     open_ = None
             if open_ is not None:
                 out.append((sid, m, open_[0], None, open_[1], limit))

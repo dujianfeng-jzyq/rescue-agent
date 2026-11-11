@@ -104,6 +104,12 @@ describe('reconcile', () => {
     assert.deepEqual(reconcile([{ id: 'auto:A', name: 'A', level: 'red', text: 't' }], want).map((c) => c.op), ['mark'])
     assert.deepEqual(reconcile([manual, { id: 'auto:OLD', name: 'O', level: 'info', text: '' }], []), [{ op: 'unmark', id: 'auto:OLD' }])
   })
+
+  it('系统标的位置上清掉智能体的标记（智能体按旧记录标的等级不会更新，两个圈会叠在一起）；别处的不动', () => {
+    const stale = { id: 'agent:A', name: 'A', level: 'blue', text: '蓝色' }
+    const other = { id: 'agent:B', name: 'B', level: 'info', text: '重点关注' }
+    assert.deepEqual(reconcile([stale, other, { id: 'auto:A', name: 'A', level: 'warn', text: 't' }], want), [{ op: 'unmark', id: 'agent:A' }])
+  })
 })
 
 describe('Autopilot', () => {

@@ -47,11 +47,11 @@
       <div class="row">
         <select id="scenario"></select>
         <label>倍速 <input id="injectSpeed" type="number" value="600" style="width:70px"></label>
-        <button class="primary" onclick="inject()">开始演示</button>
+        <button id="manualInject" onclick="inject()">手动注入事故</button>
       </div>
       <div class="row">
         <button onclick="pause(true)">暂停</button>
-        <button onclick="resume()">继续</button>
+        <button id="manualResume" onclick="resume()">继续</button>
         <input id="speed" type="number" value="60" style="width:70px"><button onclick="setSpeed()">调倍速</button>
       </div>
       <div class="row">
@@ -181,7 +181,9 @@ function renderDirector(d) {
   const box = $('directorBox')
   if (!d || d.state === 'unavailable') { box.style.display = 'none'; return }
   box.style.display = ''
-  $('dirState').textContent = DIR_NAME[d.state] + (d.stage ? `（${d.stage}）` : ''); $('dirState').className = `tag ${d.state === 'holding' ? 'warn' : ''}`
+  $('dirState').textContent = DIR_NAME[d.state] + (d.stage ? `（${d.stage}）` : '') + (d.waiting ? `：${d.waiting}` : ''); $('dirState').className = `tag ${d.state === 'holding' || d.waiting ? 'warn' : ''}`
+  const active = ['running', 'holding', 'ending'].includes(d.state)  // 导演推进中：手动注入、继续不可用（服务端也会拒绝）
+  for (const id of ['manualInject', 'manualResume']) { $(id).disabled = active; $(id).title = active ? '演示导演正在推进' : '' }
   $('dirStart').disabled = ['running', 'holding', 'ending'].includes(d.state) || state.mode !== 'demo'
   $('dirStart').textContent = d.state === 'finished' ? '再来一次' : '开始演示'
   if (d.state !== 'holding') picked = new Set()

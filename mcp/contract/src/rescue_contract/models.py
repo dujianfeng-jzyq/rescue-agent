@@ -408,6 +408,9 @@ class EvacuationNotice(_Model):
     persons: list[str]  # person_id
     routes: dict[str, list[str]] = Field(default_factory=dict)  # person_id → 节点路径
     supplementary: bool = True  # 智能体给的是“补充名单”，不替代预案撤人
+    # 依据的人员记录（run_fire_assessment 返回的 record_ids.personnel）。只用来把这次撤人挂到该工作面的事件时间线和确认弹窗上；
+    # 不核对时效、读不到也不拦：撤人不等待本系统。
+    record_id: str | None = None
 
 
 class Escalation(_Model):
@@ -533,6 +536,8 @@ class ApprovalSummary(_Model):
 
     action: str  # 要做什么，如“下发 1201 采空区封闭方案”
     tool: str
+    # 要批的内容要点（代码从记录或指令参数取，不经模型改写）：等级与触发条件、方案步骤与密闭巷道、物资缺口、撤人人数等
+    facts: list[str] = Field(default_factory=list)
     record_ids: list[str] = Field(default_factory=list)
     checks: list[ApprovalCheck] = Field(default_factory=list)
     human_items: list[str] = Field(default_factory=list)  # 需要确认人把关的人工确认项

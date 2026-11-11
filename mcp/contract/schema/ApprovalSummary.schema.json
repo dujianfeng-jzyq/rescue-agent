@@ -43,6 +43,13 @@
       "title": "Tool",
       "type": "string"
     },
+    "facts": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Facts",
+      "type": "array"
+    },
     "record_ids": {
       "items": {
         "type": "string"

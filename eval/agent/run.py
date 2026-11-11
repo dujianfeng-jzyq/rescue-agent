@@ -113,7 +113,7 @@ def setup_incident(case: dict, mine_now: str, fmt: dict[str, str]) -> None:
         old = store.append(iid, mine_now, "alert", "sentinel", {"cause": prior["cause"], "summary": prior["summary"]})
         store.append(iid, mine_now, "delivered", "eval", {"alert_id": old["event_id"], "session_id": "eval"})
         store.append(iid, mine_now, "acked", "agent", {"alert_id": old["event_id"]})
-        store.append(iid, mine_now, "note", "agent", {"type": "assessment", "text": prior.get("note", f"已处理告警：{prior['summary']}，完成研判并告知操作员")})
+        store.append(iid, mine_now, "note", "agent", {"type": "assessment", "text": prior.get("note", f"已处理告警：{prior['summary']}，完成研判并告知操作员"), "as_of": mine_now[:19]})
     if spec.get("pending_approval"):  # 对外动作在等人工确认且已超时升级（告警原因 approval_timeout）
         pa = spec["pending_approval"]
         base = {"approval_key": "eval-c1", "tool": pa["tool"]}
@@ -123,7 +123,7 @@ def setup_incident(case: dict, mine_now: str, fmt: dict[str, str]) -> None:
     if spec.get("handled"):  # 这条告警本身已经处理过（现在是重复投递）
         store.append(iid, mine_now, "delivered", "eval", {"alert_id": alert["event_id"], "session_id": "eval"})
         store.append(iid, mine_now, "acked", "agent", {"alert_id": alert["event_id"]})
-        store.append(iid, mine_now, "note", "agent", {"type": "assessment", "text": f"已处理告警 {alert['event_id']}：{spec['summary']}，完成研判并告知操作员"})
+        store.append(iid, mine_now, "note", "agent", {"type": "assessment", "text": f"已处理告警 {alert['event_id']}：{spec['summary']}，完成研判并告知操作员", "as_of": mine_now[:19]})
     # 消息由评测运行器代投（提问就是投递的消息）：立刻标为已投递，免得唤醒插件再往值班会话投一份
     store.append(iid, mine_now, "delivered", "eval", {"alert_id": alert["event_id"], "session_id": "eval"})
     fmt.update(incident_id=iid, alert_id=alert["event_id"], mine_now=mine_now[:19])

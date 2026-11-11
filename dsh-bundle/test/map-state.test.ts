@@ -48,6 +48,22 @@ describe('buildState', () => {
     assert.equal(s.readings.rows[1]!.quality, 'missing', '缺测如实显示，不补数')
   })
 
+  it('值班会话：编号取自 duty-session.json，最近一次投递取自当前事件', async () => {
+    const f = await fixture()
+    let s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine() })
+    assert.deepEqual(s.duty, { sessionId: null, lastDelivery: null }, '还没有值班会话')
+    const id = await f.store.open('2026-11-09T07:00:00', { category: 'fire', panel: '211016', summary: '211016 工作面 CO 升高', by: 'sentinel' })
+    await f.store.append(id, '2026-11-09T07:10:00', 'alert', 'sentinel', { cause: 'level_up', summary: '预警升为橙色' })
+    await f.store.append(id, '2026-11-09T07:10:00', 'delivered', 'plugin', { alert_id: 'a1', session_id: 'session-old' })
+    await f.store.append(id, '2026-11-09T07:20:00', 'delivered', 'plugin', { alert_id: 'a2', session_id: 'session-new' })
+    s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine() })
+    assert.equal(s.duty.lastDelivery?.sessionId, 'session-new', '取最近一次投递')
+    assert.equal(s.duty.sessionId, 'session-new', '没有 duty-session.json 时用投递记录里的会话')
+    await writeFile(join(f.incidentDir, 'duty-session.json'), JSON.stringify({ sessionId: 'session-duty' }))
+    s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine() })
+    assert.equal(s.duty.sessionId, 'session-duty')
+  })
+
   it('矿井返回的列表被包了一层 {result: [...]} 时照常解开', async () => {
     const f = await fixture()
     const wrapped: MineCaller = { async call(tool, args) { return { result: await mine().call(tool, args) } } }

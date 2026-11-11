@@ -22,6 +22,10 @@
     "CH4"
    ]
   },
+  "sealed_exempt": [
+   "upper_corner",
+   "return"
+  ],
   "data_gap_h": {
    "tubes": 3,
    "upper_corner": 0.75,
@@ -51,6 +55,8 @@
   "failed_required": [],
   "missing_groups": [],
   "stale_required": [],
+  "sealed": false,
+  "sealed_exempt": [],
   "data_quality": [],
   "notes": [
    "BT-1201-G1 氮气浓度 87.4%，可能处于注氮影响范围，格雷哈姆系数偏低失真"

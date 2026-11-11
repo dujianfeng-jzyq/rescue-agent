@@ -58,6 +58,8 @@ def test_reviewed_plan_passes(records):
     assert [c["name"] for c in s["checks"]] == ["引用记录", "记录时效", "合规审核", "方案记录", "方案类型、时效与红线"]
     assert all(c["ok"] for c in s["checks"])
     assert s["human_items"] == REVIEW["result"]["human_items"] and s["human_items"]
+    assert s["facts"][0].startswith("步骤：") and any(f.startswith("密闭巷道：") for f in s["facts"])  # 要点取自方案记录
+    assert any(f.startswith(("物资缺口", "物资：")) for f in s["facts"])
     plan, problems, _, _ = plan_from_record("issue_sealing_plan", rid, records, NOW)
     assert not problems and isinstance(plan, Plan) and plan.record_id == rid and plan.kind == "sealing"
 

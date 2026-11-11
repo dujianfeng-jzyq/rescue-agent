@@ -91,6 +91,7 @@ services:
       RESCUE_INCIDENT_DIR: /data/incidents        # 事件库：事件插件读写，唤醒插件扫描
       RESCUE_DUTY_CWD: /data/duty                 # 值班会话的工作目录
       RESCUE_RUN_DIR: /data/runs                  # 技能脚本的运行目录
+      RESCUE_WATCH_PANELS: ${DEMO_PANEL:-1201}     # check_mine 缺省检测的工作面，与监听器一致
       RESCUE_MAP_DIR: /data/map                   # 地图包（geometry.json），真实矿井图不进仓库
       RESCUE_AUDIT_LOG: /data/audit/tool-actions.jsonl
       DSH_PUBLIC_PORT: ${DEMO_WEB_PORT:-13080}

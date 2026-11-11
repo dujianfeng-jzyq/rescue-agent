@@ -16,6 +16,11 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs?: Record<
 const LEVEL_COLOR: Record<string, string> = { none: '#35c46a', blue: '#4aa3ff', yellow: '#f5c518', orange: '#ff8a1f', red: '#ff4d4f' }
 const KIND_COLOR: Record<string, string> = { alert: '#ff8a1f', recovered: '#35c46a', degraded: '#f5c518', opened: '#4aa3ff', note: '#7fb2e6', status: '#9aa8ff' }
 
+/** 读数质量（契约 Quality）的中文；不认识的原样显示 */
+const QUALITY_NAME: Record<string, string> = { missing: '缺数', suspect: '疑似异常' }
+/** 智能体卡片里最多列几条最近记录（卡片在聊天区上方，要短） */
+const MAX_RECORDS = 3
+
 const clock = (iso: string | null | undefined): string => (iso ? iso.replace('T', ' ').slice(0, 19) : '—')
 const hm = (iso: string): string => iso.slice(5, 16).replace('T', ' ')
 
@@ -110,7 +115,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                   { class: 'rm-sensor-vals' },
                   ...rd.rows
                     .filter((r) => r.sensor === name)
-                    .map((r) => h('div', { class: 'rm-val', 'data-q': r.quality }, h('span', null, r.measurand), h('b', null, fmtValue(r.value)), h('small', null, r.value === null ? (r.quality === 'ok' ? '' : r.quality) : r.unit))),
+                    .map((r) => h('div', { class: 'rm-val', 'data-q': r.quality }, h('span', null, r.measurand), h('b', null, fmtValue(r.value)), h('small', null, r.value === null ? (r.quality === 'ok' ? '' : (QUALITY_NAME[r.quality] ?? r.quality)) : r.unit))),
                 ),
               )
               if (anchor) {
@@ -222,17 +227,24 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
   function renderRight(s: StateData | null): void {
     const a = s?.agent
     const inc = s?.incident ?? null
+    // 卡片在聊天区上方，只放一眼要看的：状态一行、当前事件一行、有待确认指令时列出来、最近几条记录
     const status = section(
       '智能体状态',
-      h('div', { class: 'rm-agent', 'data-tone': a ? (STATE_TONE[a.state] ?? 'dim') : 'dim' }, h('i'), h('b', null, a?.label ?? '未知')),
-      h('p', { class: 'rm-note' }, a?.source === 'live' ? '来自 DSH 的实时运行状态。' : '由事件库推断：还没有收到 DSH 的运行事件，不是实时状态。'),
-      inc && h('dl', { class: 'rm-kv' }, h('dt', null, '当前事件'), h('dd', { class: 'rm-mono' }, inc.id), h('dt', null, '更新于'), h('dd', null, clock(inc.updatedAt))),
+      h(
+        'div',
+        { class: 'rm-agent', 'data-tone': a ? (STATE_TONE[a.state] ?? 'dim') : 'dim', title: a?.source === 'live' ? '来自 DSH 的实时运行状态' : '由事件库推断：还没有收到 DSH 的运行事件，不是实时状态' },
+        h('i'),
+        h('b', null, a?.label ?? '未知'),
+        a?.source !== 'live' && h('small', null, '（推断）'),
+      ),
+      inc && h('dl', { class: 'rm-kv' }, h('dt', null, '当前事件'), h('dd', { class: 'rm-mono', title: `更新于 ${clock(inc.updatedAt)}` }, inc.id)),
     )
     const ap = inc?.pendingApprovals ?? []
-    const approvals = section(
-      '待确认指令',
-      ap.length
-        ? h(
+    const approvals =
+      ap.length > 0 &&
+      section(
+        '待确认指令',
+        h(
             'ul',
             { class: 'rm-approvals' },
             ...ap.map((p) => {
@@ -246,17 +258,17 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                 p.escalated && h('em', null, '已超时升级'),
               )
             }),
-            h('p', { class: 'rm-note' }, '请在下方对话区确认或拒绝。'),
-          )
-        : empty('没有等待确认的指令'),
-    )
+            h('p', { class: 'rm-note' }, '请在对话区确认或拒绝。'),
+          ),
+      )
     const rec = section(
       '最近记录',
       s && s.records.length
-        ? h('ul', { class: 'rm-list rm-records' }, ...s.records.map((r) => h('li', null, h('span', { class: 'rm-kind' }, r.kindName), h('code', null, r.id), h('time', null, hm(r.asOf)))))
+        ? h('ul', { class: 'rm-list rm-records' }, ...s.records.slice(0, MAX_RECORDS).map((r) => h('li', null, h('span', { class: 'rm-kind' }, r.kindName), h('code', { title: r.id }, r.id), h('time', null, hm(r.asOf)))))
         : empty('暂无记录'),
     )
-    right.replaceChildren(status, approvals, rec)
+    rec.classList.add('rm-sec-records')
+    right.replaceChildren(...[status, approvals, rec].filter((x): x is HTMLElement => !!x))
   }
 
   function renderChips(s: StateData | null, staleS: number, failed: boolean): void {

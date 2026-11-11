@@ -1,6 +1,7 @@
 """风险检测（design-v2 4.9）：按固定顺序计算，与完整研判用同一批函数，结论一致。
 
 1. 数据整理：必需测点（watch.yaml 的 required）是否失效（故障、卡值、没有数据），必需测点组是否缺失；
+   火区已封闭时，watch.yaml 的 sealed_exempt 里的测点组（密闭内断电）不算必需；
 2. 实时报警（同 alarms.py）；
 3. 预警等级（同 warning.py）；
 4. 自燃阶段（同 stage.py）；
@@ -18,7 +19,7 @@ from _alarms import check_all
 from _evidence import series
 from _quality import check_series
 from _skill import evidence, load_reference, main
-from _warning import LEVELS, NAMES, STAGE_NAMES, STAGES, assess, classify_stage
+from _warning import LEVELS, NAMES, STAGE_NAMES, STAGES, assess, classify_stage, panel_sealed
 
 VERSION = "check/1.0.0"
 NOMINAL = {"level": "none", "stage": "no_sign", "alarm_keys": [], "failed": [], "missing_groups": [], "stale": [], "nominal": True}
@@ -95,13 +96,15 @@ def run(data, _args):
     alarms = check_all(ev, alarm_cfg, warnings)
     w = assess(ev, th["levels"], th["window_h"], th["rate_window_h"])
     stage, basis = classify_stage(w["values"], th["stage"])
+    exempt = sorted(set(watch.get("sealed_exempt") or []) & set(watch["required"])) if panel_sealed(ev) else []
+    required = {g: m for g, m in watch["required"].items() if g not in exempt}
     state = {
         "level": w["level"],
         "stage": stage,
         "alarm_keys": sorted({f"{a['rule_id']}@{a['sensor_id']}" for a in alarms}),
-        "failed": failed_required(ev, watch["required"], th["window_h"]),
-        "missing_groups": sorted(m["group"] for m in ev.get("missing", [])),
-        "stale": stale_required(ev, watch["required"], watch["data_gap_h"]),
+        "failed": failed_required(ev, required, th["window_h"]),
+        "missing_groups": sorted(m["group"] for m in ev.get("missing", []) if m["group"] not in exempt),
+        "stale": stale_required(ev, required, watch["data_gap_h"]),
         "nominal": False,
     }
     baseline = data.get("baseline")
@@ -128,6 +131,8 @@ def run(data, _args):
         "failed_required": state["failed"],
         "missing_groups": state["missing_groups"],
         "stale_required": state["stale"],
+        "sealed": panel_sealed(ev),
+        "sealed_exempt": exempt,  # 火区已封闭、不算必需的测点组
         "data_quality": w["data_quality"],
         "notes": w["notes"],
         "anomaly": bool(reasons),
@@ -137,7 +142,7 @@ def run(data, _args):
         "baseline_state": base,
         "state": state,
     }
-    params = {"anomaly": watch["anomaly"], "required": watch["required"], "data_gap_h": watch["data_gap_h"], "status": watch["status"], "thresholds_status": th["status"]}
+    params = {"anomaly": watch["anomaly"], "required": watch["required"], "sealed_exempt": watch.get("sealed_exempt") or [], "data_gap_h": watch["data_gap_h"], "status": watch["status"], "thresholds_status": th["status"]}
     if watch["status"] == "placeholder":
         warnings.append("检测判据为开发初稿（占位值），待专家评审")
     return result, params, warnings

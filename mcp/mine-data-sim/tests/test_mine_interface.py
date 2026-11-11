@@ -115,6 +115,18 @@ def test_alarms_follow_threshold_crossings():
     assert active and all(a.status.value == "active" for a in active)
 
 
+def test_alarm_id_is_stable_as_the_window_slides():
+    """越限一直没恢复（如封闭后测点断电）时，窗口滑动不改越限时间和编号：监听器不会每一步都当成新报警。"""
+    holder, server = make("s4-escalation", 0)
+    md = MineData(server)
+    holder.engine.clock.advance(70)
+    first = {a.alarm_id: a.raised_at for a in run(md.alarms(hours=24, active_only=True))}
+    assert first
+    holder.engine.clock.advance(30)
+    later = {a.alarm_id: a.raised_at for a in run(md.alarms(hours=24, active_only=True))}
+    assert set(first) <= set(later), "仍越限的报警编号不能随窗口变"
+
+
 def test_equipment_follows_treatments():
     holder, server = make()
     md = MineData(server)

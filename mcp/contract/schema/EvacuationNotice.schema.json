@@ -26,6 +26,18 @@
       "default": true,
       "title": "Supplementary",
       "type": "boolean"
+    },
+    "record_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Record Id"
     }
   },
   "required": [

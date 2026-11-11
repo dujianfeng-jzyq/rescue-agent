@@ -403,11 +403,38 @@ def test_actions_are_noted_on_the_open_incident(tmp_path, monkeypatch, request):
     notes = [e for e in store.entries(iid) if e["kind"] == "note"]
     assert [(n["by"], n["data"]["type"], n["data"]["status"]) for n in notes] == [("guard", "action", "rejected"), ("guard", "action", "issued")]
     assert notes[1]["data"]["action_id"] == r.structured_content["action_id"] and notes[1]["data"]["record_ids"] == [rid]
+    # 依据的数据时间（引用记录的 as_of）：唤醒插件按它判断告警是否已被这次动作覆盖
+    assert notes[1]["data"]["as_of"] == world.records.get(rid).as_of.isoformat()[:19]
     assert [row["incident_id"] for row in world.rows()] == [iid, iid]
     assert [e for e in store.entries(other) if e["kind"] == "note"] == []
     # 没有未关闭事件时：台账 incident_id 为空，指令照常
     store.append(iid, "2026-11-05T09:00:00", "status", "agent", {"status": "closed"})
     assert not world.call("publish_warning", warning_args(rid)).is_error
+    assert world.rows()[-1]["incident_id"] is None
+
+
+def test_evacuation_with_personnel_record_is_noted_on_the_incident(tmp_path, monkeypatch, request):
+    """撤人名单本身不引用记录；带上人员记录（record_ids.personnel）时挂到该工作面的事件和确认弹窗上。读不到记录也不拦撤人。"""
+    from rescue_contract.incidents import IncidentStore
+    from starlette.testclient import TestClient
+
+    monkeypatch.setenv("RESCUE_INCIDENT_DIR", str(tmp_path / "inc"))
+    store = IncidentStore()
+    iid = store.open("2026-11-05T08:00:00", category="fire", panel="1201", summary="x")
+    world = request.getfixturevalue("world")
+    rid = world.result_record("fire-assessment", "personnel", {"computed": True, "total_threatened": 2})
+    people = asyncio.run(MineData(world.mine).personnel())
+    persons = [p.person_id for p in people if p.roadway_id == "R-1201-FACE"][:2]
+    notice = {"notice": {"reason": "补充撤人", "persons": persons, "record_id": rid}}
+    with TestClient(world.server.streamable_http_app()) as http:
+        pre = http.post("/redlines/check", json={"tool": "notify_evacuation", "arguments": notice}).json()
+    assert pre["ok"] and pre["summary"]["record_ids"] == [rid] and pre["summary"]["incident_id"] == iid
+    assert not world.call("notify_evacuation", notice).is_error
+    assert world.rows()[-1]["incident_id"] == iid
+    assert [e["data"]["tool"] for e in store.entries(iid) if e["kind"] == "note"] == ["notify_evacuation"]
+    others = [p.person_id for p in people if p.roadway_id == "R-1202-IN"][:1]  # 已撤的人不在定位里，换一个
+    gone = {"notice": {"reason": "补充撤人", "persons": others, "record_id": "RS-20261105T080000-zzzzzz"}}
+    assert not world.call("notify_evacuation", gone).is_error  # 读不到的记录：照常下发，只是挂不上事件
     assert world.rows()[-1]["incident_id"] is None
 
 

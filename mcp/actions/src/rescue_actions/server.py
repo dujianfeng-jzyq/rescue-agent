@@ -141,6 +141,17 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
                 return found["incident_id"]
         return None
 
+    def evidence_as_of(record_ids: list[str]) -> str | None:
+        """引用记录里最早的取数时间（矿井时间）。记进时间线后，告警是否已被这次动作覆盖按它判断（唤醒插件的 alertStatuses），
+        不按写入先后：用旧数据下发的动作不能把之后的新告警算成“已处理”。读不到的记录跳过。"""
+        times: list[str] = []
+        for rid in record_ids:
+            try:
+                times.append(record_store.get(rid).as_of.isoformat()[:19])
+            except Exception:  # noqa: BLE001
+                continue
+        return min(times) if times else None
+
     def journal(entry: dict[str, Any]) -> None:
         """写台账，并把结果（通过、拒绝、失败）记进事件时间线。台账是依据，时间线是给人看的。"""
         ledger.append(entry)
@@ -155,7 +166,8 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
             incidents.append(
                 iid, at, "note", "guard",
                 {"type": "action", "tool": entry["tool"], "status": entry["status"], "action_id": entry.get("action_id"), "record_ids": entry["record_ids"], "problems": entry.get("problems", []),
-                 "mine_receipt_ids": [r["action_id"] for r in entry.get("mine_receipts") or [] if r.get("action_id")]},
+                 "mine_receipt_ids": [r["action_id"] for r in entry.get("mine_receipts") or [] if r.get("action_id")],
+                 **({"as_of": a} if (a := evidence_as_of(entry["record_ids"])) else {})},
             )  # fmt: skip
         except Exception as exc:  # noqa: BLE001
             log.warning("事件时间线写入失败（指令不受影响）：%s", exc)
@@ -275,7 +287,7 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
     @server.tool()
     async def notify_evacuation(notice: EvacuationNotice) -> ActionReceipt:
         """发布补充撤人名单与避灾路线（确认人：调度员）。这是对预案撤人的补充，不替代、不延迟预案撤人。"""
-        await reject_if("notify_evacuation", notice, await evacuation_problems(notice), [])
+        await reject_if("notify_evacuation", notice, await evacuation_problems(notice), [notice.record_id] if notice.record_id else [])
         where = {p.person_id: p.roadway_id for p in await md.personnel()}
         roadways = sorted({where[p] for p in notice.persons})
         notice_req = NoticeRequest(
@@ -285,7 +297,7 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
         if roadways:
             treat = TreatmentRequest(type=StepType.EVACUATE, roadways=roadways, idempotency_key=idempotency_key("notify_evacuation", notice, "-evacuate"))
             calls.append(lambda: md.submit_treatment(treat))
-        return await deliver("notify_evacuation", notice, [], calls)
+        return await deliver("notify_evacuation", notice, [notice.record_id] if notice.record_id else [], calls)
 
     async def evacuation_problems(notice: EvacuationNotice) -> list[str]:
         """撤人名单按人员定位核对：名单里的人都在井下。取不到人员数据时不通过（fail closed）。"""

@@ -251,7 +251,10 @@ export class IncidentStore {
   }
 }
 
-/** 研判、复评、方案、对外动作等“处理告警”的记录类型（流程和 guard 自动写进时间线的 note）；acked 也算已处理 */
+/**
+ * 研判、复评、方案、对外动作等“处理告警”的记录类型（流程和 guard 自动写进时间线的 note）；acked 也算已处理。
+ * note 的 as_of 是它所依据记录的取数时间（矿井时间，多条记录取最早的），由写 note 的代码从记录里取。
+ */
 const HANDLING_NOTES: Record<string, string> = {
   assessment: '研判',
   effect_review: '效果复评',
@@ -268,29 +271,39 @@ export interface AlertStatus {
   summary: string
   /** 已投递次数（delivered 条目数）；大于 1 一定是重复投递 */
   deliveries: number
-  /** handled：这条告警之后时间线里已有研判等处理记录（或被确认过）；new：还没有 */
+  /** handled：这条告警之后时间线里已有依据不早于告警的研判等处理记录（或被确认过）；new：还没有 */
   state: 'handled' | 'new'
   /** 已处理时，依据是哪类记录（如“研判”） */
   handled_by: string | null
 }
 
+/** note 依据的数据时间；没有（旧条目）返回 null，按“不能证明覆盖了告警”处理 */
+function noteAsOf(e: Entry): string | null {
+  const v = e.data.as_of
+  return typeof v === 'string' && v ? v.slice(0, 19) : null
+}
+
 /**
  * 每条告警是不是已经处理过——由代码按时间线判断，不靠智能体自己读（第五版：重复投递的告警应忽略，评测里智能体约三分之二照消息里的
- * “立即研判”重做）。规则：告警条目之后（文件顺序）出现 acked，或出现研判、复评、方案、对外动作的记录，就算已处理；之后又来的新告警不受前面记录影响。
+ * “立即研判”重做）。规则：告警条目之后（文件顺序）出现 acked，或出现研判、复评、方案、对外动作的记录，**且该记录依据的数据不早于告警**
+ * （as_of ≥ 告警的矿井时间），就算已处理。只看文件顺序不够：智能体忙着处理上一条告警时新告警进来，上一轮用旧数据写的研判排在新告警之后，
+ * 会把一次真正的升级误判成“已处理”（2026-11-10 演示：19:32 的蓝色研判盖住了 20:02 的黄色告警）。没有 as_of 的记录不算（fail closed）。
  * 只用事件库已有的条目，不改折叠规则（Python 侧共用折叠样例不受影响）。
  */
 export function alertStatuses(entries: Entry[], only?: Set<string>): AlertStatus[] {
   const out: AlertStatus[] = []
   entries.forEach((e, i) => {
     if (e.kind !== 'alert' || (only && !only.has(e.event_id))) return
+    const alertAt = e.at.slice(0, 19)
     let by: string | null = null
     for (const later of entries.slice(i + 1)) {
       if (later.kind === 'acked' && later.data.alert_id === e.event_id) {
-        by = '确认'
+        by = typeof later.data.handled_by === 'string' && later.data.handled_by ? later.data.handled_by : '确认'
         break
       }
       const t = later.kind === 'note' ? String(later.data.type ?? '') : ''
-      if (HANDLING_NOTES[t]) {
+      const asOf = HANDLING_NOTES[t] ? noteAsOf(later) : null
+      if (asOf && asOf >= alertAt) {
         by = HANDLING_NOTES[t]!
         break
       }

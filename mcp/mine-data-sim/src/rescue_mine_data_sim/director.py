@@ -2,7 +2,10 @@
 按所选操作换剧本继续，走完自动结束。
 
 时间：暂停就是冻结时钟（不再自由运行）。推进由导演一步一步做：先一次跳到离该等级还差一点的地方（jump_h），再按 step_h 一步一步推，
+跳的途中有跟踪计划到点就先停在到点时刻，等智能体复评完再跳剩下的（否则跟踪计划会晚十几个小时才投递），
 每一步等监听器检测完（心跳的矿井时间追上）再看事件库有没有新的等级告警；这样不会像自由运行那样冲过等级。
+每一步之前还要等值班智能体处理完（唤醒插件写的 duty-status.json：会话不忙、事件库里没有待投递的告警）：
+否则智能体还在处理上一级（提交、等批准、登记跟踪），矿井已经推进几个小时，下一级告警和跟踪到点一起涌来。结束段同样一步一步等。
 等级信号来自事件库里监听器写的告警（“升为 黄色/橙色/红色”），导演不判断预警等级，只读。
 
 分支剧本（`scenarios/demo-flow.yaml`，占位值）：每一级的选项、按“所选操作的个数”走的分支（继续到下一级，或跑一段时间后结束），
@@ -64,8 +67,12 @@ def validate_flow(flow: dict[str, Any]) -> None:
 class Director:
     """状态：idle（常态，没开始）、running（推进中等某级告警）、holding（暂停，等操作员选）、ending（跑结束段）、finished。"""
 
-    def __init__(self, sim, flow: dict[str, Any], store=None, heartbeat: Path | None = None, wait_s: float = 12.0, settle_s: float | None = None) -> None:
+    def __init__(
+        self, sim, flow: dict[str, Any], store=None, heartbeat: Path | None = None, wait_s: float = 12.0, settle_s: float | None = None,
+        duty: Path | None = None, duty_stale_s: float = 20.0,
+    ) -> None:  # fmt: skip
         self.sim, self.flow, self.store, self.heartbeat = sim, flow, store, heartbeat
+        self.duty, self.duty_stale_s = duty, duty_stale_s  # 值班会话状态（唤醒插件每次轮询写）；没有或过期（没接 DSH）不等
         self.settle_s = float(flow.get("settle_s", 3.0)) if settle_s is None else settle_s  # 认出操作员的选择后静默多久再走分支（真实秒）
         self.wait_s = wait_s  # 等监听器检测一步的上限（真实秒）；没有监听器时超时就继续
         self.lock = threading.RLock()
@@ -82,11 +89,17 @@ class Director:
         self._phase = "advance"
         self._target: datetime | None = None
         self._deadline = 0.0
-        self._jumped = False
+        self._jump_left = 0.0  # 本段还要跳的矿井小时（途中遇到跟踪计划到点分几次跳）
         self._end_at_h = 0.0
         self._outcome = ""
+        self.waiting: str | None = None  # 正在等什么（给控制台看）
 
     # ── 对外 ──
+
+    @property
+    def active(self) -> bool:
+        """演示进行中：时间只由导演推进，控制台的手动注入、继续、快进都不可用。"""
+        return self.state in ("running", "holding", "ending")
 
     def status(self) -> dict[str, Any]:
         with self.lock:
@@ -98,6 +111,7 @@ class Director:
                 "prompt": (st or {}).get("prompt"),
                 "chosen": self.chosen,
                 "outcome": self._outcome,
+                "waiting": self.waiting if self.state in ("running", "ending") else None,
                 "log": self.log[-12:],
             }
 
@@ -105,11 +119,12 @@ class Director:
         """矿井被重置（回到常态、换场景）时调用：导演回到待开始，丢掉进行中的演示。"""
         with self.lock:
             self.state, self.stage, self._outcome, self._done, self.chosen = "idle", None, "", [], []
+            self.waiting = None
             self.log = []
 
     def start(self) -> None:
         with self.lock:
-            if self.state in ("running", "holding", "ending"):
+            if self.active:
                 raise ValueError("演示正在进行")
             if self.sim.mode != "demo":
                 raise ValueError("只有演示模式才能开始演示")
@@ -121,6 +136,7 @@ class Director:
             self.sim.engine.inject(sc)
             self.sim.engine.clock.set_paused(True)  # 之后时间只由导演推进
             self.sim.resumed_wall = time.time()
+            self._demo_log_idx = len(self.sim.engine.action_log)  # 本次演示从这里开始的处置
             self.chosen, self.log, self._seen, self._outcome, self._done = [], [], set(), "", []
             self._start_wall = time.time()
             self._begin_running("黄色", first=True)
@@ -171,12 +187,27 @@ class Director:
         else:
             self._outcome = branch.get("message", "")
             self._end_at_h = self.sim.engine.now_h() + float(branch["run_h"])
-            self.state, self.stage = "ending", None
+            self.state, self.stage, self._phase = "ending", None, "advance"
         return self.status()
 
     def _reset_wait(self) -> None:
         self._log_idx = len(self.sim.engine.action_log)
         self._matched, self._last_match = set(), 0.0
+
+    def _carry_over(self) -> None:
+        """进入等待时：必做项（不由操作员选、持续生效的，如黄色的加密监测）在本次演示里已经由 guard 执行过，就算已到位。
+        否则智能体在蓝色就开了加密监测、到黄色不再重复下发（这是对的），导演会一直等一个不会再来的处置。
+        可选项（橙色的注氮、注浆、堵漏）仍只认进入等待之后执行的：分支按“这一级选了几项”走。"""
+        mandatory: dict[str, list[str]] = {}
+        for o in self._options():
+            if not o.choosable:
+                mandatory.setdefault(o.step, []).append(o.id)
+        log = self.sim.engine.action_log[getattr(self, "_demo_log_idx", 0) : self._log_idx]
+        have = {i for iv in log if iv.source == "action" for i in mandatory.get(iv.type, ())}
+        if have:
+            self._matched |= have
+            self._last_match = time.time()
+            self._note(f"{self.stage}：{'、'.join(o.label for o in self._options() if o.id in have)} 已在之前下发，仍在执行")
 
     def _tick_holding(self) -> None:
         """看矿井执行了哪些处置（guard 经 rescue-mine 下发，来源 action），认出对应的选项；静默 settle_s 秒后按所选个数走分支。"""
@@ -222,7 +253,8 @@ class Director:
 
     def _begin_running(self, stage: str, first: bool) -> None:
         self.state, self.stage = "running", stage
-        self._phase, self._jumped, self._target = "advance", False, None
+        self._phase, self._target = "advance", None
+        self._jump_left = float(self.flow["stages"][stage].get("jump_h", 0))
         self.sim.engine.clock.set_paused(True)
 
     def _heartbeat_mine_now(self) -> datetime | None:
@@ -256,46 +288,104 @@ class Director:
                     out.append(lv)
         return out
 
+    def _next_followup_in_h(self) -> tuple[float, str] | None:
+        """最近一个还没到点的跟踪计划离现在多少矿井小时（及其编号）；没有返回 None。"""
+        if self.store is None:
+            return None
+        now = self.sim.engine.now().replace(tzinfo=None, microsecond=0)
+        best: tuple[float, str] | None = None
+        for inc in self.store.list():
+            for f in inc["followups"]:
+                if f.get("state") != "pending":
+                    continue
+                try:
+                    h = (datetime.fromisoformat(str(f["due_at"])[:19]) - now).total_seconds() / 3600
+                except (KeyError, ValueError):
+                    continue
+                if h > 0 and (best is None or h < best[0]):
+                    best = (round(h, 4), str(f.get("followup_id", "")))
+        return best
+
+    def _agent_busy(self) -> str | None:
+        """值班智能体还没处理完时返回原因。没有值班状态文件、文件过期（没接 DSH 或 DSH 停了）按不忙，导演照常推进。"""
+        if self.duty is None:
+            return None
+        try:
+            st = json.loads(self.duty.read_text(encoding="utf-8"))
+            fresh = time.time() - float(st.get("wall", 0)) <= self.duty_stale_s
+        except (OSError, ValueError, TypeError):
+            return None
+        if not fresh:
+            return None
+        if st.get("busy"):
+            return "等值班智能体处理完"
+        if self.store is not None and self.store.pending_alerts():
+            return "等告警投递给值班智能体"
+        return None
+
+    def _hold_for_agent(self) -> bool:
+        self.waiting = self._agent_busy()
+        return self.waiting is not None
+
+    def _arm_await(self) -> None:
+        self._target = self.sim.engine.now().replace(tzinfo=None, microsecond=0)  # 监听器的心跳截到秒
+        self._deadline = time.time() + self.wait_s
+        self._phase = "await"
+
+    def _sentinel_caught_up(self) -> bool:
+        hb = self._heartbeat_mine_now()
+        return (hb is not None and self._target is not None and hb >= self._target) or time.time() >= self._deadline
+
     def _tick_running(self) -> None:
         eng, st = self.sim.engine, self.flow["stages"][self.stage]
         if self._phase == "advance":
-            if not self._jumped:
-                self._jumped = True
-                jump = float(st.get("jump_h", 0))
-                if jump > 0:
-                    eng.clock.advance(jump)
+            if self._hold_for_agent():
+                return
+            if self._jump_left > 1e-6:
+                jump, due = self._jump_left, self._next_followup_in_h()
+                if due is not None and due[0] < jump:
+                    jump = due[0]
+                    self._note(f"跳过 {jump:g} 矿井小时，跟踪计划 {due[1]} 到点，等复评完再继续")
+                else:
                     self._note(f"跳过 {jump:g} 矿井小时，接近{self.stage}预警")
+                self._jump_left -= jump
+                eng.clock.advance(jump)
             else:
                 eng.clock.advance(float(st.get("step_h", self.flow.get("step_h", 0.5))))
-            self._target = eng.now().replace(tzinfo=None, microsecond=0)  # 监听器的心跳截到秒
-            self._deadline = time.time() + self.wait_s
-            self._phase = "await"
+            self._arm_await()
             return
-        hb = self._heartbeat_mine_now()
-        done = hb is not None and self._target is not None and hb >= self._target
-        if not done and time.time() < self._deadline:
+        if not self._sentinel_caught_up():
             return
         want = LEVELS.index(self.stage)
         for lv in self._new_levels():
             if LEVELS.index(lv) >= want:
                 self.stage = lv if lv in self.flow["stages"] else self.stage
-                self.state = "holding"
+                self.state, self.waiting = "holding", None
                 self._done = []
                 self._reset_wait()
                 eng.clock.set_paused(True)
                 self._note(f"出现{lv}预警，暂停，等操作员选择处置")
+                self._carry_over()
                 return
         self._phase = "advance"
 
     def _tick_ending(self) -> None:
+        """结束段也一步一步推：每步等监听器检测完、值班智能体处理完（跟踪到点、复评都在这段里发生）。"""
         eng = self.sim.engine
+        if self._phase == "await":
+            if not self._sentinel_caught_up():
+                return
+            self._phase = "advance"
+        if self._hold_for_agent():
+            return
         left = self._end_at_h - eng.now_h()
         if left <= 1e-6:
             eng.clock.set_paused(True)
-            self.state = "finished"
+            self.state, self.waiting = "finished", None
             self._note(f"演示结束：{self._outcome}" if self._outcome else "演示结束")
             return
         eng.clock.advance(min(left, float(self.flow.get("end_step_h", 2.0))))
+        self._arm_await()
 
 
 class DirectorThread(threading.Thread):

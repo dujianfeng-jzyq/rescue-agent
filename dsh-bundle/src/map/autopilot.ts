@@ -16,6 +16,8 @@ import type { MineMap } from './mapping.ts'
 import type { MapState } from './state.ts'
 
 export const AUTO_PREFIX = 'auto:'
+/** 智能体 map_view 标记的编号前缀（定义在这里免得和 tools.ts 循环引用）。 */
+export const AGENT_PREFIX = 'agent:'
 const SEVERITY = ['ok', 'info', 'blue', 'yellow', 'warn', 'orange', 'alarm', 'red']
 const MAX_TEXT = 60
 const MAX_ALARM_PARTS = 2
@@ -102,6 +104,9 @@ export function reconcile(current: MapMark[], desired: AutoMark[]): MapCommand[]
     have.delete(d.id)
   }
   for (const id of have.keys()) cmds.push({ op: 'unmark', id })
+  // 系统标的位置上不留智能体的标记：后者的等级取自当时的记录，不会更新，两个圈叠在一起颜色不一致（如黄色预警时留着蓝色）
+  const autoNames = new Set(desired.map((d) => d.name))
+  for (const m of current) if (m.id.startsWith(AGENT_PREFIX) && autoNames.has(m.name)) cmds.push({ op: 'unmark', id: m.id })
   return cmds
 }
 

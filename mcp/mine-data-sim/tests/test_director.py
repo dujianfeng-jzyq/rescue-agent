@@ -167,14 +167,36 @@ def test_director_recognizes_what_the_guard_executed(tmp_path):
     assert not any(iv.source == "demo-operator" for iv in sim.engine.action_log)  # 导演没有自己施加
 
 
-def test_old_actions_before_the_hold_are_ignored(tmp_path):
+def test_old_choosable_actions_before_the_hold_are_ignored(tmp_path):
+    """可选项只认进入等待之后执行的：橙色之前就做的注浆不算橙色的选择。"""
     sim, store, hb, d = make(tmp_path)
     fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5})
     d.start()
-    guard_executes(sim, "monitor")  # 进入等待之前的处置不算
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["monitor"])
+    guard_executes(sim, "grouting")
     drive(d, fake, lambda: d.state == "holding")
     d.tick()
-    assert d.state == "holding" and d.stage == "黄色"
+    assert d.state == "holding" and d.stage == "橙色"
+
+
+def test_mandatory_action_already_in_effect_counts(tmp_path):
+    """蓝色时智能体已开了加密监测，到黄色不再重复下发：黄色的必做项算已到位，不卡住。"""
+    sim, store, hb, d = make(tmp_path)
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5})
+    sim.engine.apply("monitor", {}, [], "action")  # 演示开始之前的不算
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    d.tick()
+    assert d.state == "holding" and d.stage == "黄色" and not d._matched
+    d.reset()
+    d.start()
+    guard_executes(sim, "monitor")  # 蓝色阶段（等黄色之前）下发
+    drive(d, fake, lambda: d.state == "holding")
+    assert any("已在之前下发" in e["text"] for e in d.log)
+    d._last_match -= d.settle_s + 1
+    d.tick()
+    assert d.state == "running" and d.stage == "橙色"
 
 
 def test_settle_waits_for_the_whole_package(tmp_path):
@@ -245,3 +267,79 @@ def test_normal_reset_resets_the_director():
     assert c.post("/sim/demo/normal", json={"speed": 60}).json()["ok"]
     assert c.get("/sim/demo/director").json()["state"] == "idle"  # 重置为常态后可以再开始
     assert c.post("/sim/demo/start").json()["state"] == "running"
+
+
+def test_jump_stops_at_a_pending_followup(tmp_path):
+    """红色的大跳（jump_h）途中有跟踪计划到点：先停在到点时刻（等智能体复评），再跳剩下的，总共跳的不变。"""
+    sim, store, hb, d = make(tmp_path)
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5, "红色": 70})
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["monitor"])
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["inert"])  # → 红色，jump_h 20
+    t0 = sim.engine.now_h()
+    due = sim.engine.now().replace(tzinfo=None, microsecond=0)
+    from datetime import timedelta
+
+    due_at = (due + timedelta(hours=2)).isoformat(timespec="seconds")
+    store.append(fake.iid, due.isoformat(timespec="seconds"), "followup_added", "agent", {"followup_id": "FU-x", "due_at": due_at, "expect": "x"})
+    d.tick()
+    assert abs(sim.engine.now_h() - (t0 + 2)) < 1e-6
+    assert "FU-x" in d.status()["log"][-1]["text"]
+    store.append(fake.iid, due_at, "followup_due", "sentinel", {"followup_id": "FU-x"})  # 监听器写到点（之后由智能体复评）
+    fake.poll()
+    d.tick()  # 等监听器检测完
+    d.tick()  # 跳剩下的 18 小时
+    assert abs(sim.engine.now_h() - (t0 + 20)) < 1e-6
+    assert "接近红色预警" in d.status()["log"][-1]["text"]
+
+
+def test_waits_for_the_duty_agent_before_advancing(tmp_path):
+    """值班智能体还在处理（会话忙，或有告警没投递）时导演不推进矿井时间；状态文件过期（没接 DSH）不等。"""
+    import time
+
+    sim, store, hb, d = make(tmp_path)
+    duty = tmp_path / "inc" / "duty-status.json"
+    d.duty = duty
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5})
+
+    def status(busy: bool, age_s: float = 0.0) -> None:
+        duty.write_text(json.dumps({"busy": busy, "wall": time.time() - age_s}))
+
+    status(False)
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    for a in store.pending_alerts():  # 黄色告警已投递给值班会话
+        store.append(a["incident_id"], a["at"], "delivered", "plugin", {"alert_id": a["event_id"], "session_id": "s"})
+    guard_executes(sim, "monitor")
+    d.tick()
+    assert d.state == "running" and d.stage == "橙色"
+    status(True)  # 智能体还在这一轮里（登记跟踪、写报告）
+    t = sim.engine.now_h()
+    for _ in range(5):
+        d.tick()
+        fake.poll()
+    assert sim.engine.now_h() == t and d.status()["waiting"] == "等值班智能体处理完"
+    status(True, age_s=60)  # DSH 停了：状态过期，不等（橙色 jump_h 为 0，第一步不动，多推几步）
+    for _ in range(4):
+        d.tick()
+        fake.poll()
+    assert sim.engine.now_h() > t
+    status(False)
+    drive(d, fake, lambda: bool(store.pending_alerts()))
+    assert d._agent_busy() == "等告警投递给值班智能体"  # 新告警还没投递（唤醒插件下一次轮询才投）：不算空闲
+
+
+def test_manual_controls_are_refused_while_directing():
+    from rescue_contract.serving import build_app
+    from rescue_mine_data_sim.server import build_server
+    from starlette.testclient import TestClient
+
+    c = TestClient(build_app(build_server(SimHolder(mode="demo")), public_prefixes=("/console",)))
+    assert c.post("/sim/demo/start").json()["state"] == "running"
+    assert c.post("/sim/demo/inject", json={"scenario": "s4-escalation"}).status_code == 409
+    assert c.post("/sim/demo/resume", json={}).status_code == 409
+    assert c.post("/sim/advance", json={"hours": 1}).status_code == 409
+    assert c.post("/sim/pause", json={"paused": False}).status_code == 409
+    assert c.post("/sim/pause", json={"paused": True}).json()["ok"]

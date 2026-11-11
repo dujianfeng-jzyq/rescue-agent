@@ -6,6 +6,7 @@ import { describe, it } from 'node:test'
 
 import { registerTools } from '../src/incident/index.ts'
 import { alertStatuses, IncidentStore } from '../src/incident/store.ts'
+import { evidenceAsOf } from '../src/incident/timeline.ts'
 import { composeMessage, Waker } from '../src/incident/wake.ts'
 
 async function setup() {
@@ -80,6 +81,46 @@ describe('唤醒', () => {
     assert.equal(calls, 4)
   })
 
+  it('值班会话忙时不投递；空闲后已被处理覆盖的告警写 acked、不再投递，只投新的', async () => {
+    const { store, id, alert } = await setup()
+    let busy = true
+    const sent: string[] = []
+    const w = new Waker(store, { backoffS: [], busy: async () => busy, deliver: async (t) => (sent.push(t), { sessionId: 'S1' }) })
+    assert.deepEqual(await w.drain(), [])
+    assert.equal(sent.length, 0)
+    assert.deepEqual((await store.get(id)).pending_alerts, [alert.event_id])
+    // 忙的这一轮用 08:10 的数据研判（覆盖了告警），同时又来一条 09:00 的升级
+    await store.append(id, '2026-11-05T08:30:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T08:10:00' })
+    const b = await store.append(id, '2026-11-05T09:00:00', 'alert', 'sentinel', { cause: 'anomaly', summary: '升为橙色' })
+    busy = false
+    assert.deepEqual(await w.drain(), [b.event_id])
+    assert.equal(sent.length, 1)
+    assert.doesNotMatch(sent[0]!, new RegExp(alert.event_id))
+    assert.doesNotMatch(sent[0]!, /重复投递：/)
+    assert.match(sent[0]!, /请立即对该工作面做完整研判/)
+    const acked = (await store.entries(id)).filter((e) => e.kind === 'acked')
+    assert.deepEqual(acked.map((e) => [e.by, e.data.alert_id, e.data.handled_by]), [['plugin', alert.event_id, '研判']])
+    assert.deepEqual((await store.get(id)).pending_alerts, [])
+    // acked 的依据也出现在 alert_status 里
+    assert.equal(alertStatuses(await store.entries(id), new Set([alert.event_id]))[0]!.handled_by, '研判')
+  })
+
+  it('全部告警都已被处理覆盖时什么都不投递', async () => {
+    const { store, id } = await setup()
+    await store.append(id, '2026-11-05T08:30:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T08:20:00' })
+    const sent: string[] = []
+    const w = new Waker(store, { backoffS: [], busy: async () => false, deliver: async (t) => (sent.push(t), { sessionId: 'S1' }) })
+    assert.deepEqual(await w.drain(), [])
+    assert.equal(sent.length, 0)
+    assert.deepEqual((await store.get(id)).pending_alerts, [])
+  })
+
+  it('查不到值班会话状态时照常投递', async () => {
+    const { store, alert } = await setup()
+    const w = new Waker(store, { backoffS: [], busy: async () => { throw new Error('x') }, deliver: async () => ({ sessionId: 'S1' }) })
+    assert.deepEqual(await w.drain(), [alert.event_id])
+  })
+
   it('消息按原因给要求，监听降级不带研判指令', async () => {
     const { store, id } = await setup()
     const entries = await store.entries(id)
@@ -97,7 +138,7 @@ describe('告警是否已处理（代码判断）与重复投递的唤醒消息'
     let st = alertStatuses(await store.entries(id))
     assert.deepEqual(st.map((s) => [s.alert_id, s.state, s.handled_by, s.deliveries]), [[alert.event_id, 'new', null, 0]])
     await store.append(id, '2026-11-05T08:11:00', 'delivered', 'plugin', { alert_id: alert.event_id, session_id: 'S1' })
-    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判' })
+    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T08:12:00' })
     const b = await store.append(id, '2026-11-05T09:00:00', 'alert', 'sentinel', { cause: 'anomaly', summary: '又一条' })
     st = alertStatuses(await store.entries(id))
     assert.deepEqual(st.map((s) => [s.alert_id, s.state, s.handled_by]), [[alert.event_id, 'handled', '研判'], [b.event_id, 'new', null]])
@@ -116,7 +157,7 @@ describe('告警是否已处理（代码判断）与重复投递的唤醒消息'
   it('已处理的告警：消息标注“重复投递”，不再带“立即研判”，只让简短说明', async () => {
     const { store, id, alert } = await setup()
     await store.append(id, '2026-11-05T08:11:00', 'delivered', 'plugin', { alert_id: alert.event_id, session_id: 'S1' })
-    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判' })
+    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T08:12:00' })
     const entries = await store.entries(id)
     const text = composeMessage(await store.get(id), [entries.find((e) => e.kind === 'alert')!], alertStatuses(entries))
     assert.match(text, /【重复投递：之后已有研判记录，已处理】/)
@@ -130,7 +171,7 @@ describe('告警是否已处理（代码判断）与重复投递的唤醒消息'
 
   it('同一条消息里新旧告警并存：新的照常要求，旧的标注重复', async () => {
     const { store, id, alert } = await setup()
-    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判' })
+    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T08:12:00' })
     const b = await store.append(id, '2026-11-05T09:00:00', 'alert', 'sentinel', { cause: 'mine_alarm', summary: '矿井报警' })
     const entries = await store.entries(id)
     const alerts = entries.filter((e) => e.kind === 'alert')
@@ -141,9 +182,33 @@ describe('告警是否已处理（代码判断）与重复投递的唤醒消息'
     assert.doesNotMatch(text, /请立即对该工作面做完整研判/) // 旧告警（异常）的要求没了
   })
 
+  it('依据的数据比告警旧的处理记录不算已处理（上一轮用旧数据写的研判排在新告警之后）', async () => {
+    const { store, id, alert } = await setup()
+    // 告警 08:10；研判写进时间线的位置在告警之后，但依据的数据是 08:05 的
+    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '旧研判', as_of: '2026-11-05T08:05:00' })
+    assert.equal(alertStatuses(await store.entries(id))[0]!.state, 'new')
+    // 没有 as_of 的旧条目也不算（fail closed）
+    await store.append(id, '2026-11-05T08:13:00', 'note', 'guard', { type: 'action', tool: 'start_monitoring', status: 'issued' })
+    assert.equal(alertStatuses(await store.entries(id))[0]!.state, 'new')
+    // 数据时间等于告警时间就算覆盖
+    await store.append(id, '2026-11-05T08:14:00', 'note', 'guard', { type: 'action', tool: 'publish_warning', status: 'issued', as_of: '2026-11-05T08:10:00' })
+    const st = alertStatuses(await store.entries(id))[0]!
+    assert.deepEqual([st.alert_id, st.state, st.handled_by], [alert.event_id, 'handled', '对外动作'])
+  })
+
+  it('note 的数据时间取引用记录里最早的 as_of，读不到的跳过', async () => {
+    const recs: Record<string, { as_of: string }> = { A: { as_of: '2026-11-05T09:00:00' }, B: { as_of: '2026-11-05T08:30:00.5' } }
+    const read = async (id: string) => {
+      if (!recs[id]) throw new Error('没有')
+      return recs[id]
+    }
+    assert.equal(await evidenceAsOf(['A', 'B', 'X'], read), '2026-11-05T08:30:00')
+    assert.equal(await evidenceAsOf(['X'], read), undefined)
+  })
+
   it('get_incident 返回最近告警的处理状态', async () => {
     const { store, id, alert } = await setup()
-    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判' })
+    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T08:12:00' })
     const reg: Record<string, any> = {}
     registerTools({ tools: { register: (t: any) => (reg[t.name] = t) } }, store, async () => '2026-11-05T10:00:00', async () => ({ default_after_h: 2, max_after_h: 48 }))
     const out = await reg.get_incident.execute({ incident_id: id })
@@ -181,6 +246,32 @@ describe('事件工具', () => {
     assert.equal(closed.status, 'closed')
     const list: any = await call('get_incident', {})
     assert.equal(list.count, 0)
+  })
+
+  it('add_followup 不给间隔：复评之后没有新处置就按复评给出的下次复评时刻，有新处置按默认间隔', async () => {
+    const { store, call } = await tools()
+    const id = await store.open('2026-11-05T08:00:00', { category: 'fire', panel: '1201', summary: 'x' })
+    const first: any = await call('add_followup', { incident_id: id, expect: '还没复评' })
+    assert.equal(first.due_at, '2026-11-05T12:00:00')
+    assert.match(first.basis, /还没有复评/)
+    await store.append(id, '2026-11-05T09:00:00', 'note', 'flow', { type: 'effect_review', text: '需继续处置', next_review_at: '2026-11-05T21:00:00' })
+    const paced: any = await call('add_followup', { incident_id: id, expect: '按复评节奏' })
+    assert.equal(paced.due_at, '2026-11-05T21:00:00')
+    assert.equal(paced.after_h, 11)
+    // 被拒的动作不算新处置
+    await store.append(id, '2026-11-05T09:30:00', 'note', 'guard', { type: 'action', tool: 'issue_firefighting_plan', status: 'rejected' })
+    assert.equal(((await call('add_followup', { incident_id: id, expect: 'x' })) as any).due_at, '2026-11-05T21:00:00')
+    await store.append(id, '2026-11-05T09:40:00', 'note', 'guard', { type: 'action', tool: 'issue_firefighting_plan', status: 'issued' })
+    const fresh: any = await call('add_followup', { incident_id: id, expect: '新处置' })
+    assert.equal(fresh.due_at, '2026-11-05T12:00:00')
+    assert.match(fresh.basis, /新的处置/)
+    // 新的复评之后又回到复评节奏；复评时刻已过退回默认；超出上限按上限
+    await store.append(id, '2026-11-05T09:50:00', 'note', 'flow', { type: 'effect_review', text: 'x', next_review_at: '2026-11-05T09:55:00' })
+    assert.equal(((await call('add_followup', { incident_id: id, expect: 'x' })) as any).due_at, '2026-11-05T12:00:00')
+    await store.append(id, '2026-11-05T09:58:00', 'note', 'flow', { type: 'effect_review', text: 'x', next_review_at: '2026-11-09T10:00:00' })
+    assert.equal(((await call('add_followup', { incident_id: id, expect: 'x' })) as any).due_at, '2026-11-07T10:00:00')
+    // 给了 after_h 就按给的
+    assert.equal(((await call('add_followup', { incident_id: id, after_h: 1, expect: 'x' })) as any).due_at, '2026-11-05T11:00:00')
   })
 
   it('有未确认告警不能关闭；get_incident 给出时间线', async () => {

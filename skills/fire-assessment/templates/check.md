@@ -24,5 +24,8 @@
 {{#check.result.data_quality}}
 - 数据质量：{{.}}
 {{/check.result.data_quality}}
+{{#check.result.sealed}}
+- 火区已封闭：上隅角、回风巷测点在密闭内断电，不作必需测点、不参与分级，按束管监测
+{{/check.result.sealed}}
 
 依据：记录 {{record_ids.check}}（检测结果）；检测判据为开发初稿（占位值）

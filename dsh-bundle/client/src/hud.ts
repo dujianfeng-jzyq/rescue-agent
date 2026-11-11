@@ -1,7 +1,8 @@
 /**
  * 大屏界面（docs/design-v4-map.md 第 6 节）：地图在最底层，上面是
- *   顶栏（标题、时间、状态、工具）、左栏（矿井信息）、右栏（智能体信息）——这三块是自绘的（panels.ts）；
- *   底部是 DSH 的会话组件（消息、输入框、人工确认、提问卡片原样保留），只换皮肤、改位置。
+ *   顶栏（标题、时间、状态、工具）、左栏（矿井信息）、右栏顶部的智能体卡片——这几块是自绘的（panels.ts）；
+ *   右栏其余部分是 DSH 的会话组件（消息、输入框、人工确认、提问卡片原样保留），只换皮肤、改位置，
+ *   并隐藏演示用不上的控件（视图标签、权限模式、模型选择、用量统计等）。地图占中间整块高度。
  * DSH 原来的左侧会话栏改成按钮呼出的抽屉，右栏（文件预览等）打开时浮在最上面。
  *
  * 选择器依赖 DSH 0.2.1-rc.4 的 DOM（类名带哈希前缀，用 [class$="_xxx"] 匹配；右栏用 data 属性），
@@ -54,9 +55,9 @@ const NAVY = `
 const CSS = `
 ${ON}, ${ON} body { background: #0b1522 !important; color-scheme: dark; }
 #rescue-map-host { position: fixed; inset: 0; z-index: 0; }
-${ON} { --rm-l: 372px; --rm-r: 372px; --rm-top: 68px; }
+${ON} { --rm-l: 372px; --rm-chat-w: clamp(420px, 28vw, 560px); --rm-r: calc(var(--rm-chat-w) + 32px); --rm-top: 68px; --rm-agent-h: 0px; }
 ${ON}.rm-hide-left { --rm-l: 16px; }
-${ON}.rm-hide-right { --rm-r: 16px; }
+${ON}.rm-hide-right.rm-hide-chat { --rm-r: 16px; }
 ${ON} #root { position: relative; z-index: 2; height: 100%; pointer-events: none; }
 ${ON} ${WRAP} { height: 100%; background: transparent !important; pointer-events: none; }
 ${ON} ${FRAME} { display: block !important; position: relative; height: 100%; background: transparent !important; pointer-events: none; }
@@ -64,12 +65,26 @@ ${ON} ${RIGHTCOL} { display: contents !important; }
 ${ON} ${OVERLAY} { pointer-events: none; }
 ${ON} ${OVERLAY} > * { pointer-events: auto; }
 
-/* 底部：DSH 的会话组件 */
-${ON} ${CENTER} { position: absolute !important; left: var(--rm-l); right: var(--rm-r); bottom: 16px; height: min(40vh, 460px); pointer-events: auto; ${NAVY} ${CARD} }
+/* 右栏：上面是自绘的智能体卡片（高度由 JS 写进 --rm-agent-h），下面是 DSH 的会话组件，占满剩下的高度 */
+${ON} ${CENTER} { position: absolute !important; right: 16px; width: var(--rm-chat-w); top: calc(var(--rm-top) + var(--rm-agent-h) + 12px); bottom: 16px; pointer-events: auto; ${NAVY} ${CARD} }
+${ON}.rm-hide-right ${CENTER} { top: var(--rm-top); }
 ${ON} ${CENTER} > * { background: transparent !important; }
 ${ON}.rm-hide-chat ${CENTER} { display: none !important; }
-/* DSH 的右栏（文件预览）打开时，聊天区让出位置，不被它盖住 */
-${ON} ${FRAME}:not([data-rightbar-collapsed]) > [class$="_centerCol"] { right: calc(min(520px, 100vw - 32px) + 32px); }
+/* 会话组件里演示用不上的控件：视图标签（Chat/Trajectory）、内容宽度拖柄、轮次导航、权限模式、模型选择、附件按钮、用量统计 */
+${ON} ${CENTER} header [class$="_tabs"],
+${ON} ${CENTER} [data-width-handle], ${ON} ${CENTER} nav[aria-label="Turn navigation"],
+${ON} ${CENTER} [data-composer-card] [class$="_tools"], ${ON} ${CENTER} [data-composer-card] [class$="_standardControls"],
+${ON} ${CENTER} [data-composer-dock] { display: none !important; }
+${ON} ${CENTER} header { height: auto !important; min-height: 0 !important; padding-top: 8px !important; padding-bottom: 8px !important; border-bottom: 1px solid rgba(120, 160, 210, 0.16); }
+/* 消息列：占满右栏宽度（DSH 默认限制在约 750px 并居中） */
+${ON} ${CENTER} [data-chat-flow] { width: auto !important; max-width: none !important; margin-left: 0 !important; margin-right: 0 !important; padding-left: 14px !important; padding-right: 14px !important; }
+/* 输入框：一行（输入 + 发送），不透明底，消息从它下面滚过去时不再透出来 */
+${ON} ${CENTER} [data-composer-seat] { background: linear-gradient(180deg, rgba(9, 20, 38, 0) 0, rgba(9, 20, 38, 0.97) 20px) !important; padding: 18px 12px 12px !important; box-sizing: border-box; }
+/* 卡片本身的布局不动（人工确认、提问卡片挂在它的 overlay 锚点上），只拉满宽度；工具都隐藏后那一行只剩发送按钮，挪到输入框右侧 */
+${ON} ${CENTER} [data-composer-card] { align-self: stretch !important; width: auto !important; max-width: none !important; margin: 0 !important; background: rgba(12, 28, 52, 0.98) !important; border: 1px solid rgba(90, 160, 255, 0.3) !important; }
+${ON} ${CENTER} [data-composer-card] [data-input-scroll] { padding-right: 44px; box-sizing: border-box; }
+${ON} ${CENTER} [data-composer-card] > [class$="_row"] { position: absolute !important; left: 0; right: 6px; bottom: 6px; width: auto !important; min-height: 0 !important; padding: 0 !important; display: flex !important; justify-content: flex-end; pointer-events: none; }
+${ON} ${CENTER} [data-composer-card] > [class$="_row"] > * { flex: 0 0 auto !important; pointer-events: auto; }
 
 /* DSH 的会话列表：按钮呼出的抽屉 */
 ${ON} ${SIDEBAR} { display: none !important; }
@@ -78,7 +93,8 @@ ${ON}.rm-drawer ${SIDEBAR} > * { background: transparent !important; }
 
 /* DSH 的右栏（文件预览、终端等）：打开时浮在最上面，收起时不占位 */
 ${ON} ${FRAME}[data-rightbar-collapsed] [data-sidebar-right-panel] { display: none !important; }
-${ON} ${RIGHT} { position: absolute !important; right: 16px; top: var(--rm-top); bottom: 16px; width: min(520px, calc(100vw - 32px)) !important; z-index: 40; pointer-events: auto; ${NAVY} ${CARD} }
+/* 放在右栏左边，不盖住聊天区 */
+${ON} ${RIGHT} { position: absolute !important; right: var(--rm-r); top: var(--rm-top); bottom: 16px; width: min(560px, calc(100vw - var(--rm-r) - 16px)) !important; z-index: 40; pointer-events: auto; ${NAVY} ${CARD} }
 
 /* 自绘部分 */
 #${HUD_ID} { position: fixed; inset: 0; z-index: 1; pointer-events: none; color: #dbe8f5; font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', sans-serif; }
@@ -114,9 +130,11 @@ ${ON} ${RIGHT} { position: absolute !important; right: 16px; top: var(--rm-top);
 .rm-tools button[aria-pressed="true"] { border-color: rgba(79, 209, 255, 0.6); color: #4fd1ff; }
 
 .rm-card { ${CARD} }
-.rm-left, .rm-right { box-sizing: border-box; position: absolute; top: var(--rm-top); bottom: 16px; width: 340px; overflow-y: auto; padding: 6px 14px 14px; scrollbar-width: thin; scrollbar-color: rgba(120, 160, 210, 0.35) transparent; }
-.rm-left { left: 16px; }
-.rm-right { right: 16px; }
+.rm-left, .rm-right { box-sizing: border-box; position: absolute; top: var(--rm-top); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(120, 160, 210, 0.35) transparent; }
+.rm-left { left: 16px; bottom: 16px; width: 340px; padding: 6px 14px 14px; }
+/* 智能体卡片：在聊天区上方，按内容高度，最多占三分之一屏；聊天区隐藏时可以往下长 */
+.rm-right { right: 16px; width: var(--rm-chat-w); max-height: 34vh; padding: 2px 14px 8px; }
+html.rm-hide-chat .rm-right { max-height: calc(100vh - var(--rm-top) - 16px); }
 html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-sec { padding: 10px 0 4px; border-bottom: 1px solid rgba(120, 160, 210, 0.12); }
 .rm-sec:last-child { border-bottom: 0; }
@@ -166,11 +184,12 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-list { list-style: none; margin: 0; padding: 0; }
 .rm-list li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(120, 160, 210, 0.1); font-size: 12px; }
 .rm-list li em { margin-left: auto; font-style: normal; color: #ff8a1f; font-size: 11px; }
-.rm-records code { font: 11px ui-monospace, Menlo, Consolas, monospace; color: #9fc4ee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rm-records time { margin-left: auto; }
+.rm-records code { flex: 1 1 auto; min-width: 0; font: 11px ui-monospace, Menlo, Consolas, monospace; color: #9fc4ee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-records time { margin-left: auto; flex: 0 0 auto; white-space: nowrap; }
 .rm-kind { padding: 1px 6px; border-radius: 4px; background: rgba(79, 209, 255, 0.14); color: #4fd1ff; font-size: 11px; white-space: nowrap; }
 
-.rm-agent { display: flex; align-items: center; gap: 10px; font-size: 16px; padding: 2px 0 4px; }
+.rm-agent { display: flex; align-items: center; gap: 10px; font-size: 16px; padding: 2px 0 6px; }
+.rm-agent small { color: #7f93ab; font-size: 11px; font-weight: 400; }
 .rm-agent i { width: 10px; height: 10px; border-radius: 50%; background: #7f93ab; }
 .rm-agent[data-tone="ok"] i { background: #35c46a; box-shadow: 0 0 10px #35c46a; }
 .rm-agent[data-tone="warn"] i { background: #f5c518; box-shadow: 0 0 10px #f5c518; animation: rm-blink 1.2s infinite; }
@@ -183,17 +202,16 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-approvals span { color: #b9cbe0; font-size: 12px; }
 .rm-approvals em { font-style: normal; color: #ff8f8f; font-size: 11px; }
 
-#rescue-map-legend { position: absolute; top: 64px; right: 372px; width: min(300px, calc(100vw - 24px)); padding: 10px 12px; max-height: calc(100vh - 100px); overflow: auto; ${CARD} z-index: 5; }
+#rescue-map-legend { position: absolute; top: 64px; right: var(--rm-r); width: min(300px, calc(100vw - 24px)); padding: 10px 12px; max-height: calc(100vh - 100px); overflow: auto; ${CARD} z-index: 5; }
 #rescue-map-legend[hidden] { display: none; }
 #rescue-map-legend h4 { margin: 0 0 6px; font: 600 12px system-ui, sans-serif; color: #7fb2e6; letter-spacing: 0.14em; }
-html.rm-hide-right #rescue-map-legend { right: 16px; }
 
 .rm-label { position: absolute; left: 0; top: 0; white-space: nowrap; font: 11px/1 system-ui, sans-serif; transform-origin: 0 0; margin: -6px 0 0 4px; }
 .rm-label[data-kind="flow"], .rm-label[data-kind="section"], .rm-label[data-kind="note"] { font-size: 10px; opacity: 0.85; }
 .rm-label.rm-hover { color: #4fd1ff !important; text-decoration: underline; text-underline-offset: 2px; }
 .rm-label.rm-picked { animation: rm-picked 0.9s ease-out; }
 @keyframes rm-picked { 0% { background: rgba(79, 209, 255, 0.55); box-shadow: 0 0 0 4px rgba(79, 209, 255, 0.55); } 100% { background: transparent; box-shadow: 0 0 0 4px transparent; } }
-#rescue-map-toast { position: fixed; left: 50%; bottom: calc(min(40vh, 460px) + 28px); transform: translateX(-50%); z-index: 12; padding: 8px 14px; border-radius: 10px; font-size: 13px; color: #eaf4ff; pointer-events: none; ${CARD} }
+#rescue-map-toast { position: fixed; left: calc((var(--rm-l) + 100vw - var(--rm-r)) / 2); bottom: 28px; transform: translateX(-50%); z-index: 12; padding: 8px 14px; border-radius: 10px; font-size: 13px; color: #eaf4ff; pointer-events: none; ${CARD} }
 #rescue-map-toast[hidden] { display: none; }
 [data-theme="dark"] .rm-label { color: #d6e2ee; text-shadow: 0 0 3px #0b1522, 0 0 3px #0b1522; }
 [data-theme="dark"] .rm-label[data-kind="flow"] { color: #7ad9a1; }
@@ -224,16 +242,19 @@ html.rm-hide-right #rescue-map-legend { right: 16px; }
 .rm-mark[data-level="orange"] { background: #d9680a; }
 .rm-mark[data-level="red"] { background: #d83a3d; }
 
+/* 矮屏（投影仪 768 高等）：智能体卡片只留状态和待确认指令，把高度让给聊天区 */
+@media (max-height: 900px) {
+  .rm-sec-records { display: none; }
+}
 @media (max-width: 1100px) {
-  ${ON} { --rm-l: 312px; --rm-r: 312px; }
-  .rm-left, .rm-right { width: 280px; }
+  ${ON} { --rm-l: 312px; --rm-chat-w: 360px; }
+  .rm-left { width: 280px; }
   .rm-chips { display: none; }
-  #rescue-map-legend { right: 312px; }
 }
 @media (max-width: 800px) {
   ${ON} { --rm-l: 12px; --rm-r: 12px; }
   .rm-left, .rm-right { display: none; }
-  ${ON} ${CENTER} { left: 12px; right: 12px; bottom: 12px; height: min(60vh, 560px); }
+  ${ON} ${CENTER} { left: 12px; right: 12px; width: auto; top: auto; bottom: 12px; height: min(60vh, 560px); }
   .rm-clock, .rm-title span { display: none; }
   .rm-tools { overflow-x: auto; max-width: 60vw; }
 }
@@ -308,6 +329,14 @@ export function mountHud(hd: HudHandlers): Hud {
   document.body.insertBefore(hud, document.getElementById('root'))
   const panels: PanelsHandle = mountPanels(hud, hd.title(), (name) => hd.focus(name))
   const tools = hud.querySelector('.rm-tools') as HTMLElement
+  // 智能体卡片的高度决定聊天区从哪里开始（CSS 变量 --rm-agent-h）
+  const agentCard = hud.querySelector('.rm-right') as HTMLElement
+  const ro = new ResizeObserver(() => {
+    const hgt = agentCard.offsetHeight
+    root.style.setProperty('--rm-agent-h', `${hgt}px`)
+    requestAnimationFrame(() => hd.layoutChanged())
+  })
+  ro.observe(agentCard)
 
   const btn = (text: string, onClick: () => void, pressed?: boolean): HTMLButtonElement => {
     const b = h('button', { type: 'button' }, text)
@@ -318,7 +347,7 @@ export function mountHud(hd: HudHandlers): Hud {
   }
 
   const toggles: { b: HTMLButtonElement; cls: string }[] = []
-  for (const [key, cls, label] of [['left', 'rm-hide-left', '左栏'], ['chat', 'rm-hide-chat', '对话'], ['right', 'rm-hide-right', '右栏']] as const) {
+  for (const [key, cls, label] of [['left', 'rm-hide-left', '左栏'], ['right', 'rm-hide-right', '智能体'], ['chat', 'rm-hide-chat', '对话']] as const) {
     const hidden = readFlag(`hide-${key}`)
     root.classList.toggle(cls, hidden)
     const b = btn(label, () => {
@@ -335,7 +364,7 @@ export function mountHud(hd: HudHandlers): Hud {
     const anyShown = toggles.some((t) => !root.classList.contains(t.cls))
     toggles.forEach((t, i) => {
       root.classList.toggle(t.cls, anyShown)
-      writeFlag(`hide-${['left', 'chat', 'right'][i]}`, anyShown)
+      writeFlag(`hide-${['left', 'right', 'chat'][i]}`, anyShown)
       t.b.setAttribute('aria-pressed', String(!anyShown))
     })
     requestAnimationFrame(() => hd.layoutChanged())
@@ -384,6 +413,8 @@ export function mountHud(hd: HudHandlers): Hud {
     },
     setState: (s, staleS, failed) => panels.update(s, staleS, failed),
     dispose() {
+      ro.disconnect()
+      root.style.removeProperty('--rm-agent-h')
       panels.dispose()
       hud.remove()
       style.remove()
@@ -400,7 +431,7 @@ export function restoreNative(): void {
   root.classList.remove('rm-on', 'rm-drawer')
 }
 
-/** 悬浮面板当前盖住的边（像素）：左栏、底部对话区、右栏；顶部给顶栏留位置。隐藏的面板不算。 */
+/** 悬浮面板当前盖住的边（像素）：左栏、右栏（智能体卡片 + 对话区；窄屏时对话区在底部）；顶部给顶栏留位置。隐藏的面板不算。 */
 export function panelInsets(): Insets {
   const w = window.innerWidth
   const hgt = window.innerHeight
@@ -413,10 +444,12 @@ export function panelInsets(): Insets {
   const left = rect('.rm-left')
   const right = rect('.rm-right')
   const chat = rect(`${FRAME} > [class$="_centerCol"]`)
+  const chatAtBottom = !!chat && chat.left < w / 2
+  const rightEdge = Math.min(right ? right.left : w, chat && !chatAtBottom ? chat.left : w)
   return {
     left: left ? left.right : 0,
-    right: right ? w - right.left : 0,
+    right: w - rightEdge,
     top: 60,
-    bottom: chat ? hgt - chat.top : 0,
+    bottom: chat && chatAtBottom ? hgt - chat.top : 0,
   }
 }

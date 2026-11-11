@@ -2,7 +2,10 @@
  * rescue-map 浏览器端（docs/design-v4-map.md）：下层是通风图，上层是自绘的大屏界面（顶栏、左栏、右栏）
  * 加 DSH 的会话组件（底部）。任何一步失败（几何、WebGL）都退回 DSH 原界面，救援系统不能因为地图而不可用。
  */
+import { mountApprovalStyle } from './approval-style.ts'
 import { connect, loadGeometry } from './channel.ts'
+import { dutyFollower } from './duty.ts'
+import type { UiWorkspace } from './duty.ts'
 import type { Channel } from './channel.ts'
 import { mountHud, panelInsets, restoreNative } from './hud.ts'
 import { insertIntoComposer, referenceText } from './reference.ts'
@@ -32,7 +35,12 @@ function disabled(): boolean {
   }
 }
 
-function mount(): () => void {
+interface ClientContext {
+  effect?: (fn: () => () => void, name?: string) => unknown
+  get?: (name: string) => unknown
+}
+
+function mount(ctx: ClientContext): () => void {
   if (disabled()) return () => {}
   const host = document.createElement('div')
   host.id = 'rescue-map-host'
@@ -77,6 +85,21 @@ function mount(): () => void {
         (ok) => hud?.setConnected(ok),
       )
 
+      // 监听器的告警投递到值班会话时自动切过去（打开页面时也是），不用操作员去会话列表里找
+      const followDuty = dutyFollower({
+        workspace: () => {
+          try {
+            return ctx.get?.('uiWorkspace') as UiWorkspace | undefined
+          } catch {
+            return undefined
+          }
+        },
+        switched: (reason) => {
+          hud?.showChat()
+          if (reason === 'delivery') hud?.toast('监听器告警已投递给智能体，已切到值班会话')
+        },
+      })
+
       let last: StateData | null = null
       let lastOk = 0
       const refresh = async (): Promise<void> => {
@@ -84,6 +107,7 @@ function mount(): () => void {
           last = await fetchState()
           lastOk = Date.now()
           hud?.setState(last, 0, false)
+          followDuty(last)
         } catch {
           hud?.setState(last, lastOk ? Math.round((Date.now() - lastOk) / 1000) : 0, true)
         }
@@ -108,7 +132,10 @@ function mount(): () => void {
   }
 }
 
-export function apply(ctx: { effect?: (fn: () => () => void, name?: string) => unknown }): void {
-  if (typeof ctx.effect === 'function') ctx.effect(mount, 'rescue-map: map layer')
-  else mount()
+export function apply(ctx: ClientContext): void {
+  // 确认卡片的排版与地图无关：评测关掉地图界面时也保留
+  if (typeof ctx.effect === 'function') ctx.effect(mountApprovalStyle, 'rescue: approval card style')
+  else mountApprovalStyle()
+  if (typeof ctx.effect === 'function') ctx.effect(() => mount(ctx), 'rescue-map: map layer')
+  else mount(ctx)
 }

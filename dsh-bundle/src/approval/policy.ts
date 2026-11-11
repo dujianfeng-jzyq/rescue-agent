@@ -56,6 +56,8 @@ export type Verdict =
 export interface ApprovalSummary {
   action: string
   tool: string
+  /** 要批的内容要点（代码从记录或指令参数取）；旧版 actions 没有这一项 */
+  facts?: string[]
   record_ids: string[]
   checks: { name: string; ok: boolean; detail?: string | null }[]
   human_items: string[]
@@ -82,12 +84,20 @@ export function classify(toolName: string, config: Pick<ApprovalConfig, 'gatedSe
   return { gated: true, rawName }
 }
 
-/** 确认提示的正文：按 ApprovalSummary 逐项列出（不透出工具原始参数） */
+/**
+ * 确认提示的正文（标题行之后）：先写要批的内容要点和需要把关的事项，核对结果压成一行（通过的只列名称，没通过的逐条写明），
+ * 依据记录放最后。不透出工具原始参数。DSH 的确认卡片按纯文本显示，换行靠浏览器端样式（client/src/approval-style.ts）保留。
+ */
 export function summaryText(s: ApprovalSummary): string {
   const lines: string[] = []
+  const facts = s.facts ?? []
+  if (facts.length) lines.push('要点：', ...facts.map((f) => `· ${f}`))
+  if (s.human_items.length) lines.push('请确认人把关：', ...s.human_items.map((h) => `· ${h}`))
+  const ok = s.checks.filter((c) => c.ok)
+  const bad = s.checks.filter((c) => !c.ok)
+  if (ok.length) lines.push(`核对通过（${ok.length} 项）：${ok.map((c) => c.name).join('、')}`)
+  for (const c of bad) lines.push(`✗ ${c.name}${c.detail ? `：${c.detail}` : ''}`)
   if (s.record_ids.length) lines.push(`依据记录：${s.record_ids.join('、')}`)
-  for (const c of s.checks) lines.push(`${c.ok ? '✓' : '✗'} ${c.name}${c.detail ? `：${c.detail}` : ''}`)
-  if (s.human_items.length) lines.push(`请确认人把关：${s.human_items.join('；')}`)
   return lines.join('\n')
 }
 
@@ -105,10 +115,10 @@ export function askVerdict(rawName: string, config: Pick<ApprovalConfig, 'polici
       kind: 'ask',
       incidentId: summary.incident_id ?? null,
       recordIds: summary.record_ids,
-      reason: `${summary.action}：需由【${who}】确认后执行（红线预检已通过）\n${body}`,
+      reason: `${summary.action}\n确认人：【${who}】；红线预检已通过\n${body}`,
       displayReason: {
-        en: `${summary.action} requires confirmation by ${who}. Pre-check passed.\n${body}`,
-        zh: `${summary.action}：需由【${who}】确认后执行。红线预检已通过。\n${body}`,
+        en: `${summary.action}\nRequires confirmation by ${who}. Pre-check passed.\n${body}`,
+        zh: `${summary.action}\n确认人：【${who}】；红线预检已通过\n${body}`,
       },
     }
   }
@@ -116,10 +126,10 @@ export function askVerdict(rawName: string, config: Pick<ApprovalConfig, 'polici
   const extra = notes.length ? `\n请注意：${notes.join('；')}` : ''
   return {
     kind: 'ask',
-    reason: `${what}：需由【${who}】确认后执行（红线预检已通过）${extra}`,
+    reason: `${what}\n确认人：【${who}】；红线预检已通过${extra}`,
     displayReason: {
-      en: `${what} requires confirmation by ${who}. Red-line pre-check passed.${notes.length ? ` Note: ${notes.join('; ')}` : ''}`,
-      zh: `${what}：需由【${who}】确认后执行。红线预检已通过。${extra}`,
+      en: `${what}\nRequires confirmation by ${who}. Red-line pre-check passed.${notes.length ? ` Note: ${notes.join('; ')}` : ''}`,
+      zh: `${what}\n确认人：【${who}】；红线预检已通过${extra}`,
     },
   }
 }

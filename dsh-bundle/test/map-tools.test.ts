@@ -138,6 +138,13 @@ describe('map_view：unmark、clear 只动智能体自己的标记', () => {
     await assert.rejects(call({ action: 'unmark', name: '211016采面' }), /没有在“211016采面”上标记/, '系统标的不是智能体的，取消不了')
   })
 
+  it('系统已自动标出的位置不能再标（会叠圈、等级过时），提示用 focus', async () => {
+    const { call, hub } = setup()
+    hub.emit({ op: 'mark', id: 'auto:211016采面', name: '211016采面', level: 'yellow', text: '黄色（预警）' })
+    await assert.rejects(call({ action: 'mark', name: '211016采面', record_id: RS_WARNING, note: '重点关注' }), /已由系统自动标出.*focus/)
+    assert.deepEqual(hub.snapshot().marks.map((m) => m.id), ['auto:211016采面'])
+  })
+
   it('unmark 取消自己的标记', async () => {
     const { call, hub } = setup()
     await call({ action: 'mark', name: '211016回风巷', note: '重点关注' })
