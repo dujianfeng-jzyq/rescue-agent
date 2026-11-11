@@ -35,8 +35,9 @@ export function loadFieldConditions(file = new URL('../../data/field-conditions.
 export function describeFieldCard(fc: FieldConditions) {
   return {
     questions: [
-      ...fc.fields.map((f) => ({ id: f.field, header: '现场条件', question: f.question, multiSelect: false, options: f.choices.map((c) => c.label) })),
-      { id: 'confirmed_by', header: '现场条件', question: '以上现场条件由谁确认？', multiSelect: false, options: fc.confirmers },
+      // 结构与 ask_user 的参数一致（选项是 {label} 对象、multi_select），原样放进 questions 就能问（2026-11-10 演示：给字符串选项，ask_user 报错重试）
+      ...fc.fields.map((f) => ({ id: f.field, header: '现场条件', question: f.question, multi_select: false, options: f.choices.map((c) => ({ label: c.label })) })),
+      { id: 'confirmed_by', header: '现场条件', question: '以上现场条件由谁确认？', multi_select: false, options: fc.confirmers.map((label) => ({ label })) },
     ],
     note:
       `${fc.note} 用 ask_user 把 questions 原样问给操作员（一次问完）；然后调 draft_sealing_plan，field_choices 里每项给 {field: 问题 id, choice: 答案原文（选的标签或输入的文字，不要改写）}，` +

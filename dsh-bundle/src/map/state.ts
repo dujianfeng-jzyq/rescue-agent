@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { IncidentStore } from '../incident/store.ts'
 import type { Entry, IncidentView } from '../incident/store.ts'
 import type { ActivitySnapshot } from './activity.ts'
-import { evacuationView, latestPersonnelRecord } from './evacuation.ts'
+import { ageHours, evacuationView, HIDE_H, latestPersonnelRecord, personnelRecordById } from './evacuation.ts'
 import type { EvacuationView, Network } from './evacuation.ts'
 import { anchorForPanel, anchorForSensor, EMPTY_MAP } from './mapping.ts'
 import type { MineMap } from './mapping.ts'
@@ -254,6 +254,19 @@ async function readDutySession(dir: string): Promise<string | null> {
   }
 }
 
+/**
+ * 最近一次已下发的撤人通知（guard 写进事件的 action 记事）：指令编号、引用的记录、下发时的矿井时间。
+ */
+export function lastEvacuationNotice(entries: Entry[]): { actionId: string; recordId: string; asOf: string } | null {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const d = entries[i]!.data
+    if (entries[i]!.kind !== 'note' || d?.type !== 'action' || d.tool !== 'notify_evacuation' || d.status !== 'issued') continue
+    const rid = Array.isArray(d.record_ids) ? d.record_ids.find((x: unknown) => typeof x === 'string' && x.startsWith('RS-')) : undefined
+    if (typeof rid === 'string') return { actionId: String(d.action_id ?? ''), recordId: rid, asOf: String(d.as_of ?? entries[i]!.at ?? '') }
+  }
+  return null
+}
+
 function lastDelivery(entries: Entry[]): MapState['duty']['lastDelivery'] {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!
@@ -302,10 +315,10 @@ async function latestRecords(dir: string): Promise<MapState['records']> {
 
 const SKILL_NAME: Record<string, string> = {
   'fire-assessment': '研判', 'effect-review': '效果复评', 'sealing-plan': '封闭方案', 'firefighting-plan': '防灭火方案', 'plan-compliance': '合规审核',
-  'explosion-triangle': '爆炸危险性', 'emergency-escalation': '升级建议', 'unsealing-plan': '启封评估', 'fire-incident-management': '事件',
+  'explosion-triangle': '爆炸危险性', 'emergency-escalation': '升级建议', 'unsealing-plan': '启封评估', 'fire-incident-management': '事件', 'incident-review': '事件复盘',
 }
 const PART_NAME: Record<string, string> = {
-  warning: '预警等级', stage: '自燃阶段', alarms: '实时报警', trend: '趋势', personnel: '受威胁人员', check: '风险检测', explanation_options: '研判说明',
+  warning: '预警等级', stage: '自燃阶段', alarms: '实时报警', trend: '趋势', personnel: '受威胁人员', check: '风险检测', explanation_options: '研判说明', explanation: '研判说明', timeline: '时间线',
   explosion_triangle: '爆炸三角形', escalation: '升级建议', effect: '复评结果', skeleton: '方案骨架', compose: '方案', scope: '审核范围', review: '审核结论',
   unsealing_plan: '启封评估', brief: '要点', report: '报告', plan: '方案', assessment: '研判',
 }
@@ -425,9 +438,11 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
 
   let incident: MapState['incident'] = null
   let delivery: MapState['duty']['lastDelivery'] = null
+  let notice: ReturnType<typeof lastEvacuationNotice> = null
   if (main) {
     const entries = await store.entries(main.incident_id).catch(() => [] as Entry[])
     delivery = lastDelivery(entries)
+    notice = lastEvacuationNotice(entries)
     const chk = lastCheck(entries)
     incident = {
       id: main.incident_id,
@@ -517,11 +532,17 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
   let evacuation: EvacuationView | null = null
   if (incident?.panel) {
     try {
-      const rec = await latestPersonnelRecord(deps.recordDir, incident.panel, mine.now)
+      // 撤人通知下发后、在显示时限内，路线按通知引用的那份记录显示：撤人开始后人员定位变了，
+      // 之后再算的记录（如编封闭方案时）受威胁人数是 0，按最新的显示会让刚下发的撤人路线消失（2026-11-10 演示复看）
+      const age = notice ? ageHours(notice.asOf, mine.now) : null
+      const fromNotice = notice && age !== null && age <= HIDE_H && !(mine.now && notice.asOf.slice(0, 19) > mine.now.slice(0, 19))
+        ? await personnelRecordById(deps.recordDir, notice.recordId, incident.panel)
+        : null
+      const rec = fromNotice ?? (await latestPersonnelRecord(deps.recordDir, incident.panel, mine.now))
       if (rec) {
         const computed = !!(rec.content?.result as { computed?: boolean } | undefined)?.computed
         const net = computed && deps.network ? await deps.network().catch(() => null) : null
-        evacuation = evacuationView(rec, net, map, mine.now)
+        evacuation = { ...evacuationView(rec, net, map, mine.now), noticeActionId: fromNotice ? notice!.actionId : null }
       }
     } catch {
       evacuation = null // 记录读不了：不显示，不影响其他部分

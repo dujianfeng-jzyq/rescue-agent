@@ -312,8 +312,10 @@ class SimEngine:
             s.t_h = round(s.t_h + STEP_H, 6)
             self._history.append(s)
 
-    def _apply(self, s: _State, iv: Intervention) -> None:
+    def _apply(self, s: _State, iv: Intervention, when_h: float | None = None) -> None:
+        """when_h：处置实际施加的时刻（火区台账记这个）；过程计算仍按步长对齐的状态进行。"""
         kind, prm = iv.type, iv.params
+        when = s.t_h if when_h is None else when_h
         if kind == "inert_injection":
             s.n2_m3_h = max(0.0, s.n2_m3_h + float(prm.get("rate_m3_h", 600)))
         elif kind == "stop_inert_injection":
@@ -327,11 +329,11 @@ class SimEngine:
             s.leak_mult *= 1 - min(0.9, float(prm.get("reduction", 0.5)))
         elif kind in ("temporary_seal", "permanent_seal"):
             if not s.sealed:
-                s.sealed, s.sealed_at_h, s.unsealed_at_h = True, s.t_h, None
+                s.sealed, s.sealed_at_h, s.unsealed_at_h = True, when, None
             s.leak_mult *= 0.1 if kind == "temporary_seal" else 0.3
         elif kind == "unseal":
             if s.sealed:
-                s.unsealed_at_h = s.t_h
+                s.unsealed_at_h = when
             s.sealed, s.leak_mult = False, max(s.leak_mult, 0.5)
         elif kind == "leak_change":  # 剧本：漏风突然增大（如顶板垮落、密闭失效）
             s.leak_mult *= float(prm.get("factor", 2.0))
@@ -345,7 +347,8 @@ class SimEngine:
         t = self.now_h()
         self._advance_to(t)
         iv = Intervention(type=iv_type, at_h=self._history[-1].t_h, params=params or {}, roadways=tuple(roadways or ()), source=source)
-        self._apply(self._history[-1], iv)
+        # 火区台账记实际下发时刻，不记对齐到步长的时刻（2026-11-10 演示：04:09 下发的封闭方案，台账写成 04:00 封闭）
+        self._apply(self._history[-1], iv, when_h=t)
         self.action_log.append(iv)
         return iv
 

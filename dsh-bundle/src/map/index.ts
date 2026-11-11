@@ -250,7 +250,7 @@ export function apply(ctx: Context, config: Config): void {
       'x-accel-buffering': 'no',
     })
     const unsubscribe = hub.subscribe((chunk) => res.write(chunk))
-    const beat = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS)
+    const beat = setInterval(() => res.write(hub.ping()), HEARTBEAT_MS)
     const done = (): void => {
       clearInterval(beat)
       unsubscribe()

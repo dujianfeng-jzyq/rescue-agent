@@ -170,7 +170,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
     const evac = ev
       ? section(
           '受威胁人员与撤离',
-          h('p', { class: 'rm-note' }, `依据记录 ${ev.recordId}（${hm(ev.asOf)}）`),
+          h('p', { class: 'rm-note' }, ev.noticeActionId ? `依据撤人通知 ${ev.noticeActionId} 的记录 ${ev.recordId}（${hm(ev.asOf)}）` : `依据记录 ${ev.recordId}（${hm(ev.asOf)}）`),
           !ev.computed
             ? empty(ev.note ?? '记录没有计算受威胁人员')
             : h(
@@ -264,7 +264,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                 p.escalated && h('em', null, '已超时升级'),
               )
             }),
-            h('p', { class: 'rm-note' }, '请在对话区确认或拒绝。'),
+            h('p', { class: 'rm-note' }, '请在屏幕中间的确认框里确认或拒绝。'),
           ),
       )
     const rec = section(

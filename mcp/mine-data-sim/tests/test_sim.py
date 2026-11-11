@@ -112,7 +112,10 @@ def test_fire_areas_register_follows_sealing_and_unsealing():
     assert a.status == FireAreaStatus.UNSEALED and a.sealed_at == sealed_at and a.unsealed_at is not None
     assert [err for _, err in asyncio.run(run_all(server)) if err] == []  # 启封后仍通过一致性检查
 
+    holder.engine.clock.advance(0.155)  # 不在步长整点上下发
+    when = holder.engine.now()
     holder.engine.apply("temporary_seal")  # 重新封闭：启封时间清空，封闭时间更新
     holder.engine.clock.advance(1)
     (a,) = asyncio.run(md.fire_areas())
     assert a.status == FireAreaStatus.SEALED and a.unsealed_at is None and a.sealed_at > sealed_at
+    assert a.sealed_at == when  # 台账记实际下发时刻，不是对齐到步长的时刻

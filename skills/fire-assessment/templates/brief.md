@@ -13,8 +13,8 @@
 {{#worst}}
 - 最不利测点：{{sensor_id}}，{{zone}} 区 {{zone_name}}
 {{/worst}}
-- 受威胁人员：{{#personnel.result.computed}}{{personnel.result.total_threatened}} 人（井下共 {{personnel.result.total_underground}} 人），撤人按预案立即执行{{/personnel.result.computed}}{{^personnel.result.computed}}{{personnel.result.note}}{{/personnel.result.computed}}
-- 升级建议：{{#escalation.result.recommend}}建议升级为应急响应{{/escalation.result.recommend}}{{^escalation.result.recommend}}暂不建议升级为应急响应{{/escalation.result.recommend}}
+- 受威胁人员：{{#personnel.result.computed}}{{personnel.result.total_threatened}} 人（井下共 {{personnel.result.total_underground}} 人）{{/personnel.result.computed}}{{^personnel.result.computed}}{{personnel.result.note}}{{/personnel.result.computed}}
+- 升级建议：{{#escalation.result.recommend}}建议升级为应急响应；进入应急响应后调度员按预案立即撤人，不等待研判结果{{/escalation.result.recommend}}{{^escalation.result.recommend}}暂不建议升级为应急响应{{/escalation.result.recommend}}
 - 升级建议的规程依据：{{articles_text}}；条文原文见完整报告
 {{#explanation_summary}}
 - 研判说明：{{.}}

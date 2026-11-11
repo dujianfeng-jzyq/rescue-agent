@@ -41,23 +41,27 @@ export function describeOptions(levels: Levels, levelRaw: string) {
   }
   const choosable = all.filter((o) => o.choosable && !o.always)
   const always = all.filter((o) => o.always)
+  // card 就是 ask_user 的一道题，字段名和结构与 ask_user 的参数一致（选项是 {label} 对象、multi_select），智能体放进 questions 原样传
   const card =
     choosable.length === 0
       ? null
       : {
+          id: 'orange_response_options',
           header: '处置选项',
-          question: `${LEVEL_NAME[level] ?? level}预警：请选择要追加的处置（可多选；不追加就选“${NONE_LABEL}”）`,
-          detail: always.length ? `必做项已包含，不用选：${always.map((o) => o.label).join('、')}` : null,
-          multiSelect: true,
-          options: [...choosable.map((o) => o.label), NONE_LABEL],
-          label_to_id: { ...Object.fromEntries(choosable.map((o) => [o.label, o.id])), [NONE_LABEL]: null },
+          question:
+            `${LEVEL_NAME[level] ?? level}预警：请选择要追加的处置（可多选；不追加就选“${NONE_LABEL}”）` +
+            (always.length ? `。必做项已包含，不用选：${always.map((o) => o.label).join('、')}` : ''),
+          multi_select: true,
+          options: [...choosable.map((o) => ({ label: o.label })), { label: NONE_LABEL }],
         }
+  const labelToId = card ? { ...Object.fromEntries(choosable.map((o) => [o.label, o.id])), [NONE_LABEL]: null } : null
   return {
     level,
     options: all.map((o) => ({ id: o.id, label: o.label, always: o.always, choosable: o.choosable, how: o.how })),
     card,
+    label_to_id: labelToId,
     note: card
-      ? `用 ask_user 把 card 原样问给操作员（选项和标签照抄，不增不减、不加说明，multiSelect 为 true）；把答案里选中的标签按 label_to_id 换成 id（“${NONE_LABEL}”对应 null，去掉），调 draft_firefighting_plan 的 selected_options 传入（必做项不用传）。操作员选了“${NONE_LABEL}”或点了“跳过”就是只做必做项，selected_options 传空列表 []，不要再追问；“${NONE_LABEL}”和别的选项一起选时以别的选项为准。没有 card（选项由流程自己落实）时不用问。\``
+      ? `用 ask_user 提问：questions 里只放 card 这一道题，原样照抄（id、选项和标签不增不减、不改、不加说明）；把答案里选中的标签按 label_to_id 换成 id（“${NONE_LABEL}”对应 null，去掉），调 draft_firefighting_plan 的 selected_options 传入（必做项不用传）。操作员选了“${NONE_LABEL}”或点了“跳过”就是只做必做项，selected_options 传空列表 []，不要再追问；“${NONE_LABEL}”和别的选项一起选时以别的选项为准。没有 card（选项由流程自己落实）时不用问。`
       : '这一级的各项处置都要落实，由你按各选项的 how 在同一轮里提交（不问“要不要”，确认弹窗就是请示），不用向操作员列选项。',
   }
 }

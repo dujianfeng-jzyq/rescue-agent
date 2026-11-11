@@ -135,5 +135,11 @@ describe('MapHub 图元（撤人路线等，只由代码生成）', () => {
     const { chunks } = collect(hub)
     assert.match(chunks[0]!, /"figures":\[\{"id":"auto:a"/)
   })
-})
 
+  it('心跳是带当前序号的 ping 事件（浏览器据此发现漏收的指令）', () => {
+    const hub = new MapHub()
+    hub.emit({ op: 'focus', name: 'A' })
+    hub.emit({ op: 'mark', id: 'x', name: 'A', level: 'red', text: 't' })
+    assert.equal(hub.ping(), 'event: ping\ndata: {"seq":2}\n\n')
+  })
+})

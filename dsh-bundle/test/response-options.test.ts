@@ -9,12 +9,13 @@ describe('处置选项表（契约导出）', () => {
   it('橙色卡片只列可选的处置，必做项写在说明里；标签换回编号', () => {
     const d = describeOptions(levels, '橙色')
     assert.equal(d.level, 'orange')
-    assert.deepEqual(d.card!.options, ['注浆', '堵漏', '不追加（只做必做项）']) // “不追加”由代码给，智能体不自己加
-    assert.equal(d.card!.multiSelect, true)
-    assert.match(d.card!.detail!, /注氮/)
+    assert.deepEqual(d.card!.options, [{ label: '注浆' }, { label: '堵漏' }, { label: '不追加（只做必做项）' }]) // “不追加”由代码给，智能体不自己加
+    assert.equal(d.card!.multi_select, true) // 与 ask_user 参数同名同构，原样传
+    assert.equal(d.card!.id, 'orange_response_options')
+    assert.match(d.card!.question, /必做项已包含.*注氮/)
     assert.match(d.card!.question, /不追加（只做必做项）/)
     assert.match(d.note, /跳过/)
-    assert.deepEqual(d.card!.label_to_id, { 注浆: 'grout', 堵漏: 'leak_seal', '不追加（只做必做项）': null })
+    assert.deepEqual(d.label_to_id, { 注浆: 'grout', 堵漏: 'leak_seal', '不追加（只做必做项）': null })
     assert.equal(d.options.length, 3)
   })
 

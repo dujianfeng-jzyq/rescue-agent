@@ -9,9 +9,9 @@ describe('封闭方案现场条件卡片（契约导出）', () => {
   it('5 项现场条件 + 确认人，各自带选项；问题 id 就是字段名', () => {
     const card = describeFieldCard(fc)
     assert.deepEqual(card.questions.map((q) => q.id), ['area_temperature_c', 'visibility_m', 'fire_source_confirmed', 'water_supply_sufficient', 'return_airway_clear', 'confirmed_by'])
-    assert.deepEqual(card.questions[2]!.options, ['是', '否'])
-    assert.deepEqual(card.questions[5]!.options, ['总指挥', '总工程师', '救护队带队指挥员'])
-    assert.ok(card.questions.every((q) => q.multiSelect === false && q.header === '现场条件'))
+    assert.deepEqual(card.questions[2]!.options, [{ label: '是' }, { label: '否' }])
+    assert.deepEqual(card.questions[5]!.options, [{ label: '总指挥' }, { label: '总工程师' }, { label: '救护队带队指挥员' }])
+    assert.ok(card.questions.every((q) => q.multi_select === false && q.header === '现场条件'))
     assert.match(card.note, /不要替人/)
   })
 

@@ -254,6 +254,20 @@ describe('撤人路线（来自 personnel 记录）', () => {
     assert.equal((await buildState({ incidentDir: f2.incidentDir, recordDir: f2.recordDir, mine: null })).evacuation, null)
   })
 
+  it('下发过撤人通知：6 小时内按通知引用的记录显示，之后再算出的 0 人记录不顶掉撤人路线（2026-11-10 演示复看）', async () => {
+    const f = await setup()
+    const zero = { record_id: 'RS-20261104T201000-zzzzzz', kind: 'result', panel: '1201', as_of: '2026-11-04T20:10:00', source: { skill: 'fire-assessment', script: 'personnel' }, content: { result: { ...RESULT, total_threatened: 0, groups: [] } } }
+    await writeFile(join(f.recordDir, `${zero.record_id}.json`), JSON.stringify(zero))
+    const at = (now: string) => buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mineAt(now), map, network: async () => NETWORK })
+    assert.equal((await at('2026-11-04T20:30:00')).evacuation!.recordId, zero.record_id) // 没有通知：取最新的
+    await f.store.append(f.id, '2026-11-04T20:00:00', 'note', 'guard', { type: 'action', tool: 'notify_evacuation', status: 'issued', action_id: 'A-1', record_ids: ['RS-20261104T200000-aaaaaa'], as_of: '2026-11-04T20:00:00' })
+    const e = (await at('2026-11-04T20:30:00')).evacuation!
+    assert.deepEqual([e.recordId, e.noticeActionId, e.totalThreatened], ['RS-20261104T200000-aaaaaa', 'A-1', 11])
+    assert.ok(e.figures.some((x) => x.id === 'auto:evac:route:R-1201-FACE'))
+    const late = (await at('2026-11-05T03:00:00')).evacuation! // 通知超过 6 小时：回到最新的记录
+    assert.deepEqual([late.recordId, late.noticeActionId], [zero.record_id, null])
+  })
+
   it('记录过了 6 小时：不再出图元，但列表保留并标“hidden”', async () => {
     const f = await setup()
     const s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mineAt('2026-11-05T03:00:00'), map, network: async () => NETWORK })
@@ -312,6 +326,24 @@ describe('timelineOf', () => {
     const t = timelineOf(entries)
     assert.equal(t.length, 14)
     assert.equal(t[0]!.at, 't39')
+  })
+})
+
+describe('recordTitle（记录的中文名）', () => {
+  it('每个技能的脚本和模板都有中文名，不在“最近记录”里露出英文（2026-11-10：研判 · explanation）', async () => {
+    const { readdirSync, existsSync } = await import('node:fs')
+    const root = new URL('../../skills/', import.meta.url)
+    for (const skill of readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
+      const parts: { script?: string; template?: string }[] = []
+      const sd = new URL(`${skill}/scripts/`, root)
+      if (existsSync(sd)) for (const f of readdirSync(sd)) if (/^[a-z][a-z_]*\.py$/.test(f)) parts.push({ script: f.replace(/\.py$/, '') })
+      const td = new URL(`${skill}/templates/`, root)
+      if (existsSync(td)) for (const f of readdirSync(td)) if (f.endsWith('.md')) parts.push({ template: `templates/${f}` })
+      for (const p of parts) {
+        const t = recordTitle({ record_id: 'RS-x', kind: 'result', source: { skill, ...p } })
+        assert.match(t, /^[^a-zA-Z]+$/, `${skill} ${JSON.stringify(p)} → ${t}`)
+      }
+    }
   })
 })
 

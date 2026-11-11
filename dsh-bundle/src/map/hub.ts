@@ -134,6 +134,11 @@ export class MapHub {
     return () => this.clients.delete(write)
   }
 
+  /** 心跳：带当前序号。浏览器端据此发现漏收的指令或卡住的连接，重连取快照（注释行 `: ping` 浏览器收不到，判断不了） */
+  ping(): string {
+    return `event: ping\ndata: ${JSON.stringify({ seq: this.seq })}\n\n`
+  }
+
   get clientCount(): number {
     return this.clients.size
   }

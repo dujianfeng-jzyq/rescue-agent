@@ -48,6 +48,7 @@ export interface StateData {
   openIncidents: number
   evacuation: null | {
     recordId: string
+    noticeActionId?: string | null
     asOf: string
     panel: string
     computed: boolean

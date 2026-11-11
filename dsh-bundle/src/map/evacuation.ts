@@ -85,6 +85,8 @@ export interface EvacuationView {
   groups: GroupView[]
   /** 要画的图元；记录不显示（未计算、已过期）时为空 */
   figures: MapFigure[]
+  /** 按已下发的撤人通知显示时，通知的指令编号（路线就是通知里的那份记录） */
+  noticeActionId?: string | null
 }
 
 type Json = Record<string, any>
@@ -238,6 +240,21 @@ export function evacuationView(record: RecordLike & { as_of?: string }, network:
 type PRec = RecordLike & { as_of?: string }
 let cache: { dir: string; mtime: number; panel: string; recs: PRec[] } | null = null
 const SCAN_LIMIT = 40
+
+/**
+ * 按编号读一份 personnel 记录（撤人通知引用的那份）；不是该工作面的 personnel 记录、读不到都返回 null。
+ */
+export async function personnelRecordById(dir: string, id: string, panel: string): Promise<PRec | null> {
+  if (!/^RS-\d{8}T\d{6}-[a-z0-9]{6}$/.test(id)) return null
+  try {
+    const r = JSON.parse(await readFile(join(dir, `${id}.json`), 'utf8')) as PRec
+    if (r.source?.skill !== 'fire-assessment' || r.source?.script !== 'personnel') return null
+    if ((r.content?.result as Json | undefined)?.panel !== panel && r.panel !== panel) return null
+    return r
+  } catch {
+    return null
+  }
+}
 
 /**
  * notAfter（当前矿井时间）：记录的 as_of 晚于它的忽略——模拟矿井重置时钟后，上一轮演示留下的“未来”记录不能当最新的。
