@@ -385,7 +385,9 @@
     "quantity": 1,
     "unit": "套",
     "from_node": "N2",
-    "to_node": "N5"
+    "to_node": "N5",
+    "from_name": "1201运输巷口",
+    "to_name": "1201回风巷口"
    },
    {
     "item_type": "brick_pcs",
@@ -393,7 +395,9 @@
     "quantity": 4915,
     "unit": "块",
     "from_node": "N1",
-    "to_node": "N2"
+    "to_node": "N2",
+    "from_name": "主井底车场",
+    "to_name": "1201运输巷口"
    },
    {
     "item_type": "brick_pcs",
@@ -401,7 +405,9 @@
     "quantity": 4915,
     "unit": "块",
     "from_node": "N1",
-    "to_node": "N5"
+    "to_node": "N5",
+    "from_name": "主井底车场",
+    "to_name": "1201回风巷口"
    },
    {
     "item_type": "cement_t",
@@ -409,7 +415,9 @@
     "quantity": 0.931,
     "unit": "t",
     "from_node": "N1",
-    "to_node": "N2"
+    "to_node": "N2",
+    "from_name": "主井底车场",
+    "to_name": "1201运输巷口"
    },
    {
     "item_type": "cement_t",
@@ -417,7 +425,9 @@
     "quantity": 0.931,
     "unit": "t",
     "from_node": "N1",
-    "to_node": "N5"
+    "to_node": "N5",
+    "from_name": "主井底车场",
+    "to_name": "1201回风巷口"
    },
    {
     "item_type": "sand_m3",
@@ -425,7 +435,9 @@
     "quantity": 2.35,
     "unit": "m³",
     "from_node": "N1",
-    "to_node": "N2"
+    "to_node": "N2",
+    "from_name": "主井底车场",
+    "to_name": "1201运输巷口"
    },
    {
     "item_type": "sand_m3",
@@ -433,7 +445,9 @@
     "quantity": 2.35,
     "unit": "m³",
     "from_node": "N1",
-    "to_node": "N5"
+    "to_node": "N5",
+    "from_name": "主井底车场",
+    "to_name": "1201回风巷口"
    }
   ],
   "dispatch_count": 7,

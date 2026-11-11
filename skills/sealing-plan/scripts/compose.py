@@ -42,6 +42,7 @@ def dispatch_lines(rows, stock, seals, network, cfg):
     （进风侧巷道取起点、其余取终点，即巷道靠外的一端）；存放点就在密闭处的不调。数量为计算结果，到点时间不估。"""
     items = set(cfg.get("items") or [])
     roads = {r["id"]: r for r in network["roadways"]}
+    names = {n["id"]: n.get("name") or n["id"] for n in network.get("nodes") or []}
     sites = []
     for rid in seals:
         r = roads.get(rid)
@@ -65,7 +66,10 @@ def dispatch_lines(rows, stock, seals, network, cfg):
                     share = 0
                     break
                 qty = min(share, depot["quantity"])
-                out.append({"item_type": row["item_type"], "label": row["label"], "quantity": qty, "unit": row["unit"], "from_node": depot["depot_node"], "to_node": site})
+                out.append({
+                    "item_type": row["item_type"], "label": row["label"], "quantity": qty, "unit": row["unit"],
+                    "from_node": depot["depot_node"], "to_node": site, "from_name": names.get(depot["depot_node"], depot["depot_node"]), "to_name": names.get(site, site),
+                })  # fmt: skip
                 share -= qty
     return out
 

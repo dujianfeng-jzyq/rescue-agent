@@ -29,6 +29,9 @@ const LEVEL_NAME: Record<string, string> = { yellow: '黄色', orange: '橙色',
 
 export const normalizeLevel = (level: string): string => NAME_TO_LEVEL[level] ?? level
 
+/** 卡片里“不追加”的选项（代码给出，2026-11-10 演示复看：智能体自己加“跳过”选项，不如由代码给）；label_to_id 里对应 null */
+export const NONE_LABEL = '不追加（只做必做项）'
+
 /** get_response_options 的返回：选项（代码给出）、给智能体的提问卡片内容（标签原样用）、选了之后怎么落实 */
 export function describeOptions(levels: Levels, levelRaw: string) {
   const level = normalizeLevel(levelRaw)
@@ -43,18 +46,18 @@ export function describeOptions(levels: Levels, levelRaw: string) {
       ? null
       : {
           header: '处置选项',
-          question: `${LEVEL_NAME[level] ?? level}预警：请选择要追加的处置（可多选；不追加、只做必做项就点“跳过”）`,
+          question: `${LEVEL_NAME[level] ?? level}预警：请选择要追加的处置（可多选；不追加就选“${NONE_LABEL}”）`,
           detail: always.length ? `必做项已包含，不用选：${always.map((o) => o.label).join('、')}` : null,
           multiSelect: true,
-          options: choosable.map((o) => o.label),
-          label_to_id: Object.fromEntries(choosable.map((o) => [o.label, o.id])),
+          options: [...choosable.map((o) => o.label), NONE_LABEL],
+          label_to_id: { ...Object.fromEntries(choosable.map((o) => [o.label, o.id])), [NONE_LABEL]: null },
         }
   return {
     level,
     options: all.map((o) => ({ id: o.id, label: o.label, always: o.always, choosable: o.choosable, how: o.how })),
     card,
     note: card
-      ? '用 ask_user 把 card 原样问给操作员（标签照抄，multiSelect 为 true）；把答案里选中的标签按 label_to_id 换成 id，调 draft_firefighting_plan 的 selected_options 传入（必做项不用传）；操作员点了“跳过”（没有选任何项）就是只做必做项，selected_options 传空列表 []，不要再追问。没有 card（选项由流程自己落实）时不用问。'
+      ? `用 ask_user 把 card 原样问给操作员（选项和标签照抄，不增不减、不加说明，multiSelect 为 true）；把答案里选中的标签按 label_to_id 换成 id（“${NONE_LABEL}”对应 null，去掉），调 draft_firefighting_plan 的 selected_options 传入（必做项不用传）。操作员选了“${NONE_LABEL}”或点了“跳过”就是只做必做项，selected_options 传空列表 []，不要再追问；“${NONE_LABEL}”和别的选项一起选时以别的选项为准。没有 card（选项由流程自己落实）时不用问。\``
       : '这一级的各项处置都要落实，由你按各选项的 how 在同一轮里提交（不问“要不要”，确认弹窗就是请示），不用向操作员列选项。',
   }
 }

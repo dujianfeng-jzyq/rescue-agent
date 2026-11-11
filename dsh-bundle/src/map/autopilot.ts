@@ -129,6 +129,7 @@ export function reconcileFigures(current: MapFigure[], desired: MapFigure[]): Ma
  */
 export class Autopilot {
   private lastAlert: string | null | undefined = undefined
+  private lastStatus: string | null = null
   private readonly zoom: number
 
   constructor(zoom = 3) {
@@ -137,6 +138,14 @@ export class Autopilot {
 
   step(state: MapState, map: MineMap, currentMarks: MapMark[], currentFigures: MapFigure[] = []): MapCommand[] {
     const cmds = [...reconcile(currentMarks, computeOverlay(state, map)), ...reconcileFigures(currentFigures, state.evacuation?.figures ?? [])]
+    // 事件转为已稳定时清掉智能体的标记（处置期间标的“重点关注”之类，稳定后不该一直留在图上；2026-11-10 演示复看）。
+    // 只在转入的那一刻清：之后操作员问到、智能体再标的照常保留
+    const status = state.incident ? `${state.incident.id}:${state.incident.status}` : null
+    if (state.incident?.status === 'stable' && status !== this.lastStatus && this.lastStatus !== null) {
+      const already = new Set(cmds.filter((c) => c.op === 'unmark').map((c) => (c as { id: string }).id))
+      for (const m of currentMarks) if (m.id.startsWith(AGENT_PREFIX) && !already.has(m.id)) cmds.push({ op: 'unmark', id: m.id })
+    }
+    this.lastStatus = status
     const key = state.incident ? `${state.incident.id}:${state.incident.latestAlertId ?? ''}` : null
     if (this.lastAlert !== undefined && key !== null && key !== this.lastAlert && state.incident?.latestAlertId) {
       const name = anchorForPanel(map, state.incident.panel)

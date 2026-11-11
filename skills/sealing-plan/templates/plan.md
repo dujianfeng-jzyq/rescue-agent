@@ -40,7 +40,7 @@
 
 {{/compose.result.has_dispatch}}
 {{#compose.result.dispatch_lines}}
-- {{label}}：{{quantity}}，{{from_node}} → {{to_node}}
+- {{label}}：{{quantity}}，{{from_name}}（{{from_node}}）→ {{to_name}}（{{to_node}}）
 {{/compose.result.dispatch_lines}}
 {{#compose.result.has_dispatch}}
 

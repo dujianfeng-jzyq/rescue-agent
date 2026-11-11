@@ -129,6 +129,17 @@ describe('Autopilot', () => {
     assert.deepEqual(ap.step(state({ incident: incident({ panel: '999', latestAlertId: 'E2' }) }), MAP, []).filter((c) => c.op === 'focus'), [])
   })
 
+  it('事件转为已稳定时清掉智能体的标记，只在转入那一刻清（之后再标的保留）', () => {
+    const ap = new Autopilot()
+    const mark = { id: 'agent:211016回风巷', name: '211016回风巷', level: 'info', text: '重点关注' }
+    const unmarks = (cmds: any[]) => cmds.filter((c) => c.op === 'unmark' && c.id.startsWith('agent:'))
+    assert.deepEqual(unmarks(ap.step(state({ incident: incident({ status: 'handling' }) }), MAP, [mark])), [])
+    assert.deepEqual(unmarks(ap.step(state({ incident: incident({ status: 'stable' }) }), MAP, [mark])), [{ op: 'unmark', id: mark.id }])
+    assert.deepEqual(unmarks(ap.step(state({ incident: incident({ status: 'stable' }) }), MAP, [mark])), [], '稳定之后再标的不清')
+    const fresh = new Autopilot() // 刚启动时事件已经是稳定的：不清（不知道标记是不是稳定之后标的）
+    assert.deepEqual(unmarks(fresh.step(state({ incident: incident({ status: 'stable' }) }), MAP, [mark])), [])
+  })
+
   it('事件关闭后标记被清掉', () => {
     const ap = new Autopilot()
     const marks = [{ id: 'auto:211016采面', name: '211016采面', level: 'orange', text: 'x' }]

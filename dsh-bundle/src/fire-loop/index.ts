@@ -267,7 +267,7 @@ export function apply(ctx: Context, config: Config) {
           out.card = null
           out.note = `${prior.reason}：不再问操作员，也不重新下发同样的方案；继续按已下发的方案跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出追加处置的卡片。`
         } else if (prior.issued_at) {
-          out.note = `${prior.reason}。${out.note} 操作员点了“跳过”就是不追加：不重新下发已有的方案。`
+          out.note = `${prior.reason}。${out.note} 操作员选了“不追加（只做必做项）”或点了“跳过”就是不追加：不重新下发已有的方案。`
         }
         return toJson(out)
       },

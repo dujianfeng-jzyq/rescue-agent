@@ -269,6 +269,7 @@ def test_dispatch_order_is_filled_from_the_plan_record(world):
         pre = http.post("/redlines/check", json={"tool": "issue_dispatch_order", "arguments": args}).json()
     assert pre["ok"], pre["problems"]
     assert len(pre["summary"]["facts"]) == len(expected) and pre["summary"]["record_ids"] == [rid]
+    assert any(f.startswith("调运：砖 ") and "主井底车场（N1）" in f for f in pre["summary"]["facts"]), pre["summary"]["facts"]  # 弹窗用中文名
     r = world.call("issue_dispatch_order", args)
     assert not r.is_error, r.content[0].text
     (sent,) = world.holder.dispatches

@@ -335,7 +335,27 @@ def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) ->
             dest = sorted({str(p[-1]) for p in (body.get("routes") or {}).values() if isinstance(p, list) and p})
             return [f"补充撤人名单 {len(persons)} 人"] + ([f"撤往：{'、'.join(dest)}"] if dest else [])
         if tool == "issue_dispatch_order":
-            return [f"调运：{ln.get('item_type')} {ln.get('quantity')} {ln.get('unit')}（{ln.get('from_node')} → {ln.get('to_node')}）" for ln in body.get("lines") or [] if isinstance(ln, dict)]
+            # 引用了方案记录：物资和地点的中文名从方案的“需调运”明细取（与明细逐条对应）；没有就用编号
+            named: dict[tuple, dict[str, Any]] = {}
+            if body.get("record_id") and records is not None:
+                try:
+                    rec = records.get(str(body["record_id"]))
+                    pr = _result(rec)
+                    if "dispatch_lines" not in pr:
+                        pr = _result(records.get(str((rec.source.get("inputs") or {}).get("plan"))))
+                    named = {(x["item_type"], x["from_node"], x["to_node"]): x for x in pr.get("dispatch_lines") or []}
+                except (RecordNotFound, RecordTampered, ValueError, KeyError):
+                    named = {}
+            out = []
+            for ln in body.get("lines") or []:
+                if not isinstance(ln, dict):
+                    continue
+                n = named.get((ln.get("item_type"), ln.get("from_node"), ln.get("to_node"))) or {}
+                label = str(n.get("label") or ln.get("item_type")).split("（")[0]
+                frm = f"{n['from_name']}（{ln.get('from_node')}）" if n.get("from_name") else ln.get("from_node")
+                to = f"{n['to_name']}（{ln.get('to_node')}）" if n.get("to_name") else ln.get("to_node")
+                out.append(f"调运：{label} {ln.get('quantity')} {ln.get('unit')}（{frm} → {to}）")
+            return out
     except (RecordNotFound, RecordTampered, ValueError, KeyError, TypeError, AttributeError):
         return []
     return []
