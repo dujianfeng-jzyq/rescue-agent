@@ -2,6 +2,8 @@
 
 由 mcp/fire-model 的 effect.py（panel_effect）和 mcp/workflow 的 escalation.py（review_effect、counts_by_type）迁移，判据不变。
 测点：采空区束管 CO、采空区测温 TEMP、非进风侧安全监控 CO（采集清单 effect，窗口从 since 之前 baseline_h 小时到现在）。
+火区台账里本工作面已封闭时，封闭后一直读不到数的安全监控测点（密闭内断电）不参与复评，列在 sealed_off（2026-11-10 演示复看：
+封闭后这两个测点一直算“观测时间不足”）。TODO(专家): 封闭范围内哪些测点停用，按本矿封闭方案定。
 
 输入：{"evidence": <effect 证据，含 since>, "options": {"since_source": <处置开始时间的来源说明>}}。
 总体结论、各结论测点数、按类型分组的测点数、下次复评时刻都在这里算好，照抄，不要自己数或推算。
@@ -19,6 +21,20 @@ VERSION = "effect/1.0.0"
 SHORT = {"已受控": "已受控", "需继续处置": "需继续处置", "恶化": "恶化", "观测时间不足，暂不下结论": "观测时间不足"}
 SOURCE_NAMES = {"bundle_tube": "采空区束管", "temperature": "采空区测温", "safety_monitor": "安全监控"}
 METHOD = "逐测点处置前后速率比较后汇总（任一恶化→恶化；全部已受控→已受控；否则需继续处置；观测不足的测点不参与）。判据为演示占位值，需按本矿制度审定"
+
+
+def sealed_at(ev):
+    """火区台账里本工作面已封闭火区的封闭时间（没有台账或未封闭为 None）。"""
+    times = [datetime.fromisoformat(str(a["sealed_at"])) for a in ev.get("fire_areas") or [] if a.get("panel") == ev["panel"] and a.get("status") == "sealed" and a.get("sealed_at")]
+    return max(times) if times else None
+
+
+def sealed_dark(ev, tg, now):
+    """评估测点里，火区已封闭后一直读不到数的安全监控测点（密闭内断电）：不参与复评，单独列出。束管、测温缺数照常算观测不足。"""
+    at = sealed_at(ev)
+    if at is None:
+        return set()
+    return {s["id"] for s, m in tg if s["source"] == "safety_monitor" and not any(r.get("value") is not None for r in readings(ev, s["id"], m, at, now))}
 
 
 def targets(ev):
@@ -62,6 +78,8 @@ def run(data, _args):
     if windows and min(windows) * 3600 + 1 < (now - start).total_seconds():
         raise ValueError(f"证据的时间窗口不足：需要从处置前 {cfg['baseline_h']} 小时取到现在，检查采集清单的 before_since_h")
     tg = targets(ev)
+    dark = sealed_dark(ev, tg, now)
+    tg = [(s, m) for s, m in tg if s["id"] not in dark]
     if not tg:
         raise ValueError(f"工作面 {ev['panel']} 没有可用于效果评估的发火指标测点")
     warnings, points = [], []
@@ -97,6 +115,8 @@ def run(data, _args):
         "counts_text": "、".join(f"{SHORT.get(k, k)} {v} 个" for k, v in res["counts"].items()),
         "counts_by_type": by_type,
         "points": [{k: p[k] for k in ("sensor_id", "measurand", "effect", "effect_name", "value_at_since", "latest", "change_since", "rate_before_per_hour", "rate_after_per_hour", "rate_reduction_pct", "new_marker_gases", "basis")} | {"new_marker_gases_text": "、".join(p["new_marker_gases"])} for p in points],
+        "sealed_off": sorted(dark),  # 火区封闭后断电、不参与复评的安全监控测点
+        "sealed_off_text": "、".join(sorted(dark)),
         "escalation_suggested": res["overall"] == "worsening",
         "method": METHOD,
     }

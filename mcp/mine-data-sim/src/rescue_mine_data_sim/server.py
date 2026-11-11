@@ -351,7 +351,8 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
                     status=AlarmStatus.CLEARED if cleared is not None else AlarmStatus.ACTIVE,
                     raised_at=raised, cleared_at=cleared, value=value, threshold=limit,
                     acknowledged=ack is not None, acknowledged_at=ack,
-                    message=f"{SENSOR_BY_ID[sid].name} {m.value}={value} 超过报警值 {limit}",
+                    message=f"{SENSOR_BY_ID[sid].name} {m.value}={value} 超过报警值 {limit}"
+                    + ("；火区封闭、测点断电，报警解除" if cleared is not None and e.sealed_off_at(sid, cleared) else ""),
                 )
             )  # fmt: skip
         return out

@@ -23,7 +23,10 @@
    },
    "inert": {
     "penetration": 0.9
-   }
+   },
+   "continuous_supply": [
+    "grout_material_t"
+   ]
   }
  },
  "warnings": [],
@@ -223,7 +226,8 @@
     "shortage": 0.0,
     "sufficient": true,
     "in_ledger": true,
-    "label": "快速密闭材料（套）"
+    "label": "快速密闭材料（套）",
+    "continuous": false
    },
    {
     "item_type": "brick_pcs",
@@ -234,7 +238,8 @@
     "shortage": 4915,
     "sufficient": false,
     "in_ledger": false,
-    "label": "砖（块）"
+    "label": "砖（块）",
+    "continuous": false
    },
    {
     "item_type": "cement_t",
@@ -245,7 +250,8 @@
     "shortage": 0.931,
     "sufficient": false,
     "in_ledger": false,
-    "label": "水泥（t）"
+    "label": "水泥（t）",
+    "continuous": false
    },
    {
     "item_type": "sand_m3",
@@ -256,7 +262,8 @@
     "shortage": 2.35,
     "sufficient": false,
     "in_ledger": false,
-    "label": "砂（m³）"
+    "label": "砂（m³）",
+    "continuous": false
    }
   ],
   "shortages": [
@@ -269,7 +276,8 @@
     "shortage": 4915,
     "sufficient": false,
     "in_ledger": false,
-    "label": "砖（块）"
+    "label": "砖（块）",
+    "continuous": false
    },
    {
     "item_type": "cement_t",
@@ -280,7 +288,8 @@
     "shortage": 0.931,
     "sufficient": false,
     "in_ledger": false,
-    "label": "水泥（t）"
+    "label": "水泥（t）",
+    "continuous": false
    },
    {
     "item_type": "sand_m3",
@@ -291,7 +300,8 @@
     "shortage": 2.35,
     "sufficient": false,
     "in_ledger": false,
-    "label": "砂（m³）"
+    "label": "砂（m³）",
+    "continuous": false
    }
   ],
   "shortage_count": 3,

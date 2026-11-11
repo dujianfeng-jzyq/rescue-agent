@@ -411,6 +411,15 @@ class SimEngine:
         ch4 = p.ch4_goaf_pct * (1 - 0.3 * n2_frac)
         return {Measurand.O2: o2, Measurand.CO: co, Measurand.C2H4: c2h4, Measurand.C2H2: c2h2, Measurand.CO2: co2, Measurand.CH4: ch4, Measurand.H2: h2}
 
+    @staticmethod
+    def _sealed_off(sensor_id: str, s: _State) -> bool:
+        """密闭内的安全监控测点封闭后断电（读不到数）。"""
+        return s.sealed and sensor_id in (f"SM-{PANEL}-UC", f"SM-{PANEL}-RET", f"SM-{PANEL}-IN")
+
+    def sealed_off_at(self, sensor_id: str, ts: datetime) -> bool:
+        """该时刻测点是否因火区封闭断电（报警平台据此把断电前未恢复的报警解除）。"""
+        return self._sealed_off(sensor_id, self.state_at((ts - self.at(0)).total_seconds() / 3600))
+
     def _true_value(self, sensor_id: str, m: Measurand, s: _State) -> float | None:
         p = self.params_at(s.t_h)
         sensor = SENSOR_BY_ID[sensor_id]
@@ -437,7 +446,7 @@ class SimEngine:
                 return max(0.0, 100 - o2 - co2 - ch4 - 0.93)
             return bg[m] + near * (hot[m] - bg[m])
         # 安全监控测点：封闭后断电，读不到数
-        if s.sealed and sensor_id in (f"SM-{PANEL}-UC", f"SM-{PANEL}-RET", f"SM-{PANEL}-IN"):
+        if self._sealed_off(sensor_id, s):
             return None
         leak_share = min(1.0, s.leak_mult)
         uc = {
@@ -590,7 +599,7 @@ class SimEngine:
 
     def alarms(self, start_h: float, end_h: float) -> list[tuple[str, Measurand, datetime, datetime | None, float, float]]:
         """报警平台视角：每次越限一条 (传感器, 参数, 越限时间, 恢复时间或 None, 越限时读数, 报警值)。
-        缺数不算报警（那是 get_events 的测点故障）。返回窗口内仍越限或在窗口内恢复的报警；
+        缺数不算报警（那是 get_events 的测点故障），也不算恢复；只有火区封闭断电时，报警在断电时刻解除。返回窗口内仍越限或在窗口内恢复的报警；
         越限时间是真正开始越限的时刻（从场景开始扫，不从窗口起点算）：原来窗口起点之前就已越限的报警从窗口第一个读数算起，
         窗口一滑动越限时间就变，报警编号跟着变，监听器每一步都当成新报警（封闭后测点断电、报警一直未恢复时尤其明显）。"""
         end_h = min(end_h, self.now_h())
@@ -600,6 +609,12 @@ class SimEngine:
             open_: tuple[datetime, float] | None = None
             for r in self.readings([sid], 0.0, end_h, [m]):
                 if r.quality == Quality.MISSING or r.value is None:
+                    # 缺数一般不算恢复（测点故障在 get_events）；但火区封闭后测点断电是停用，报警平台在断电时解除报警，
+                    # 否则封闭前越限的报警永远“未恢复”，大屏一直标红（2026-11-10 演示复看）
+                    if open_ is not None and self.sealed_off_at(sid, r.ts):
+                        if r.ts >= start:
+                            out.append((sid, m, open_[0], r.ts, open_[1], limit))
+                        open_ = None
                     continue
                 if r.value > limit and open_ is None:
                     open_ = (r.ts, r.value)

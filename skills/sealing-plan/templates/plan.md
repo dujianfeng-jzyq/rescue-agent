@@ -32,7 +32,7 @@
 材料与库存（计算结果，参数为开发占位值）：{{^compose.result.supply}}无{{/compose.result.supply}}
 
 {{#compose.result.supply}}
-- {{label}}：需要 {{required}}，台账现有 {{on_hand}}{{^sufficient}}，缺口 {{shortage}}{{/sufficient}}
+- {{label}}：{{#continuous}}总量 {{required}}，台账现有 {{on_hand}}，持续供应（按注浆站能力连续制浆，不算缺口）{{/continuous}}{{^continuous}}需要 {{required}}，台账现有 {{on_hand}}{{^sufficient}}，缺口 {{shortage}}{{/sufficient}}{{/continuous}}
 {{/compose.result.supply}}
 
 {{#compose.result.has_shortages}}

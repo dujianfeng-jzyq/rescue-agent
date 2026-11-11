@@ -32,6 +32,8 @@ export interface SensorGroupSpec {
 export interface CollectKindSpec {
   sensors?: SensorGroupSpec[]
   events_h?: number
+  /** 矿井报警平台未恢复报警的回看时长（矿井小时） */
+  mine_alarms_h?: number
   fire_areas?: boolean
   personnel?: boolean
   inventory?: boolean
@@ -106,6 +108,7 @@ export interface Evidence {
   groups: Record<string, { sensors: any[]; measurands: Record<string, string[]>; latest: any[]; readings: any[]; window_h: number }>
   missing: { group: string; reason: string }[]
   events?: any[]
+  mine_alarms?: any[] | null
   fire_areas?: any[]
   personnel?: any
   inventory?: any[]
@@ -154,6 +157,14 @@ export async function collect(call: CallTool, spec: CollectSpec, kind: string, p
     ev.groups[g.name] = { sensors: picked, measurands, latest: sortReadings(latest), readings: sortReadings(readings), window_h: windowH }
   }
   if (k.events_h) ev.events = unwrap(await call('get_events', { hours: k.events_h }))
+  if (k.mine_alarms_h) {
+    // 矿井报警平台的未恢复报警（可选功能：矿井没有报警平台时为 null，不影响研判）
+    try {
+      ev.mine_alarms = unwrap(await call('get_alarms', { hours: k.mine_alarms_h, active_only: true }))
+    } catch {
+      ev.mine_alarms = null
+    }
+  }
   if (k.fire_areas) ev.fire_areas = unwrap(await call('get_fire_areas', {}))
   if (k.personnel) ev.personnel = await call('get_personnel', {})
   if (k.inventory) ev.inventory = unwrap(await call('get_inventory', {}))

@@ -192,6 +192,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
     `自燃发展阶段 ${st.stage_name}`,
     `爆炸危险性 ${x.overall_name}`,
     `实时报警 ${al.count} 条`,
+    ...(al.platform_available ? [`矿井报警平台未恢复报警 ${al.platform_count} 条`] : []),
     pe.computed ? `受威胁 ${pe.total_threatened} 人` : pe.note,
     es.recommend ? '建议升级为应急响应' : '暂不建议升级为应急响应',
   ].join('；')

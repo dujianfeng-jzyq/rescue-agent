@@ -37,6 +37,10 @@
    }
   ],
   "count": 3,
-  "reseal_indicated": true
+  "reseal_indicated": true,
+  "platform_available": false,
+  "platform_alarms": [],
+  "platform_count": 0,
+  "platform_text": ""
  }
 }

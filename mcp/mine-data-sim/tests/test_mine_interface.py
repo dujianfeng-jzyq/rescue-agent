@@ -127,6 +127,20 @@ def test_alarm_id_is_stable_as_the_window_slides():
     assert set(first) <= set(later), "仍越限的报警编号不能随窗口变"
 
 
+
+def test_sealing_powers_off_sensors_and_clears_their_alarms():
+    """封闭前越限、封闭后测点断电：报警在断电时解除（注明原因），不再一直“未恢复”（2026-11-10 演示复看：回风巷一直标红）。"""
+    holder, server = make("s4-escalation", 0)
+    md = MineData(server)
+    holder.engine.clock.advance(70)
+    active = [a for a in run(md.alarms(hours=24, active_only=True)) if a.sensor_id == "SM-1201-UC"]
+    assert active
+    holder.engine.apply("temporary_seal")
+    holder.engine.clock.advance(1)
+    assert [a for a in run(md.alarms(hours=24, active_only=True)) if a.sensor_id == "SM-1201-UC"] == []
+    cleared = [a for a in run(md.alarms(hours=24)) if a.alarm_id == active[0].alarm_id]
+    assert cleared and cleared[0].status.value == "cleared" and "封闭" in cleared[0].message
+
 def test_equipment_follows_treatments():
     holder, server = make()
     md = MineData(server)

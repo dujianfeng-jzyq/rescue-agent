@@ -2,9 +2,10 @@
 
 边界约定：
 - rescue-mine（矿井接口）只执行、不判断；红线、记录核对、批准、台账都在这一侧。换矿不用重审。
-- 对外动作工具（start_monitoring、publish_warning、escalate_emergency、notify_evacuation、issue_dispatch_order、issue_sealing_plan、issue_firefighting_plan、approve_unsealing）都是 C 级动作
+- 对外动作工具（publish_warning、escalate_emergency、notify_evacuation、issue_dispatch_order、issue_sealing_plan、issue_firefighting_plan、approve_unsealing）都是 C 级动作
   （rescue_contract.action_policy）：先预检，再人工确认，本服务在执行前强制校验，通过后才调用 rescue-mine 的
   send_notice / dispatch_order / submit_treatment（写入令牌只有本服务持有）。
+- 加密监测 start_monitoring 是 B 级（只增加观察、不改变现场）：不弹人工确认，但同样在本服务校验引用的记录并写台账。
 - 只读和计算类工具分布在其他服务；方案自查用本服务的只读工具 precheck_plan，台账查询用 query_last_issued（A 级，不弹确认）。
 
 三道防线：
@@ -261,8 +262,8 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
 
     @server.tool()
     async def start_monitoring(record_id: str) -> ActionReceipt:
-        """开始加密监测（观察跟进；确认人：值班长，黄色预警的处置）。只给 record_id，照抄 run_fire_assessment 返回的 record_ids.warning。
-        监测只增加观察、不改变现场；批准超时没人回应时按动作分级表自动放行（并提醒总工程师）。"""
+        """开始加密监测（观察跟进，黄色预警的处置）。只给 record_id，照抄 run_fire_assessment 返回的 record_ids.warning。
+        监测只增加观察、不改变现场，按动作分级表是 B 级：不弹人工确认，提交即执行（本服务仍核对记录并写台账）。"""
         payload = MonitoringRequest(record_id=record_id)
         now = await require_now("start_monitoring", payload, [record_id])
         result = precheck("start_monitoring", {"record_id": record_id}, now, record_store)
@@ -399,13 +400,13 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
 
     @server.tool()
     def query_last_issued(panel: str = "1201") -> dict[str, Any]:
-        """本工作面最近一次已下发（status=issued）的封闭方案或防灭火方案（只读）。固定流程 review_effect 缺处置开始时间时用它，
+        """本工作面处置开始时间的台账依据（只读）：最近一次已下发（status=issued）的封闭方案或防灭火方案；
+        没有方案时取最近一次已开始的加密监测（黄色阶段只有观察跟进）。固定流程 review_effect 缺处置开始时间时用它，
         found 为 false 时没有可用的下发记录。返回 tool、action_id、issued_at（矿井时间）、plan_id、title。"""
-        hits = [
-            r
-            for r in ledger_records(ledger.path)
-            if r.get("tool") in ("issue_sealing_plan", "issue_firefighting_plan") and r.get("status") == "issued" and for_panel(r.get("payload") or {}, panel)
-        ]
+        rows = [r for r in ledger_records(ledger.path) if r.get("status") == "issued"]
+        plans = [r for r in rows if r.get("tool") in ("issue_sealing_plan", "issue_firefighting_plan") and for_panel(r.get("payload") or {}, panel)]
+        monitors = [r for r in rows if r.get("tool") == "start_monitoring" and record_panel(str((r.get("payload") or {}).get("record_id", ""))) == panel]
+        hits = plans or monitors  # 方案优先：方案之后再开的加密监测不是新的处置，不能把起算时间往后挪
         if not hits:
             return {"found": False, "panel": panel}
         r = hits[-1]

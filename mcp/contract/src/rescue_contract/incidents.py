@@ -74,8 +74,8 @@ def fold(incident_id: str, entries: list[dict[str, Any]]) -> dict[str, Any]:
         k, d = e["kind"], e.get("data") or {}
         if k == "alert":
             alerts[e["event_id"]] = e
-            if status == "stable":
-                status = "monitoring"  # 稳定后再次告警：回到监测中
+            if status == "stable" and d.get("cause") != "followup_due":
+                status = "monitoring"  # 稳定后再次告警：回到监测中（计划内的跟踪到点不算）
         elif k in ("delivered", "acked"):
             handled.add(d.get("alert_id"))
         elif k == "status":

@@ -10,7 +10,10 @@
    },
    "inert": {
     "penetration": 0.9
-   }
+   },
+   "continuous_supply": [
+    "grout_material_t"
+   ]
   }
  },
  "warnings": [],
@@ -179,7 +182,8 @@
     "shortage": 1762.5,
     "sufficient": false,
     "in_ledger": true,
-    "label": "注浆干料（t）"
+    "label": "注浆干料（t）",
+    "continuous": true
    },
    {
     "item_type": "nitrogen_capacity_m3_h",
@@ -190,22 +194,12 @@
     "shortage": 534.0,
     "sufficient": false,
     "in_ledger": true,
-    "label": "制氮产能（m³/h）"
+    "label": "制氮产能（m³/h）",
+    "continuous": false
    }
   ],
   "shortages": [
    {
-    "item_type": "grout_material_t",
-    "name": "注浆材料（黄泥/粉煤灰）",
-    "required": 2062.5,
-    "on_hand": 300.0,
-    "unit": "t",
-    "shortage": 1762.5,
-    "sufficient": false,
-    "in_ledger": true,
-    "label": "注浆干料（t）"
-   },
-   {
     "item_type": "nitrogen_capacity_m3_h",
     "name": "地面制氮机组（产能）",
     "required": 1734.0,
@@ -214,10 +208,11 @@
     "shortage": 534.0,
     "sufficient": false,
     "in_ledger": true,
-    "label": "制氮产能（m³/h）"
+    "label": "制氮产能（m³/h）",
+    "continuous": false
    }
   ],
-  "shortage_count": 2,
+  "shortage_count": 1,
   "has_shortages": true,
   "missing_inputs": [],
   "has_missing": false,

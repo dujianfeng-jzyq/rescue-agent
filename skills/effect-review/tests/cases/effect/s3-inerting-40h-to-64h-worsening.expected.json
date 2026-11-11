@@ -208,6 +208,8 @@
     "new_marker_gases_text": ""
    }
   ],
+  "sealed_off": [],
+  "sealed_off_text": "",
   "escalation_suggested": true,
   "method": "逐测点处置前后速率比较后汇总（任一恶化→恶化；全部已受控→已受控；否则需继续处置；观测不足的测点不参与）。判据为演示占位值，需按本矿制度审定"
  }

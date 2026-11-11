@@ -139,6 +139,12 @@ async def collect(call: CallTool, spec: dict[str, Any], kind: str, panel: str, s
         }
     if k.get("events_h"):
         ev["events"] = _unwrap(await call("get_events", {"hours": k["events_h"]}))
+    if k.get("mine_alarms_h"):
+        # 矿井报警平台的未恢复报警（可选功能：矿井没有报警平台时为 None，不影响研判）
+        try:
+            ev["mine_alarms"] = _unwrap(await call("get_alarms", {"hours": k["mine_alarms_h"], "active_only": True}))
+        except Exception:  # noqa: BLE001
+            ev["mine_alarms"] = None
     for key, tool in (("fire_areas", "get_fire_areas"), ("personnel", "get_personnel"), ("inventory", "get_inventory"), ("rescue_teams", "get_rescue_teams"), ("network", "get_network")):
         if k.get(key):
             ev[key] = _unwrap(await call(tool, {}))

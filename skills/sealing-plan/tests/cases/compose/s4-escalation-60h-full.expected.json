@@ -23,7 +23,10 @@
    },
    "inert": {
     "penetration": 0.9
-   }
+   },
+   "continuous_supply": [
+    "grout_material_t"
+   ]
   }
  },
  "warnings": [],
@@ -303,7 +306,8 @@
     "shortage": 0.0,
     "sufficient": true,
     "in_ledger": true,
-    "label": "快速密闭材料（套）"
+    "label": "快速密闭材料（套）",
+    "continuous": false
    },
    {
     "item_type": "brick_pcs",
@@ -314,7 +318,8 @@
     "shortage": 9830,
     "sufficient": false,
     "in_ledger": false,
-    "label": "砖（块）"
+    "label": "砖（块）",
+    "continuous": false
    },
    {
     "item_type": "cement_t",
@@ -325,7 +330,8 @@
     "shortage": 1.862,
     "sufficient": false,
     "in_ledger": false,
-    "label": "水泥（t）"
+    "label": "水泥（t）",
+    "continuous": false
    },
    {
     "item_type": "sand_m3",
@@ -336,7 +342,8 @@
     "shortage": 4.7,
     "sufficient": false,
     "in_ledger": false,
-    "label": "砂（m³）"
+    "label": "砂（m³）",
+    "continuous": false
    },
    {
     "item_type": "grout_material_t",
@@ -347,7 +354,8 @@
     "shortage": 1762.5,
     "sufficient": false,
     "in_ledger": true,
-    "label": "注浆干料（t）"
+    "label": "注浆干料（t）",
+    "continuous": true
    },
    {
     "item_type": "nitrogen_capacity_m3_h",
@@ -358,7 +366,8 @@
     "shortage": 0.0,
     "sufficient": true,
     "in_ledger": true,
-    "label": "制氮产能（m³/h）"
+    "label": "制氮产能（m³/h）",
+    "continuous": false
    }
   ],
   "shortages": [
@@ -371,7 +380,8 @@
     "shortage": 9830,
     "sufficient": false,
     "in_ledger": false,
-    "label": "砖（块）"
+    "label": "砖（块）",
+    "continuous": false
    },
    {
     "item_type": "cement_t",
@@ -382,7 +392,8 @@
     "shortage": 1.862,
     "sufficient": false,
     "in_ledger": false,
-    "label": "水泥（t）"
+    "label": "水泥（t）",
+    "continuous": false
    },
    {
     "item_type": "sand_m3",
@@ -393,21 +404,11 @@
     "shortage": 4.7,
     "sufficient": false,
     "in_ledger": false,
-    "label": "砂（m³）"
-   },
-   {
-    "item_type": "grout_material_t",
-    "name": "注浆材料（黄泥/粉煤灰）",
-    "required": 2062.5,
-    "on_hand": 300.0,
-    "unit": "t",
-    "shortage": 1762.5,
-    "sufficient": false,
-    "in_ledger": true,
-    "label": "注浆干料（t）"
+    "label": "砂（m³）",
+    "continuous": false
    }
   ],
-  "shortage_count": 4,
+  "shortage_count": 3,
   "has_shortages": true,
   "missing_inputs": [
    {

@@ -367,6 +367,19 @@ def test_query_last_issued_only_sees_issued_plans(world):
     assert world.call("query_last_issued", {"panel": "1202"}).structured_content["found"] is False
 
 
+
+def test_query_last_issued_falls_back_to_monitoring(world):
+    """黄色阶段只有加密监测：复评起算时间取加密监测的开始时间；有方案时方案优先（之后再开的加密监测不挪起算时间）。"""
+    rid = world.result_record("fire-assessment", "warning", {"level": "yellow"})
+    assert not world.call("start_monitoring", {"record_id": rid}).is_error
+    out = world.call("query_last_issued", {"panel": "1201"}).structured_content
+    assert out["found"] and out["tool"] == "start_monitoring" and out["issued_at"] == world.rows()[-1]["issued_at"]
+    assert world.call("query_last_issued", {"panel": "1202"}).structured_content["found"] is False
+    with world.ledger.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"tool": "issue_firefighting_plan", "status": "issued", "action_id": "A-2", "issued_at": "2000-01-01T00:00:00", "payload": {"panel": "1201", "plan_id": "FP-1"}}) + "\n")
+    out = world.call("query_last_issued", {"panel": "1201"}).structured_content
+    assert out["tool"] == "issue_firefighting_plan" and out["plan_id"] == "FP-1"
+
 # ── 动作分级：guard 的工具与分级表一致 ──
 
 

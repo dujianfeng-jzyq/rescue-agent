@@ -406,6 +406,11 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
     } catch (e) {
       fireAreas = { items: [], error: `火区台账取不到：${(e as Error).message}` }
     }
+    // 火区已封闭：密闭内的安全监控测点断电、读不到数是预期的，显示“封闭断电”而不是缺数（束管、测温缺数照常显示缺数）
+    const sealed = new Set(fireAreas.items.filter((f) => f.status === 'sealed').map((f) => f.panel))
+    if (readings.panel && sealed.has(readings.panel)) {
+      readings.rows = readings.rows.map((r) => (r.quality === 'missing' && byId.get(r.sensorId)?.source === 'safety_monitor' ? { ...r, quality: 'sealed_off' } : r))
+    }
   }
 
   let evacuation: EvacuationView | null = null

@@ -165,7 +165,8 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
       name: 'add_followup',
       description:
         '登记跟踪计划：处置下发后，过一段矿井时间到点，监听器会唤醒你复评（review_effect）。到点时间由系统按矿井时钟算，你不要自己算。' +
-        'after_h 不给时由系统定：最近一次复评之后没有新处置，就用复评给出的下次复评时刻；刚下发了新处置或还没复评过，用技能规定的默认间隔（返回的 due_at、basis 照抄）。指挥人员明确要求某个间隔时才填 after_h。expect 写一句话预期（如“注惰后上隅角 CO 应回落”）。',
+        'after_h 不给时由系统定：最近一次复评之后没有新处置，就用复评给出的下次复评时刻；刚下发了新处置或还没复评过，用技能规定的默认间隔（返回的 due_at、basis 照抄）。指挥人员明确要求某个间隔时才填 after_h。expect 写一句话预期（如“注惰后上隅角 CO 应回落”）。' +
+        '一个事件只保留一条跟踪：没完成的旧跟踪会被新跟踪取代（返回的 superseded），不用再对它们 complete_followup。',
       parameters: {
         incident_id: { type: 'string', required: true, description: '事件编号' },
         after_h: { type: 'number', description: '多少矿井小时后复评（大于 0）；缺省由系统定（见工具说明）' },
@@ -185,8 +186,13 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
           basis = '按给定间隔'
         }
         const followupId = `FU-${now.slice(0, 19).replace(/[-:]/g, '')}-${Math.random().toString(36).slice(2, 6)}`
+        // 一个事件只保留一条跟踪：新跟踪取代没完成的旧跟踪（2026-11-10 演示复看：橙色登记新跟踪时没关掉黄色的，两条线各自每 12 小时复评一次）
+        const superseded = (await store.get(String(args.incident_id))).followups.filter((f) => f.state !== 'done').map((f) => f.followup_id)
+        for (const id of superseded) {
+          await store.append(String(args.incident_id), now, 'followup_done', 'agent', { followup_id: id, result: `被新的跟踪计划 ${followupId} 取代` })
+        }
         await store.append(String(args.incident_id), now, 'followup_added', 'agent', { followup_id: followupId, due_at: dueAt, expect: String(args.expect) })
-        return toJson({ followup_id: followupId, due_at: dueAt, now, after_h: hours, basis })
+        return toJson({ followup_id: followupId, due_at: dueAt, now, after_h: hours, basis, superseded })
       },
     }),
   )

@@ -11,6 +11,10 @@
 
 各结论测点数：{{effect.result.counts_text}}
 
+{{#effect.result.sealed_off_text}}
+火区已封闭、测点断电，不参与复评：{{.}}
+
+{{/effect.result.sealed_off_text}}
 {{#effect.result.counts_by_type}}
 - {{type}} {{measurand}} 共 {{total}} 个：{{counts_text}}
 {{/effect.result.counts_by_type}}

@@ -307,7 +307,7 @@ def main(argv: list[str]) -> int:
         b = stage("步骤 2 黄色", 35.5, "黄色")
         iid = ctx["iid"]
         check("黄色：研判记入时间线", notes(store, iid, b, "assessment") >= 1)
-        check("黄色：加密监测经确认下发，没有其他对外动作", set(actions(store, iid, b)) == {("start_monitoring", "issued")})
+        check("黄色：加密监测已下发（不弹确认），没有其他对外动作", set(actions(store, iid, b)) == {("start_monitoring", "issued")})
         check("黄色：登记了跟踪计划", followups_since(store, iid, b) >= 1)
 
         # ── 橙色 ──

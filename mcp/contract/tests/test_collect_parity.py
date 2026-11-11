@@ -41,6 +41,7 @@ kinds:
         select: {role: main_return, panel: true}   # 总回风没有所属工作面：按工作面取不到，要记进 missing
         required: true
     events_h: 6
+    mine_alarms_h: 72
     fire_areas: true
     personnel: true
   effect:

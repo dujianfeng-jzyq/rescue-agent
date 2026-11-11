@@ -132,9 +132,11 @@ def run(data, _args):
     rows = [supply(stock, item, qty) for item, qty in needs.items()]
     if inert:
         rows.append(supply(stock, "nitrogen_capacity_m3_h", float(inert["required_n2_m3_h"])))
+    continuous = set(cfg.get("continuous_supply") or [])
     for r in rows:
         r["label"] = ITEM_NAMES.get(r["item_type"], r["item_type"])
-    shortages = [r for r in rows if not r["sufficient"]]
+        r["continuous"] = r["item_type"] in continuous  # 持续供应：总量照算，不算缺口
+    shortages = [r for r in rows if not r["sufficient"] and not r["continuous"]]
 
     plan = {
         "plan_id": sk["plan_id"],

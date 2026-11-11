@@ -25,3 +25,4 @@ kinds:
         measurands: [CO]
         before_since_h: 12
     network: true
+    fire_areas: true              # 火区已封闭时，密闭内断电的安全监控测点不参与复评

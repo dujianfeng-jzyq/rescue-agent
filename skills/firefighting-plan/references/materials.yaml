@@ -13,3 +13,7 @@ grout:
 inert:
   # 注氮稀释估算：O₂_target = O₂_current × Q_leak / (Q_leak + η·Q_N₂)；η 为注入氮气进入漏风流的比例
   penetration: 0.9
+
+# 持续供应的物资：总量照算、列出台账现有量，但不算缺口、不进“有缺口的物资”（注浆是几天里按注浆站能力连续制浆，
+# 不是开工前一次备齐；2026-11-10 演示复看）。TODO(专家): 哪些物资按持续供应、是否按注浆站日产能核对，按本矿注浆工艺定
+continuous_supply: [grout_material_t]

@@ -12,6 +12,10 @@
 
 实时报警：{{^alarms.result.alarms}}无{{/alarms.result.alarms}}
 
+{{#alarms.result.platform_available}}
+矿井报警平台未恢复的报警（矿井自己的越限报警，不是规程红线报警）：{{alarms.result.platform_count}} 条{{#alarms.result.platform_text}}：{{.}}{{/alarms.result.platform_text}}
+
+{{/alarms.result.platform_available}}
 {{#alarms.result.reseal_indicated}}
 启封后复燃：火区已启封且出现复燃征兆，应重新封闭。
 

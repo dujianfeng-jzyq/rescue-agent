@@ -94,6 +94,7 @@ kinds:                          # 一份清单可以有多种采集，如 check�
         window_h: 6             # 可选：历史窗口（矿井小时）；缺省只取最新值
         required: true          # 没有匹配的测点时写进证据的 missing
     events_h: 6                 # 可选：安全监控事件
+    mine_alarms_h: 72           # 可选：矿井报警平台的未恢复报警（get_alarms，active_only；矿井没有报警平台时为 null）
     fire_areas: true            # 可选：火区台账；还有 personnel、inventory、rescue_teams、network
 ```
 

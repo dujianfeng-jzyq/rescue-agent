@@ -233,6 +233,20 @@ async def test_followup_due(tmp_path, monkeypatch):
 
 
 @arun
+async def test_followup_due_keeps_a_stable_incident_stable(tmp_path, monkeypatch):
+    """计划内的跟踪到点不是新的异常：已稳定的事件不改回监测中（2026-11-10 演示复看）。"""
+    f = Fake(tmp_path, monkeypatch)
+    await f.step(result("blue", "latent", reasons=["x"], escalated=True))
+    (inc,) = f.store.list()
+    iid = inc["incident_id"]
+    f.store.append(iid, f.mine_now(), "status", "agent", {"status": "stable"})
+    f.store.append(iid, f.mine_now(), "followup_added", "agent", {"followup_id": "FU-1", "due_at": "2026-01-01T01:00:00", "expect": "封闭后复评"})
+    got = await f.step(result("blue", "latent"), minutes=65)
+    assert [a["data"]["cause"] for a in got] == ["followup_due"]
+    assert f.store.get(iid)["status"] == "stable"
+
+
+@arun
 async def test_mine_alarm_ingested_once(tmp_path, monkeypatch):
     f = Fake(tmp_path, monkeypatch)
     f.alarms = [{"alarm_id": "AL-1", "sensor_id": "SM-1201-UC", "message": "上隅角 CO 超过报警值", "acknowledged": False, "value": 60, "threshold": 24}]

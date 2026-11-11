@@ -25,6 +25,10 @@
    }
   ],
   "count": 1,
-  "reseal_indicated": false
+  "reseal_indicated": false,
+  "platform_available": false,
+  "platform_alarms": [],
+  "platform_count": 0,
+  "platform_text": ""
  }
 }

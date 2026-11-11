@@ -48,6 +48,20 @@ describe('buildState', () => {
     assert.equal(s.readings.rows[1]!.quality, 'missing', '缺测如实显示，不补数')
   })
 
+  it('火区已封闭：安全监控测点缺数显示为封闭断电，束管缺数照常是缺数', async () => {
+    const f = await fixture()
+    const sensors = [
+      { id: 'S1', name: '上隅角 CO', role: 'upper_corner', panel: '211016', source: 'safety_monitor', measurands: ['CO'] },
+      { id: 'T1', name: '束管 1', role: 'goaf_gas_tube', panel: '211016', source: 'bundle_tube', measurands: ['CO'] },
+    ]
+    const missing = (a: any) => (a.sensor_ids as string[]).map((id) => ({ sensor_id: id, measurand: 'CO', ts: 'x', value: null, quality: 'missing' }))
+    const areas = (status: string) => () => [{ area_id: 'FA-1', panel: '211016', name: '211016 采空区', status, sealed_at: '2026-11-09T07:00:00' }]
+    let s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine({ list_sensors: () => sensors, get_latest: missing, get_fire_areas: areas('sealed') }) })
+    assert.deepEqual(s.readings.rows.map((r) => [r.sensorId, r.quality]), [['S1', 'sealed_off'], ['T1', 'missing']])
+    s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine({ list_sensors: () => sensors, get_latest: missing, get_fire_areas: areas('unsealed') }) })
+    assert.deepEqual(s.readings.rows.map((r) => r.quality), ['missing', 'missing'], '启封后断电就是缺数')
+  })
+
   it('值班会话：编号取自 duty-session.json，最近一次投递取自当前事件', async () => {
     const f = await fixture()
     let s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine() })

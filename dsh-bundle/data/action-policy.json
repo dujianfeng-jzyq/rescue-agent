@@ -7,15 +7,6 @@
   },
   "policies": [
     {
-      "tool": "start_monitoring",
-      "level": "C",
-      "name": "开始加密监测（观察跟进）",
-      "confirmer": "值班长",
-      "approval_timeout_min": 5,
-      "escalate_to": "总工程师",
-      "on_timeout": "approve"
-    },
-    {
       "tool": "publish_warning",
       "level": "C",
       "name": "发布预警等级",
@@ -91,6 +82,15 @@
       "tool": "query_last_issued",
       "level": "A",
       "name": "查询最近一次下发",
+      "confirmer": null,
+      "approval_timeout_min": null,
+      "escalate_to": null,
+      "on_timeout": "escalate"
+    },
+    {
+      "tool": "start_monitoring",
+      "level": "B",
+      "name": "开始加密监测（观察跟进）",
       "confirmer": null,
       "approval_timeout_min": null,
       "escalate_to": null,

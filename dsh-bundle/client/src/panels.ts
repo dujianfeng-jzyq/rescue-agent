@@ -17,7 +17,7 @@ const LEVEL_COLOR: Record<string, string> = { none: '#35c46a', blue: '#4aa3ff', 
 const KIND_COLOR: Record<string, string> = { alert: '#ff8a1f', recovered: '#35c46a', degraded: '#f5c518', opened: '#4aa3ff', note: '#7fb2e6', status: '#9aa8ff' }
 
 /** 读数质量（契约 Quality）的中文；不认识的原样显示 */
-const QUALITY_NAME: Record<string, string> = { missing: '缺数', suspect: '疑似异常' }
+const QUALITY_NAME: Record<string, string> = { missing: '缺数', suspect: '疑似异常', sealed_off: '封闭断电' }
 /** 智能体卡片里最多列几条最近记录（卡片在聊天区上方，要短） */
 const MAX_RECORDS = 3
 

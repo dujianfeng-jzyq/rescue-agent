@@ -86,7 +86,7 @@ export function fold(incidentId: string, entries: Entry[]): IncidentView {
     switch (e.kind) {
       case 'alert':
         alerts.set(e.event_id, e)
-        if (status === 'stable') status = 'monitoring'
+        if (status === 'stable' && d.cause !== 'followup_due') status = 'monitoring' // 稳定后再次告警回到监测中；计划内的跟踪到点不算
         break
       case 'delivered':
       case 'acked':

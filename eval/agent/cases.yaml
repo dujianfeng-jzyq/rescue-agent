@@ -469,11 +469,11 @@
     - 告警 {alert_id}（矿井时间 {mine_now}）：1201 工作面：预警等级由 蓝色 升为 黄色
     请立即对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。不要先问操作员“要不要研判”。
     （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
-  approvals: {start_monitoring: allow} # 加密监测放行，其余对外动作一律拒绝（本用例期望不提交别的）
+  approvals: {start_monitoring: allow} # 加密监测是 B 级不弹确认（这里保留放行，兼容旧表）；其余对外动作一律拒绝（本用例期望不提交别的）
   checks:
     expect_decisions:
       status: placeholder
-      derived_from: {hand_written: 分级决策表（占位，2026-11-09 第五版）：黄色 = 研判、告知、加密监测（start_monitoring，超时自动放行）、登记复评，不提交其他对外动作}
+      derived_from: {hand_written: 分级决策表（占位，2026-11-09 第五版）：黄色 = 研判、告知、加密监测（start_monitoring，B 级不弹确认；2026-11-10 起）、登记复评，不提交其他对外动作}
       external_actions:
         required:
           start_monitoring: {}

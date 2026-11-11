@@ -10,7 +10,10 @@
    },
    "inert": {
     "penetration": 0.9
-   }
+   },
+   "continuous_supply": [
+    "grout_material_t"
+   ]
   }
  },
  "warnings": [],

@@ -206,12 +206,13 @@ def effect_inputs() -> dict[tuple[str, str, str], dict]:
         (ER, "effect", "s2-inerting-48h-to-72h-continuing"): {"evidence": effect_evidence("s2-slow-oxidation", 48, inert, 72), "options": {"since_source": "指挥人员给出"}},
         (ER, "effect", "s2-inerting-48h-to-54h-insufficient"): {"evidence": effect_evidence("s2-slow-oxidation", 48, inert[:1], 54)},
         (ER, "effect", "s3-inerting-40h-to-64h-worsening"): {"evidence": effect_evidence("s3-accelerating", 40, [("inert_injection", {"rate_m3_h": 600}, None)], 64)},
+        (ER, "effect", "s4-sealed-48h-to-72h-monitors-off"): {"evidence": effect_evidence("s4-escalation", 48, [("temporary_seal", {}, None), ("permanent_seal", {}, None)], 72)},
     }
 
 
 def effect_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
     out = {}
-    for case in ("s2-inerting-48h-to-72h-continuing", "s3-inerting-40h-to-64h-worsening"):
+    for case in ("s2-inerting-48h-to-72h-continuing", "s3-inerting-40h-to-64h-worsening", "s4-sealed-48h-to-72h-monitors-off"):
         r = run(ER, "effect", inputs[(ER, "effect", case)])
         out[(ER, "report", case)] = report_data({"effect": fake_record("effect", r, 0)})
         out[(ER, "brief", case)] = report_data({"effect": fake_record("effect", r, 0)})

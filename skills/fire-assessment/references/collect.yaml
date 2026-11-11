@@ -37,6 +37,7 @@ kinds:
     fire_areas: true
   assessment:
     sensors: *sensors
+    mine_alarms_h: 72             # 矿井报警平台未恢复的报警：研判要点里与规程红线报警分开列出
     fire_areas: true
     personnel: true
     network: true

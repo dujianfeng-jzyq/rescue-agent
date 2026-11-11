@@ -112,7 +112,8 @@ class Sentinel:
         return found["incident_id"] if found else self.store.open(at, category=category, panel=panel, summary=summary, by=BY)
 
     def _alert(self, incident_id: str, at: str, cause: str, summary: str, **data: Any) -> dict[str, Any]:
-        if self.store.get(incident_id)["status"] == "stable":
+        # 计划内的跟踪到点不是新的异常：已稳定的事件保持已稳定（2026-11-10 演示复看：每次到点都在 监测中/已稳定 之间来回跳）
+        if cause != "followup_due" and self.store.get(incident_id)["status"] == "stable":
             self.store.append(incident_id, at, "status", BY, {"status": "monitoring", "reason": "稳定后再次出现告警"})
         return self.store.append(incident_id, at, "alert", BY, {"cause": cause, "summary": summary, **data})
 

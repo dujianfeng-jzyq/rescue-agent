@@ -2,13 +2,13 @@
 
 | 级别 | 动作 | 处理 |
 | A 只读 | 取数、研判、检索、起草方案、预检 | 自动 |
-| B 内部提示 | 给值班人员的告警、事件更新、报告交付 | 自动 |
+| B 内部提示 / 观察 | 给值班人员的告警、事件更新、报告交付、加密监测（只增加观察、不改变现场） | 自动（加密监测仍经 guard 校验并写台账） |
 | C 对外动作 | 预警广播、撤人通知、方案下发、调度下发、升级、启封审批 | 守卫校验 + 人工批准；弹窗显示依据 |
 
 这张表是分级的唯一来源：DSH 审批插件按它决定哪些工具要弹确认（读 `dsh-bundle/data/action-policy.json`，由 export_schema 导出），
 guard 的测试检查“每个工具都登记了、登记的都存在”。**没有登记的工具按 C 级处理**（fail closed）。
 
-超时后怎么办（on_timeout，第五版）：approve 自动放行（只给低风险、可逆的动作，如加密监测）、reject 自动拒绝、escalate 只升级提醒不执行（缺省；影响现场或不可逆的动作一律不自动执行）。
+超时后怎么办（on_timeout，第五版）：approve 自动放行（只给低风险、可逆的动作；目前没有工具用它，加密监测已改为 B 级不弹确认）、reject 自动拒绝、escalate 只升级提醒不执行（缺省；影响现场或不可逆的动作一律不自动执行）。
 确认人、批准超时、超时后升级给谁，都是占位值（TODO(专家)：演示后审定）。超时升级由 P3 的监听器执行
 （写进事件时间线）；批准人按角色限定需要 DSH 的用户身份，P3/P4 再做，目前确认人只用于弹窗显示。
 """
@@ -38,8 +38,6 @@ class ActionPolicy:
 
 POLICIES: tuple[ActionPolicy, ...] = (
     # C 级：对外动作（弹确认；执行前 guard 再校验）
-    # 加密监测（观察跟进，黄色预警的处置）：只增加观察、不改变现场、可随时停止，所以批准超时后自动放行（on_timeout=approve），放行后仍提醒总工程师
-    ActionPolicy("start_monitoring", ActionLevel.C, "开始加密监测（观察跟进）", "值班长", 5, "总工程师", "approve"),
     ActionPolicy("publish_warning", ActionLevel.C, "发布预警等级", "通风部门负责人", 10, "值班长"),
     ActionPolicy("escalate_emergency", ActionLevel.C, "升级为应急响应", "总工程师或矿长", 15, "矿长"),
     ActionPolicy("notify_evacuation", ActionLevel.C, "发布补充撤人名单", "调度员", 5, "值班长"),
@@ -50,7 +48,9 @@ POLICIES: tuple[ActionPolicy, ...] = (
     # A 级：只读（不弹确认；审计仍记录）
     ActionPolicy("precheck_plan", ActionLevel.A, "方案红线自查"),
     ActionPolicy("query_last_issued", ActionLevel.A, "查询最近一次下发"),
-    # B 级（给值班人员的告警、事件更新）随第三版 P3 的 incident 插件加入
+    # B 级：不弹确认，自动执行；仍经 guard 校验（引用记录、时效）并写台账和审计
+    # 加密监测（观察跟进，黄色预警的处置）：只增加观察、不改变现场、可随时停止。2026-11-10 操作员决定：只有影响矿井现场的处置和对外通知才要人确认
+    ActionPolicy("start_monitoring", ActionLevel.B, "开始加密监测（观察跟进）"),
 )
 
 ON_TIMEOUT = ("approve", "reject", "escalate")

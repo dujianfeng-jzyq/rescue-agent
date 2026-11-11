@@ -46,9 +46,13 @@ describe('classify（动作分级：C 级弹确认，A、B 级不弹，未登记
     const withB: ActionPolicy[] = [...policies, { tool: 'notify_duty_officer', level: 'B', name: '值班提示' }]
     assert.deepEqual(classify('mcp__actions__notify_duty_officer', { gatedServer: 'actions', policies: withB }), { gated: false })
   })
-  it('六个对外动作都是 C 级，每个都有确认人和批准超时', () => {
+  it('加密监测（观察跟进）是 B 级，不弹确认', () => {
+    assert.equal(levelOf('start_monitoring', policies), 'B')
+    assert.deepEqual(classify('mcp__actions__start_monitoring', config), { gated: false })
+  })
+  it('七个对外动作都是 C 级，每个都有确认人和批准超时', () => {
     const c = policies.filter((p) => p.level === 'C')
-    assert.deepEqual(c.map((p) => p.tool).sort(), ['approve_unsealing', 'escalate_emergency', 'issue_dispatch_order', 'issue_firefighting_plan', 'issue_sealing_plan', 'notify_evacuation', 'publish_warning', 'start_monitoring'])
+    assert.deepEqual(c.map((p) => p.tool).sort(), ['approve_unsealing', 'escalate_emergency', 'issue_dispatch_order', 'issue_firefighting_plan', 'issue_sealing_plan', 'notify_evacuation', 'publish_warning'])
     for (const p of c) {
       assert.ok(p.confirmer, `${p.tool} 缺确认人`)
       assert.ok((p.approval_timeout_min ?? 0) > 0, `${p.tool} 缺批准超时`)

@@ -174,6 +174,7 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-alarms b { font: 600 12px ui-monospace, Menlo, Consolas, monospace; color: #ff8f8f; white-space: nowrap; }
 .rm-alarms time { color: #7f93ab; font: 11px ui-monospace, Menlo, Consolas, monospace; }
 .rm-val[data-q]:not([data-q="ok"]) b, .rm-val[data-q]:not([data-q="ok"]) small { color: #f5c518; }
+.rm-val[data-q="sealed_off"] b, .rm-val[data-q="sealed_off"] small { color: #7f93ab; }
 
 .rm-timeline { list-style: none; margin: 0; padding: 0 0 0 12px; border-left: 1px solid rgba(120, 160, 210, 0.25); }
 .rm-timeline li { position: relative; padding: 0 0 10px 8px; display: grid; grid-template-columns: auto 1fr; column-gap: 8px; }
