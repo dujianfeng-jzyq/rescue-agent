@@ -26,6 +26,7 @@ import { MineMapLoader } from './mapping.ts'
 import { geometryInfo } from './names.ts'
 import type { Network } from './evacuation.ts'
 import { buildState } from './state.ts'
+import type { DemoStatus } from './state.ts'
 import type { MapState } from './state.ts'
 
 export const name = 'rescue-map'
@@ -43,6 +44,8 @@ export interface Config {
   mineDataToken?: string | undefined
   /** 左栏读数显示的工作面（缺省取当前事件的工作面） */
   panel?: string | undefined
+  /** 演示进度（模拟矿井的 /demo/status，用 mineDataToken）：演示结束时大屏显示“演示已结束”。只在演示环境配置 */
+  demoStatusUrl?: string | undefined
   /** 自动叠加：按状态和映射表把等级、报警、火区画到图上，来了新告警自动飞过去（不经模型） */
   autopilot: boolean
 }
@@ -55,6 +58,7 @@ export const Config: Schema<Config> = Schema.object({
   mineDataUrl: Schema.string(),
   mineDataToken: Schema.string(),
   panel: Schema.string(),
+  demoStatusUrl: Schema.string(),
   autopilot: Schema.boolean().default(true),
 })
 
@@ -167,6 +171,14 @@ export function apply(ctx: Context, config: Config): void {
     }
     return netCache.value
   }
+  const demoStatus = config.demoStatusUrl
+    ? async (): Promise<DemoStatus | null> => {
+        const r = await fetch(config.demoStatusUrl!, { headers: config.mineDataToken ? { authorization: `Bearer ${config.mineDataToken}` } : {}, signal: AbortSignal.timeout(3000) })
+        if (!r.ok) return null
+        const j: any = await r.json()
+        return { state: String(j.state ?? ''), outcome: String(j.outcome ?? ''), endedAt: j.ended_at ? String(j.ended_at) : null }
+      }
+    : undefined
   let cache: { at: number; value: Promise<MapState> } | null = null
   const getState = (): Promise<MapState> => {
     if (!cache || Date.now() - cache.at > 2000) {
@@ -176,7 +188,7 @@ export function apply(ctx: Context, config: Config): void {
         lastWarnings = joined
         for (const w of warnings) ctx.logger.warn(`rescue-map: mine_map.yaml：${w}`)
       }
-      cache = { at: Date.now(), value: buildState({ incidentDir: config.incidentDir, recordDir: config.recordDir, mine, panel: config.panel, map, activity: getActivity().snapshot(), network: getNetwork }).then((s) => ({ ...s, mapWarnings: warnings })) }
+      cache = { at: Date.now(), value: buildState({ incidentDir: config.incidentDir, recordDir: config.recordDir, mine, panel: config.panel, map, activity: getActivity().snapshot(), network: getNetwork, demoStatus }).then((s) => ({ ...s, mapWarnings: warnings })) }
     }
     return cache.value
   }

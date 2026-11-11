@@ -75,6 +75,7 @@
         mineDataUrl: !!js "process.env.RESCUE_MCP_MINE_DATA_URL ?? 'http://127.0.0.1:8101/mcp'"
         mineDataToken: !!js "process.env.RESCUE_MCP_MINE_DATA_TOKEN || process.env.RESCUE_MCP_TOKEN || undefined"
         panel: !!js "process.env.RESCUE_MAP_PANEL || undefined"
+        demoStatusUrl: !!js "process.env.RESCUE_DEMO_STATUS_URL || undefined"   # 演示进度（模拟矿井 /demo/status）：结束时大屏显示“演示已结束”；只在演示环境设
         autopilot: !!js "process.env.RESCUE_MAP_AUTOPILOT !== '0'"   # 自动叠加（等级、报警、火区、新告警自动定位）
         debug: !!js "process.env.RESCUE_MAP_DEBUG === '1'"   # 调试路由 POST /rescue-map/emit，只在开发时开
 

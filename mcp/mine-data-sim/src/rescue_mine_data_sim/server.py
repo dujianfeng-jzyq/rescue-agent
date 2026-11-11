@@ -607,6 +607,13 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
     if holder is None and director is not None:
         DirectorThread(director).start()
 
+    @server.custom_route("/demo/status", methods=["GET"])
+    async def demo_status(_req: Request) -> JSONResponse:
+        """演示进度（给网页端显示“演示已结束”）：只有导演状态和结局，不含真值和控制信息，所以不在 /sim/ 下、用 mine_data 的只读令牌。"""
+        d = director.status() if director else {"state": "unavailable"}
+        ended = next((x["at"] for x in reversed(d.get("log") or []) if str(x.get("text", "")).startswith("演示结束")), None)
+        return JSONResponse({"state": d.get("state"), "outcome": d.get("outcome") or "", "ended_at": ended if d.get("state") == "finished" else None})
+
     @server.custom_route("/sim/demo/director", methods=["GET"])
     async def demo_director(_req: Request) -> JSONResponse:
         return JSONResponse(director.status() if director else {"state": "unavailable"})

@@ -85,6 +85,7 @@ services:
       RESCUE_MCP_MINE_DATA_TOKEN: ${RESCUE_MCP_MINE_DATA_TOKEN:?}
       RESCUE_MCP_ACTIONS_TOKEN: ${RESCUE_MCP_ACTIONS_TOKEN:?}
       RESCUE_MCP_MINE_DATA_URL: http://mine-sim:8101/mcp
+      RESCUE_DEMO_STATUS_URL: http://mine-sim:8101/demo/status   # 演示进度（只有导演状态和结局，用只读令牌）：结束时大屏显示“演示已结束”
       RESCUE_MCP_ACTIONS_URL: http://actions:8106/mcp
       RESCUE_REDLINE_CHECK_URL: http://actions:8106/redlines/check
       RESCUE_RECORD_DIR: /data/records

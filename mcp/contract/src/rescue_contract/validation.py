@@ -248,6 +248,27 @@ def plan_from_record(
     return plan, [], [str(x) for x in r.get("human_items") or []], checks
 
 
+def evacuation_from_record(notice: dict[str, Any], records: RecordStore | None) -> dict[str, Any]:
+    """撤人名单留空、给了人员记录（run_fire_assessment 的 record_ids.personnel）时，按记录填受威胁人员和可达的避灾路线。
+    名单已给出，或读不到记录、记录没有算出受威胁人员时原样返回（之后的核对会拦下空名单）。"""
+    if notice.get("persons") or not notice.get("record_id") or records is None:
+        return notice
+    try:
+        r = _result(records.get(str(notice["record_id"])))
+    except (RecordNotFound, RecordTampered, ValueError):
+        return notice
+    persons: list[str] = []
+    routes: dict[str, list[str]] = dict(notice.get("routes") or {})
+    for g in r.get("threatened") or []:
+        route = g.get("escape_route") or {}
+        for pid in g.get("persons") or []:
+            if pid not in persons:
+                persons.append(str(pid))
+            if route.get("reachable") and route.get("nodes") and pid not in routes:
+                routes[str(pid)] = [str(n) for n in route["nodes"]]
+    return {**notice, "persons": persons, "routes": routes} if persons else notice
+
+
 def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) -> list[str]:
     """审批弹窗的要点：确认人要批的到底是什么。全部由代码从记录（或撤人、调度的指令参数）取，不经模型改写；
     取不到就不给（要点只是给人看的摘要，核对仍按 checks）。"""

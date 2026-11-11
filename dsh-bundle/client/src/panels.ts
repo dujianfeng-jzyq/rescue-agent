@@ -213,13 +213,18 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
         : empty('暂无'),
     )
 
+    const ended = s?.demo?.state === 'finished'
+    const banner = ended
+      ? h('div', { class: 'rm-demo-end' }, h('b', null, '演示已结束'), h('span', null, `${s!.demo!.outcome || ''}${s!.demo!.endedAt ? `（矿井时间 ${hm(s!.demo!.endedAt)} 停止推进）` : ''}`))
+      : null
     const fu = section(
       '跟踪计划',
+      ...(ended && inc?.followups.some((f) => f.state !== 'done') ? [h('div', { class: 'rm-note' }, '演示已结束，矿井时钟停止，下面的跟踪不会再到点')] : []),
       inc && inc.followups.length
         ? h('ul', { class: 'rm-list' }, ...inc.followups.map((f) => h('li', null, h('time', null, hm(f.dueAt)), h('span', null, f.expect || '复评'), f.state === 'due' && h('em', null, '已到点'))))
         : empty('暂无'),
     )
-    left.replaceChildren(sit, readings, alarms, ...(evac ? [evac] : []), tl, fu)
+    left.replaceChildren(...(banner ? [banner] : []), sit, readings, alarms, ...(evac ? [evac] : []), tl, fu)
   }
 
   const STATE_TONE: Record<string, 'ok' | 'warn' | 'bad' | 'dim'> = { idle: 'dim', working: 'ok', waiting_approval: 'warn', waiting_question: 'warn', alert_pending: 'warn', degraded: 'bad' }

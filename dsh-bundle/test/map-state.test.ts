@@ -48,6 +48,17 @@ describe('buildState', () => {
     assert.equal(s.readings.rows[1]!.quality, 'missing', '缺测如实显示，不补数')
   })
 
+  it('演示进度：有就带上，取不到按没有', async () => {
+    const f = await fixture()
+    let s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine() })
+    assert.equal(s.demo, null)
+    const done = { state: 'finished', outcome: '已撤人并封闭', endedAt: '2026-11-08T18:11:35' }
+    s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine(), demoStatus: async () => done })
+    assert.deepEqual(s.demo, done)
+    s = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine(), demoStatus: async () => { throw new Error('连不上') } })
+    assert.equal(s.demo, null)
+  })
+
   it('火区已封闭：安全监控测点缺数显示为封闭断电，束管缺数照常是缺数', async () => {
     const f = await fixture()
     const sensors = [

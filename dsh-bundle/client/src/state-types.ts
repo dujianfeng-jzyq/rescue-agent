@@ -19,6 +19,8 @@ export interface ReadingRow {
 
 export interface StateData {
   wall: string
+  /** 演示进度（演示环境）：state 为 finished 时显示“演示已结束” */
+  demo?: { state: string; outcome: string; endedAt: string | null } | null
   mapWarnings?: string[]
   mine: { now: string | null; ok: boolean; error?: string }
   sentinel: { known: boolean; ageS: number | null; error: string | null }

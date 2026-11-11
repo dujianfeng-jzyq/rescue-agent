@@ -255,6 +255,8 @@ def test_director_routes():
     st = c.get("/sim/state").json()
     assert st["director"]["state"] == "running" and st["paused"] is True and st["injected"]
     assert "directorBox" in c.get("/console").text
+    # 网页端用的演示进度：只有状态和结局，不含真值
+    assert c.get("/demo/status").json() == {"state": "running", "outcome": "", "ended_at": None}
 
 
 def test_normal_reset_resets_the_director():

@@ -59,7 +59,7 @@ from rescue_contract.models import (
 )
 from rescue_contract.records import RecordNotFound, RecordStore
 from rescue_contract.redlines import RULES
-from rescue_contract.validation import PLAN_TOOLS, plan_from_record, precheck, validate_plan
+from rescue_contract.validation import PLAN_TOOLS, evacuation_from_record, plan_from_record, precheck, validate_plan
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -263,12 +263,27 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
     @server.tool()
     async def start_monitoring(record_id: str) -> ActionReceipt:
         """开始加密监测（观察跟进，黄色预警的处置）。只给 record_id，照抄 run_fire_assessment 返回的 record_ids.warning。
-        监测只增加观察、不改变现场，按动作分级表是 B 级：不弹人工确认，提交即执行（本服务仍核对记录并写台账）。"""
+        监测只增加观察、不改变现场，按动作分级表是 B 级：不弹人工确认，提交即执行（本服务仍核对记录并写台账）。
+        同一事件里本工作面已经开始加密监测时不重复下发，返回原来那次的编号和说明（note）。"""
         payload = MonitoringRequest(record_id=record_id)
         now = await require_now("start_monitoring", payload, [record_id])
         result = precheck("start_monitoring", {"record_id": record_id}, now, record_store)
         await reject_if("start_monitoring", payload, result["problems"], [record_id])
-        req = TreatmentRequest(type=StepType.MONITOR, panel=record_panel(record_id), idempotency_key=idempotency_key("start_monitoring", payload))
+        panel = record_panel(record_id)
+        # 同一事件里本工作面已开始加密监测：不重复下发（2026-11-10 演示复看：免确认后，升黄时智能体又下了一次，矿井执行了两次）
+        iid = incident_of([record_id])
+        running = [
+            r for r in ledger_records(ledger.path)
+            if iid and r.get("tool") == "start_monitoring" and r.get("status") == "issued" and r.get("incident_id") == iid
+            and record_panel(str((r.get("payload") or {}).get("record_id", ""))) == panel
+        ]  # fmt: skip
+        if running:
+            r = running[-1]
+            return ActionReceipt(
+                action_id=str(r.get("action_id")), tool="start_monitoring", issued_at=datetime.fromisoformat(str(r["issued_at"])), status="issued",
+                note=f"本工作面加密监测已在进行（{r.get('action_id')}，下发于 {r['issued_at']}），未重复下发", mine_receipts=[], mine_not_executed=[],
+            )  # fmt: skip
+        req = TreatmentRequest(type=StepType.MONITOR, panel=panel, idempotency_key=idempotency_key("start_monitoring", payload))
         return await deliver("start_monitoring", payload, [record_id], [lambda: md.submit_treatment(req)])
 
     @server.tool()
@@ -287,7 +302,10 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
 
     @server.tool()
     async def notify_evacuation(notice: EvacuationNotice) -> ActionReceipt:
-        """发布补充撤人名单与避灾路线（确认人：调度员）。这是对预案撤人的补充，不替代、不延迟预案撤人。"""
+        """发布补充撤人名单与避灾路线（确认人：调度员）。这是对预案撤人的补充，不替代、不延迟预案撤人。
+        record_id 照抄 run_fire_assessment 返回的 record_ids.personnel，persons 留空：名单和可达的避灾路线由本服务按记录的受威胁人员填写。
+        persons 只在指挥人员另外点名时填（人员编号，如 C001）。"""
+        notice = EvacuationNotice.model_validate(evacuation_from_record(notice.model_dump(mode="json"), record_store))
         await reject_if("notify_evacuation", notice, await evacuation_problems(notice), [notice.record_id] if notice.record_id else [])
         where = {p.person_id: p.roadway_id for p in await md.personnel()}
         roadways = sorted({where[p] for p in notice.persons})
@@ -306,6 +324,8 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
             where = {p.person_id for p in await md.personnel()}
         except Exception as exc:  # noqa: BLE001
             return [f"取不到井下人员定位，无法核对撤人名单：{exc}"]
+        if not notice.persons:
+            return ["撤人名单为空：给出人员记录（record_ids.personnel，且研判算出了受威胁人员）或人员编号"]
         unknown = sorted(p for p in notice.persons if p not in where)
         return [f"名单里的人员不在井下人员定位中：{unknown}（已升井或编号有误）"] if unknown else []
 
@@ -424,6 +444,11 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
             return JSONResponse({"ok": False, "problems": [NO_CLOCK], "notes": []})
         result = precheck(tool, body.get("arguments") or {}, now, record_store)
         args = body.get("arguments") or {}
+        if tool == "notify_evacuation":  # 名单按人员记录填好再核对、再给确认弹窗算人数（与工具执行时同一规则）
+            key = "notice" if "notice" in args else None
+            filled = evacuation_from_record(args.get("notice", args), record_store)
+            args = {**args, "notice": filled} if key else filled
+            result = precheck(tool, args, now, record_store)
         if tool in ("issue_dispatch_order", "notify_evacuation") and result["ok"]:  # 按矿井数据核对（人工确认之前就拦住）
             try:
                 if tool == "issue_dispatch_order":

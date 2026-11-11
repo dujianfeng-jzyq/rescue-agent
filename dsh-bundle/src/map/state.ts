@@ -35,7 +35,16 @@ export interface StateDeps {
   activity?: ActivitySnapshot
   /** 矿井网络（get_network）；撤人路线要用，取不到时只列文字、不画 */
   network?: () => Promise<Network | null>
+  /** 演示进度（只在演示环境有）；取不到按没有 */
+  demoStatus?: () => Promise<DemoStatus | null>
   nowMs?: () => number
+}
+
+/** 演示导演的进度：state 为 finished 时大屏显示“演示已结束” */
+export interface DemoStatus {
+  state: string
+  outcome: string
+  endedAt: string | null
 }
 
 export interface TimelineItem {
@@ -82,6 +91,8 @@ export interface FireAreaRow {
 
 export interface MapState {
   wall: string
+  /** 演示进度（演示环境）；不是演示或取不到为 null */
+  demo?: DemoStatus | null
   /** 映射表里被丢弃的条目（名称不在地图上等）；没有问题时为空 */
   mapWarnings?: string[]
   mine: { now: string | null; ok: boolean; error?: string }
@@ -438,8 +449,10 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
   else if (incident && incident.pendingAlerts > 0) agent = { ...agent, state: 'alert_pending', label: `有 ${incident.pendingAlerts} 条告警待处理` }
   else if (!live && incident && incident.status === 'handling') agent = { ...agent, state: 'working', label: '处置中' } // 没有实时事件时的推断
 
+  const demo = deps.demoStatus ? await deps.demoStatus().catch(() => null) : null
   return {
     wall: new Date(nowMs).toISOString(),
+    demo,
     mine,
     sentinel: await readHeartbeat(deps.incidentDir, nowMs),
     incident,

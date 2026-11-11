@@ -41,8 +41,7 @@
     }
   },
   "required": [
-    "reason",
-    "persons"
+    "reason"
   ],
   "title": "EvacuationNotice",
   "type": "object",

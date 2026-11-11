@@ -426,6 +426,28 @@ def test_actions_are_noted_on_the_open_incident(tmp_path, monkeypatch, request):
     assert world.rows()[-1]["incident_id"] is None
 
 
+def test_monitoring_is_not_reissued_within_the_same_incident(tmp_path, monkeypatch, request):
+    """同一事件里本工作面已开始加密监测：再提交只返回原来那次（note 说明），矿井不再执行、台账不再写（2026-11-10 演示复看）。"""
+    from rescue_contract.incidents import IncidentStore
+
+    monkeypatch.setenv("RESCUE_INCIDENT_DIR", str(tmp_path / "inc"))
+    store = IncidentStore()
+    iid = store.open("2026-11-05T08:00:00", category="fire", panel="1201", summary="x")
+    world = request.getfixturevalue("world")
+    blue = world.result_record("fire-assessment", "warning", {"level": "blue"})
+    first = world.call("start_monitoring", {"record_id": blue}).structured_content
+    yellow = world.result_record("fire-assessment", "warning", {"level": "yellow"})
+    again = world.call("start_monitoring", {"record_id": yellow}).structured_content
+    assert again["action_id"] == first["action_id"] and "未重复下发" in again["note"]
+    assert [iv.type for iv in world.holder.engine.action_log] == ["monitor"]
+    assert [r["tool"] for r in world.rows()] == ["start_monitoring"]
+    # 事件关闭后再开的事件：照常下发
+    store.append(iid, "2026-11-05T09:00:00", "status", "agent", {"status": "closed"})
+    store.open("2026-11-05T10:00:00", category="fire", panel="1201", summary="y")
+    third = world.call("start_monitoring", {"record_id": yellow}).structured_content
+    assert third["action_id"] != first["action_id"]
+
+
 def test_evacuation_with_personnel_record_is_noted_on_the_incident(tmp_path, monkeypatch, request):
     """撤人名单本身不引用记录；带上人员记录（record_ids.personnel）时挂到该工作面的事件和确认弹窗上。读不到记录也不拦撤人。"""
     from rescue_contract.incidents import IncidentStore
@@ -450,6 +472,32 @@ def test_evacuation_with_personnel_record_is_noted_on_the_incident(tmp_path, mon
     assert not world.call("notify_evacuation", gone).is_error  # 读不到的记录：照常下发，只是挂不上事件
     assert world.rows()[-1]["incident_id"] is None
 
+
+
+def test_evacuation_list_is_filled_from_the_personnel_record(world):
+    """名单留空、给人员记录：guard 按记录的受威胁人员和可达避灾路线填写，确认弹窗的人数同一规则（2026-11-10 演示复看）。"""
+    from starlette.testclient import TestClient
+
+    people = asyncio.run(MineData(world.mine).personnel())
+    face = [p.person_id for p in people if p.roadway_id == "R-1201-FACE"][:2]
+    ret = [p.person_id for p in people if p.roadway_id == "R-1201-RET"][:1]
+    rid = world.result_record("fire-assessment", "personnel", {
+        "computed": True, "total_threatened": 3,
+        "threatened": [
+            {"roadway_id": "R-1201-FACE", "persons": face, "escape_route": {"reachable": True, "nodes": ["N3", "N2", "N8"]}},
+            {"roadway_id": "R-1201-RET", "persons": ret, "escape_route": {"reachable": False}},
+        ],
+    })  # fmt: skip
+    notice = {"notice": {"reason": "补充撤人", "record_id": rid}}
+    with TestClient(world.server.streamable_http_app()) as http:
+        pre = http.post("/redlines/check", json={"tool": "notify_evacuation", "arguments": notice}).json()
+    assert pre["ok"] and "补充撤人名单 3 人" in pre["summary"]["facts"]
+    r = world.call("notify_evacuation", notice)
+    assert not r.is_error, r.content[0].text
+    payload = world.rows()[-1]["payload"]
+    assert payload["persons"] == face + ret and payload["routes"] == {p: ["N3", "N2", "N8"] for p in face}
+    # 没有记录也没有名单：拦下
+    assert world.call("notify_evacuation", {"notice": {"reason": "x"}}).is_error
 
 # ── 启封审批（approve_unsealing，按启封评估记录）──
 

@@ -405,7 +405,9 @@ class DispatchOrder(_Model):
 
 class EvacuationNotice(_Model):
     reason: str
-    persons: list[str]  # person_id
+    # person_id。留空并给 record_id 时，由 guard 按人员记录的受威胁人员和可达避灾路线填写（evacuation_from_record）：
+    # 名单不用智能体抄（2026-11-10 演示复看：智能体把名单写成一句话被拦）
+    persons: list[str] = Field(default_factory=list)
     routes: dict[str, list[str]] = Field(default_factory=dict)  # person_id → 节点路径
     supplementary: bool = True  # 智能体给的是“补充名单”，不替代预案撤人
     # 依据的人员记录（run_fire_assessment 返回的 record_ids.personnel）。只用来把这次撤人挂到该工作面的事件时间线和确认弹窗上；
