@@ -9,7 +9,8 @@
         "how": "start_monitoring",
         "plan_key": null,
         "always": false,
-        "choosable": false
+        "choosable": false,
+        "suggested": false
       }
     ],
     "orange": [
@@ -19,8 +20,9 @@
         "step": "inert_injection",
         "how": "draft_firefighting_plan → issue_firefighting_plan",
         "plan_key": "inert_injection",
-        "always": true,
-        "choosable": true
+        "always": false,
+        "choosable": true,
+        "suggested": true
       },
       {
         "id": "grout",
@@ -29,7 +31,8 @@
         "how": "draft_firefighting_plan → issue_firefighting_plan",
         "plan_key": "grouting",
         "always": false,
-        "choosable": true
+        "choosable": true,
+        "suggested": false
       },
       {
         "id": "leak_seal",
@@ -38,7 +41,8 @@
         "how": "draft_firefighting_plan → issue_firefighting_plan",
         "plan_key": "leak_sealing",
         "always": false,
-        "choosable": true
+        "choosable": true,
+        "suggested": false
       }
     ],
     "red": [
@@ -49,7 +53,8 @@
         "how": "notify_evacuation",
         "plan_key": null,
         "always": false,
-        "choosable": false
+        "choosable": false,
+        "suggested": false
       },
       {
         "id": "seal",
@@ -58,7 +63,8 @@
         "how": "draft_sealing_plan → issue_sealing_plan",
         "plan_key": null,
         "always": false,
-        "choosable": false
+        "choosable": false,
+        "suggested": false
       }
     ]
   }

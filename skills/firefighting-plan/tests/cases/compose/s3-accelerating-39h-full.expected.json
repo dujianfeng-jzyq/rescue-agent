@@ -151,6 +151,7 @@
   "step_count": 5,
   "optional_steps": [
    "leak_sealing",
+   "inert_injection",
    "grouting",
    "monitor_after"
   ],

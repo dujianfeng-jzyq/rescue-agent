@@ -47,10 +47,25 @@ def select(sk, sel):
         raise ValueError(f"可选步骤不在清单里：{'、'.join(bad)}")
     if sel.get("seal_roadways"):
         raise ValueError("防灭火方案不封闭火区，不能选密闭巷道")
+    required = {s["key"] for s in sk["required_steps"]}
+
+    def anchor(key):
+        # after 指向没选的可选步骤时，顺着它的 after 往前找，接到方案里有的步骤上
+        a = optional[key]["after"]
+        while a not in required and a not in chosen and a in optional:
+            a = optional[a]["after"]
+        return a
+
     steps = []
-    for s in sk["required_steps"]:
+
+    def emit(s):
         steps.append(s)
-        steps += [optional[k] for k in optional if k in chosen and optional[k]["after"] == s["key"]]
+        for k in optional:  # 同一位置按清单顺序；接在可选步骤后面的跟着它
+            if k in chosen and anchor(k) == s["key"]:
+                emit(optional[k])
+
+    for s in sk["required_steps"]:
+        emit(s)
     keys = {s["key"] for s in steps}
     notes = {}
     for n in sel.get("step_notes") or []:

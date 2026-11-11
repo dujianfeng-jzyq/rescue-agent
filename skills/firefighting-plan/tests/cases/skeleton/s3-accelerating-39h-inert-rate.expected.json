@@ -48,11 +48,6 @@
     "key": "monitor",
     "type": "monitor",
     "description": "处置前观测采空区束管、上隅角和回风巷的气体与温度，作为处置效果的对照；处置期间按指挥部确定的频次加密观测"
-   },
-   {
-    "key": "inert_injection",
-    "type": "inert_injection",
-    "description": "向采空区注入惰性气体，降低氧浓度、抑制煤氧化（注氮流量由代码按漏风量和目标氧浓度估算，未给出时不写数值）"
    }
   ],
   "optional_steps": [
@@ -63,6 +58,13 @@
     "roadways": "leak",
     "after": "monitor",
     "label": "回风侧堵漏，减少向采空区漏风"
+   },
+   {
+    "key": "inert_injection",
+    "type": "inert_injection",
+    "description": "向采空区注入惰性气体，降低氧浓度、抑制煤氧化（注氮流量由代码按漏风量和目标氧浓度估算，未给出时不写数值）",
+    "after": "monitor",
+    "label": "向采空区注氮"
    },
    {
     "key": "inhibitor_spray",

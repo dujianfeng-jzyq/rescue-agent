@@ -242,11 +242,13 @@ def sealing_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
 
 # 防灭火方案：“方案编写”阶段的选择是模型给的，样例里写死（没有密闭巷道）
 FIRE_FULL = {
-    "optional_steps": ["leak_sealing", "grouting", "monitor_after"],
+    "optional_steps": ["leak_sealing", "inert_injection", "grouting", "monitor_after"],
     "step_notes": [{"key": "inert_injection", "note": "注氮口位置按现场确定"}, {"key": "monitor", "note": ""}],
     "summary": "先注惰降氧，辅以堵漏和注浆，不封闭火区",
 }
 FIRE_MINIMAL = {"optional_steps": [], "step_notes": [], "summary": ""}
+# 操作员没选注氮（2026-11-11 注氮改为可选）：注浆、处置后取样原本接在注惰后面，改接到检测观测后面
+FIRE_NO_INERT = {"optional_steps": ["grouting", "monitor_after"], "step_notes": [], "summary": "注浆覆盖浮煤，不注氮"}
 
 
 def firefighting_review_choice(scope: dict, fail: str | None = None) -> dict:
@@ -270,6 +272,7 @@ def firefighting_inputs() -> dict[tuple[str, str, str], dict]:
     minimal = {"skeleton": run(FP, "skeleton", sk_plain), "evidence": s3, "options": {"selection": FIRE_MINIMAL}}
     out[(FP, "compose", "s3-accelerating-39h-full")] = full
     out[(FP, "compose", "s3-accelerating-39h-minimal")] = minimal
+    out[(FP, "compose", "s3-accelerating-39h-no-inert")] = {"skeleton": minimal["skeleton"], "evidence": s3, "options": {"selection": FIRE_NO_INERT}}
     plan = run(FP, "compose", full)
     out[(PC, "scope", "firefighting-s3-39h-full")] = {"plan": plan}
     scope = run(PC, "scope", {"plan": plan})

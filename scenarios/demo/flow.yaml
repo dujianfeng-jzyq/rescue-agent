@@ -16,10 +16,12 @@ stages:
         note: 继续观察，温度仍在上升
 
   # 橙色按所选（累计）个数分支：3 项全做 → 受控回落；只做 1 项 → 发展到红色；做了 2 项 → 效果有限，要求追加（仍停在橙色）。
+  # 操作员在卡片输入框输入“不采取处置”（declined）→ 发展到红色（2026-11-11 注氮改为可选后加的分支；与只做 1 项同样的漏风突增，占位，没有单独调参）。
+  # 点“跳过”（暂不决定）或选择冲突不走分支，导演继续等。
   # 参数是按 s3-accelerating 在 36.5 矿井小时左右调出来的占位值（eval 用 baseline 的预警判据扫描）：k_ox 乘 0.64 时预警在黄色区间停留约 50 小时。
   橙色:
     jump_h: 0
-    prompt: 橙色预警：采取注氮、注浆、堵漏等处置。处置越不足，越容易发展到红色。
+    prompt: 橙色预警：选择注氮、注浆、堵漏等处置（注氮为建议项）。处置越不足，越容易发展到红色。
     branches:
       - when: {min: 3}
         end: true
@@ -33,6 +35,12 @@ stages:
       - when: {max: 1}
         goto: 红色
         note: 处置不足，漏风增大，发展到红色
+        effect:
+          interventions:
+            - {type: leak_change, params: {factor: 3}}
+      - when: {declined: true}
+        goto: 红色
+        note: 未采取处置，漏风增大，发展到红色
         effect:
           interventions:
             - {type: leak_change, params: {factor: 3}}

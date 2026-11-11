@@ -32,11 +32,18 @@ def test_orange_options_match_the_firefighting_plan_steps():
     for o in options_for("orange"):
         assert o.plan_key in steps, o.id
         assert steps[o.plan_key]["type"] == o.step
-        assert (o.plan_key in required) == o.always  # 必备步骤不进选择卡片，可选步骤才进
+        assert o.plan_key not in required  # 卡片上的处置都是方案的可选步骤：操作员不选就不进方案
+        assert not o.always
+
+
+def test_inert_is_suggested_not_mandatory():
+    """2026-11-11：注氮由操作员选（标“建议”），不再必做；操作员可以明确选“不采取处置”。"""
+    inert = next(o for o in options_for("orange") if o.id == "inert")
+    assert inert.suggested and not inert.always and inert.choosable
 
 
 def test_card_options_are_the_choosable_ones_only():
-    assert [o.id for o in choosable_for("orange")] == ["grout", "leak_seal"]
+    assert [o.id for o in choosable_for("orange")] == ["inert", "grout", "leak_seal"]
     assert choosable_for("yellow") == [] and choosable_for("red") == []
     assert options_for("橙色") == options_for("orange") and options_for("none") == ()
 

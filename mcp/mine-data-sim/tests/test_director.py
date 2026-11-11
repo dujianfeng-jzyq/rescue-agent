@@ -167,6 +167,56 @@ def test_director_recognizes_what_the_guard_executed(tmp_path):
     assert not any(iv.source == "demo-operator" for iv in sim.engine.action_log)  # 导演没有自己施加
 
 
+def test_operator_declines_goes_to_red_and_skip_keeps_waiting(tmp_path):
+    """2026-11-11：卡片上输入“不采取处置”（智能体记进时间线，矿井什么也不执行）→ 走 declined 分支到红色；点跳过（暂不决定）或选择冲突 → 继续等。"""
+    sim, store, hb, d = make(tmp_path)
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5, "红色": 50})
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["monitor"])
+    drive(d, fake, lambda: d.state == "holding")
+    assert d.stage == "橙色"
+    at = sim.engine.now().isoformat(timespec="seconds")
+    store.append(fake.iid, at, "note", "flow", {"type": "response_choice", "level": "orange", "choice": "undecided", "option_ids": []})
+    d.tick()
+    assert d.state == "holding" and d.stage == "橙色"  # 暂不决定：继续等
+    assert "暂未选择" in d.status()["log"][-1]["text"]
+    store.append(fake.iid, at, "note", "flow", {"type": "response_choice", "level": "orange", "choice": "conflict", "option_ids": ["grout"]})
+    d.tick()
+    assert d.state == "holding" and d.stage == "橙色"  # 冲突：继续等
+    assert "冲突" in d.status()["log"][-1]["text"]
+    store.append(fake.iid, at, "note", "flow", {"type": "response_choice", "level": "orange", "choice": "none", "option_ids": []})
+    d.tick()
+    assert d.state == "running" and d.stage == "红色"
+    assert d.chosen[-1] == {"stage": "橙色", "options": [], "declined": True}
+    assert any(iv.type == "leak_change" and iv.source == "demo-script" for iv in sim.engine.action_log)
+
+
+def test_choice_recorded_before_the_hold_is_ignored(tmp_path):
+    """进入等待之前记下的选择（上一轮的）不算。"""
+    sim, store, hb, d = make(tmp_path)
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5})
+    store.append(fake.iid, "2026-11-02T08:00:00", "note", "flow", {"type": "response_choice", "level": "orange", "choice": "none", "option_ids": []})
+    import time as _t
+
+    _t.sleep(1.1)  # 事件时间戳截到秒
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["monitor"])
+    drive(d, fake, lambda: d.state == "holding")
+    d.tick()
+    assert d.state == "holding" and d.stage == "橙色"
+
+
+def test_declined_branch_cannot_be_again():
+    import copy
+
+    bad = copy.deepcopy(FLOW)
+    bad["stages"]["橙色"]["branches"].append({"when": {"declined": True}, "again": True})
+    with pytest.raises(ValueError, match="不采取处置"):
+        validate_flow(bad)
+
+
 def test_old_choosable_actions_before_the_hold_are_ignored(tmp_path):
     """可选项只认进入等待之后执行的：橙色之前就做的注浆不算橙色的选择。"""
     sim, store, hb, d = make(tmp_path)

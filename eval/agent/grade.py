@@ -493,7 +493,7 @@ DEFAULT_CHECKS = {"numbers_grounded": True, "cited_tools_called": True}
 
 # 固定流程和检测是 DSH 插件工具（不是 MCP），结果结构见 dsh-bundle/src/fire-loop、src/evidence/check.ts。
 # DSH 进程内的工具（不是 MCP 工具，名字里没有 mcp__ 前缀），tools_called 也认
-NATIVE_TOOLS = {"map_view", "get_response_options", "get_field_conditions"}  # 代码给出卡片内容的只读工具
+NATIVE_TOOLS = {"map_view", "get_response_options", "record_response_choice", "get_field_conditions"}  # 代码给出卡片内容的只读工具
 FLOW_TOOLS = {"run_fire_assessment", "check_mine", "draft_sealing_plan", "draft_firefighting_plan", "review_effect", "review_timeline", "assess_unsealing"}
 
 

@@ -48,7 +48,7 @@ python -m rescue_contract.conformance <URL> [--with-actions]   # 接口一致性
 python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清单取一次证据（Python 采集小工具）
 ```
 
-演示（第五版）：控制台“演示导演”区块点一次“开始演示”，之后导演自己推进；`eval/agent/demo_run.py` 是同一流程的脚本版（扮演操作员，`STORY_ORANGE_OPTIONS` 控制橙色卡片选什么：`注浆|堵漏` 回落、空串 = 点跳过升红）。
+演示（第五版）：控制台“演示导演”区块点一次“开始演示”，之后导演自己推进；`eval/agent/demo_run.py` 是同一流程的脚本版（扮演操作员，`STORY_ORANGE_OPTIONS` 控制橙色卡片选什么：`注氮|注浆|堵漏` 回落、只选一项或 `不采取处置`（在输入框输入）升红、空串 = 点跳过（暂不决定））。
 单个包的测试：`cd mcp && uv run pytest contract/tests -q`（包：contract、mine-data-sim、actions、sentinel）；TS：`cd dsh-bundle && pnpm test`；改了 `dsh-bundle/src` 要 `pnpm build`（只改 `client/src` 用 `node client/build.mjs`）。
 
 ## 结构与边界（改代码前先看）

@@ -153,7 +153,7 @@ const ENTRY_LABEL: Record<string, string> = {
   status: '状态变化', followup_added: '登记跟踪', followup_done: '跟踪完成', followup_due: '跟踪到点', note: '记录',
 }
 const NOTE_LABEL: Record<string, string> = {
-  assessment: '研判', sealing_plan: '封闭方案', firefighting_plan: '防灭火方案', effect_review: '效果复评', unsealing: '启封评估',
+  assessment: '研判', sealing_plan: '封闭方案', firefighting_plan: '防灭火方案', effect_review: '效果复评', unsealing: '启封评估', response_choice: '处置选择',
   approval_pending: '等待人工确认', approval_decided: '人工确认', approval_escalated: '确认超时升级', action: '对外动作',
 }
 /** 时间线里不显示的条目（投递细节对操作员没有信息量） */

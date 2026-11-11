@@ -22,7 +22,7 @@ describe('防灭火方案：流程配置', () => {
 })
 
 describe('防灭火方案：方案编写', () => {
-  const good = { optional_steps: ['leak_sealing', 'monitor_after'], step_notes: [{ key: 'inert_injection', note: '注氮口位置按现场确定' }, { key: 'monitor', note: '' }], summary: '先注惰降氧，不封闭火区' }
+  const good = { optional_steps: ['leak_sealing', 'inert_injection', 'monitor_after'], step_notes: [{ key: 'inert_injection', note: '注氮口位置按现场确定' }, { key: 'monitor', note: '' }], summary: '先注惰降氧，不封闭火区' }
   it('合格：没有密闭巷道，空说明去掉', () => {
     const r = checkSelection(good, SK, MATERIAL)
     assert.ok(r.ok)

@@ -27,7 +27,7 @@ import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
 import { describeFieldCard, loadFieldConditions, resolveFieldChoices } from './field-conditions.ts'
-import { describeOptions, loadResponseOptions, planKeysFor, priorChoice } from './response-options.ts'
+import { describeOptions, interpretChoice, loadResponseOptions, planKeysFor, priorChoice } from './response-options.ts'
 import { draftFirefightingPlan, draftSealingPlan, FIREFIGHTING, type HumanInput, type PlanFlow, type Redline, SEALING } from './sealing.ts'
 import { IncidentStore } from '../incident/store.ts'
 import { evidenceAsOf, noteOnIncident } from '../incident/timeline.ts'
@@ -250,7 +250,7 @@ export function apply(ctx: Context, config: Config) {
       name: 'get_response_options',
       description:
         '查某一级预警的处置选项（代码给出，不要自己编）。level 取 yellow / orange / red（或 黄色 / 橙色 / 红色）。返回选项、给操作员的提问卡片内容（card，标签原样用）和下一步说明（note）。' +
-        '橙色预警：研判之后先调它（带上 panel），返回有 card 就用 ask_user 原样问给操作员（多选），没有 card 就不问；都按 note 的指引继续。黄色、红色没有卡片，处置由对应流程落实。',
+        '橙色预警：研判之后先调它（带上 panel），返回有 card 就用 ask_user 原样问给操作员（多选），拿到答案后调 record_response_choice；没有 card 就不问；都按 note 的指引继续。黄色、红色没有卡片，处置由对应流程落实。',
       parameters: {
         level: { type: 'string', required: true, description: 'yellow / orange / red，或 黄色 / 橙色 / 红色' },
         panel: { type: 'string', description: '工作面编号：给了就按事件时间线判断这一级是不是已经选过处置（选过、复评没恶化就不再问）' },
@@ -265,9 +265,51 @@ export function apply(ctx: Context, config: Config) {
         out.prior = prior
         if (!prior.ask) {
           out.card = null
-          out.note = `${prior.reason}：不再问操作员，也不重新下发同样的方案；继续按已下发的方案跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出追加处置的卡片。`
-        } else if (prior.issued_at) {
-          out.note = `${prior.reason}。${out.note} 操作员选了“不追加（只做必做项）”或点了“跳过”就是不追加：不重新下发已有的方案。`
+          out.note = prior.declined_at
+            ? `${prior.reason}：不再问操作员，也不下发处置；继续跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出卡片。`
+            : `${prior.reason}：不再问操作员，也不重新下发同样的方案；继续按已下发的方案跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出追加处置的卡片。`
+        }
+        if (prior.ask && prior.conflict) {
+          out.card = { ...out.card, question: `${out.card.question}。上次既勾选了处置又输入了“不采取处置”，请只选一种` }
+          out.note = `${prior.reason}。${out.note}`
+        } else if (prior.ask && prior.issued_at) {
+          // 追加：卡片上提醒已下发的不用再选（代码不过滤：再选会随新方案再下发一次）
+          out.card = { ...out.card, question: `${out.card.question}。本级已下发过方案（${prior.issued_at}），已下发的处置不用再选` }
+          out.note = `${prior.reason}。${out.note}`
+        }
+        return toJson(out)
+      },
+    }),
+  )
+
+  // 操作员在处置选项卡片上的答案（2026-11-11）：由代码判断选了什么（处置 / 明确不处置 / 暂未决定 / 冲突），记进事件时间线，
+  // get_response_options 是否再问、演示导演走哪个分支、复盘都按这条记录；智能体不自己解释答案
+  c.tools.register(
+    defineTool({
+      name: 'record_response_choice',
+      description:
+        '记录操作员在处置选项卡片（get_response_options 给的 card）上的答案，返回代码判断的选择和下一步（next）。ask_user 拿到答案后立即调用：selected 放答案里的 selected 原样（含“（建议）”等后缀），答案里有 custom（操作员在输入框输入的文字）就原样放进 custom，一个字不改；答案是跳过（selected 为空且没有 custom）传 skipped: true。' +
+        '按返回的 next 做：选了处置就用 option_ids 调 draft_firefighting_plan；不处置、暂未决定或选择冲突都不编方案、不下发（冲突要立即重问）。',
+      parameters: {
+        panel: { type: 'string', required: true, description: '工作面编号' },
+        level: { type: 'string', required: true, description: 'orange（或 橙色）' },
+        selected: { type: 'array', items: { type: 'string' }, description: '答案里选中的标签，原样' },
+        custom: { type: 'string', description: '答案里的 custom（操作员在输入框输入的文字），原样，一个字不改；没有就不传' },
+        skipped: { type: 'boolean', description: '操作员点了“跳过”（暂不决定）' },
+      },
+      output: { schema: { type: 'json' as const }, render: (_args: unknown, v: any) => [{ type: 'text' as const, text: JSON.stringify(v) }] },
+      execute: async (args: { panel: string; level: string; selected?: string[]; custom?: string; skipped?: boolean }) => {
+        const out: any = interpretChoice(responseOptions, String(args.level), Array.isArray(args.selected) ? args.selected.map(String) : [], typeof args.custom === 'string' ? args.custom : '', Boolean(args.skipped))
+        try {
+          const inc = incidents ? await incidents.findOpen('fire', String(args.panel)) : undefined
+          if (inc) {
+            const ev = c.rescueEvidence as RescueEvidence
+            const at = String((await ev.mineData.call('get_clock', {})).now).slice(0, 19)
+            await incidents!.append(inc.incident_id, at, 'note', 'flow', { type: 'response_choice', level: out.level, choice: out.choice, option_ids: out.option_ids, text: out.text })
+            out.incident_id = inc.incident_id
+          }
+        } catch (err) {
+          ctx.logger.warn(`${FLOW}: 处置选择记入事件时间线失败：${(err as Error).message}`)
         }
         return toJson(out)
       },
@@ -309,6 +351,8 @@ export function apply(ctx: Context, config: Config) {
         const humanInputs: HumanInput[] = [...(args.human_inputs ?? []), ...resolveFieldChoices(fieldConditions, (args.field_choices ?? []).filter((x) => !given.has(x.field)), args.confirmed_by)]
         // 防灭火方案：操作员在处置选项卡片上选的选项编号 → 方案的可选步骤 key（代码校验，不认识的报错）
         const forcedSteps = flow === FIREFIGHTING && Array.isArray(args.selected_options) ? planKeysFor(responseOptions, 'orange', args.selected_options.map(String)) : undefined
+        if (forcedSteps && forcedSteps.length === 0)
+          throw new Error('selected_options 为空：操作员没有选处置（明确不处置或暂未决定）时不编方案、不下发，按 record_response_choice 返回的 next 做')
         const parent = exec.agent
         if (!parent) throw new Error(`${flow.name} 需要调用方会话`)
         const workspace: string = await c.workingDirectory.ensure(parent, exec.signal)
@@ -408,7 +452,7 @@ export function apply(ctx: Context, config: Config) {
       panel: { type: 'string', required: true, description: '工作面编号，如 1201' },
       leak_m3_min: { type: 'number', description: '采空区漏风量（m³/min），指挥人员给出时才填；与 target_o2_pct 一起用于由代码估算注氮流量' },
       target_o2_pct: { type: 'number', description: '注氮的目标氧浓度（%），指挥人员给出时才填' },
-      selected_options: { type: 'array', items: { type: 'string' }, description: '操作员在处置选项卡片（get_response_options 给出）上选的选项编号；给了就以它为准，方案的可选步骤正好是这些，不要自己增减。没有选就不传（由你按证据选）' },
+      selected_options: { type: 'array', items: { type: 'string' }, description: '操作员在处置选项卡片上选的选项编号（record_response_choice 返回的 option_ids，原样传）；给了就以它为准，方案的可选步骤正好是这些，不要自己增减。没有选就不传（由你按证据选）' },
     },
     draftFirefightingPlan,
   )

@@ -422,7 +422,7 @@
     cited_tools_called: true
 
 - id: v3-orange-firefighting
-  description: 橙色预警（s3 第 39 小时）：研判后先查处置选项、用卡片问操作员（运行器代答：追加注浆、堵漏），按所选编制防灭火处置方案（不封闭火区）并提交（放行），同时提交预警，登记复评；不提交封闭方案、不提别的问题
+  description: 橙色预警（s3 第 39 小时）：研判后先查处置选项、用卡片问操作员（运行器代答：STORY_ORANGE_OPTIONS，缺省只选注氮），把答案交给 record_response_choice，按所选编制防灭火处置方案（不封闭火区）并提交（放行），同时提交预警，登记复评；不提交封闭方案、不提别的问题
   scenario: s3-accelerating
   at_h: 39
   incident: {panel: "1201", cause: anomaly, summary: "1201 工作面：预警等级由 黄色 升为 橙色"}
@@ -431,7 +431,7 @@
     - 告警 {alert_id}（矿井时间 {mine_now}）：1201 工作面：预警等级由 黄色 升为 橙色
     请立即对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。不要先问操作员“要不要研判”。
     （投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）
-  operator_cards: true # 运行器扮演操作员回答代码给出的卡片（处置选项：注浆、堵漏）
+  operator_cards: true # 运行器扮演操作员回答代码给出的卡片（处置选项：缺省只选注氮）
   approvals: {issue_firefighting_plan: allow} # 防灭火方案放行，其余对外动作一律拒绝
   checks:
     expect_decisions:
@@ -449,7 +449,7 @@
         required: [add_followup]
         forbidden: [close_incident]
     incident_read: true
-    tools_called: [run_fire_assessment, get_response_options, draft_firefighting_plan]
+    tools_called: [run_fire_assessment, get_response_options, record_response_choice, draft_firefighting_plan]
     tools_not_called: [draft_sealing_plan, approve_unsealing]
     approval_asked: [issue_firefighting_plan]
     actions_issued: [issue_firefighting_plan]

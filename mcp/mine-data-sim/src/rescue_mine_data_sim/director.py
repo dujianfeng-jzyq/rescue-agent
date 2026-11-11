@@ -9,6 +9,8 @@
 等级信号来自事件库里监听器写的告警（“升为 黄色/橙色/红色”），导演不判断预警等级，只读。
 
 分支剧本（`scenarios/demo-flow.yaml`，占位值）：每一级的选项、按“所选操作的个数”走的分支（继续到下一级，或跑一段时间后结束），
+操作员在卡片输入框里输入“不采取处置”时（智能体经 record_response_choice 记进事件时间线，矿井什么也不执行）走 `when: {declined: true}` 的分支；
+点“跳过”（暂不决定）或选择冲突时继续等，
 分支可以改过程参数（`params`/`scale`）。`apply_options: true` 时导演自己把所选操作施加到模拟矿井（控制台代替选项卡片的过渡期）；
 智能体经 guard 下发时由 guard 经 rescue-mine 执行，导演就不再重复施加。
 """
@@ -24,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from rescue_contract.response_options import ResponseOption, options_for
+from rescue_contract.response_options import LEVEL_NAMES, ResponseOption, options_for
 
 LEVELS = ("黄色", "橙色", "红色")
 LEVEL_RE = re.compile(r"升为\s*(黄色|橙色|红色)")
@@ -56,6 +58,8 @@ def validate_flow(flow: dict[str, Any]) -> None:
         if not st.get("branches"):
             raise ValueError(f"{name} 没有分支")
         for b in st["branches"]:
+            if (b.get("when") or {}).get("declined") and "again" in b:
+                raise ValueError(f"{name} 的“不采取处置”分支不能是 again（会一直等）")
             if sum(k in b for k in ("goto", "end", "again")) != 1:
                 raise ValueError(f"{name} 的分支要么 goto、要么 end、要么 again（追加处置）")
             if "goto" in b and b["goto"] not in stages:
@@ -84,6 +88,8 @@ class Director:
         self._log_idx = 0  # 进入等待时处置日志的长度：只看之后执行的处置
         self._matched: set[str] = set()  # 等待期间矿井执行的处置对应的选项
         self._last_match = 0.0
+        self._hold_wall = 0.0  # 进入等待（或要求追加）的真实时间：只认之后记下的操作员选择
+        self._seen_choice: set[str] = set()
         self._seen: set[str] = set()
         self._start_wall = 0.0
         self._phase = "advance"
@@ -161,14 +167,14 @@ class Director:
                 self.sim.engine.apply(known[i].step, {}, [], "demo-operator")
             return self._decide(ids)
 
-    def _decide(self, ids: list[str]) -> dict[str, Any]:
-        """按累计选中的个数走分支（ids 是这一次新增的选项，已经执行）。"""
+    def _decide(self, ids: list[str], declined: bool = False) -> dict[str, Any]:
+        """按累计选中的个数走分支（ids 是这一次新增的选项，已经执行）；declined：操作员输入了“不采取处置”。"""
         st = self.flow["stages"][self.stage]
         known = {o.id: o for o in self._options()}
         total = self._done + ids
-        branch = self._pick_branch(st, len(total))
-        self.chosen.append({"stage": self.stage, "options": ids})
-        names = "、".join(known[i].label for i in ids)
+        branch = self._pick_branch(st, len(total), declined)
+        self.chosen.append({"stage": self.stage, "options": ids, **({"declined": True} if declined else {})})
+        names = "、".join(known[i].label for i in ids) or "不采取处置"
         if "again" in branch:
             self._done = total
             self._reset_wait()
@@ -193,6 +199,28 @@ class Director:
     def _reset_wait(self) -> None:
         self._log_idx = len(self.sim.engine.action_log)
         self._matched, self._last_match = set(), 0.0
+        self._hold_wall = time.time()
+
+    def _operator_choices(self) -> list[str]:
+        """等待期间智能体记下的操作员选择（事件时间线里 record_response_choice 写的 note，按出现顺序，只给新的）。"""
+        if self.store is None:
+            return []
+        out: list[str] = []
+        for inc in self.store.list():
+            for e in self.store.entries(inc["incident_id"]):
+                d = e.get("data") or {}
+                if e["kind"] != "note" or d.get("type") != "response_choice" or e["event_id"] in self._seen_choice:
+                    continue
+                if LEVEL_NAMES.get(str(d.get("level")), d.get("level")) != self.stage:
+                    continue
+                try:
+                    if datetime.fromisoformat(e["wall"]).timestamp() < self._hold_wall - 1:  # 事件时间戳截到秒
+                        continue
+                except ValueError:
+                    continue
+                self._seen_choice.add(e["event_id"])
+                out.append(str(d.get("choice")))
+        return out
 
     def _carry_over(self) -> None:
         """进入等待时：必做项（不由操作员选、持续生效的，如黄色的加密监测）在本次演示里已经由 guard 执行过，就算已到位。
@@ -222,6 +250,16 @@ class Director:
                     self._matched |= new
                     self._last_match = time.time()
         self._log_idx = len(log)
+        if not self._matched:
+            for choice in self._operator_choices():
+                if choice == "none":
+                    self._note(f"{self.stage}：操作员选择不采取处置")
+                    self._decide([], declined=True)
+                    return
+                if choice == "undecided":
+                    self._note(f"{self.stage}：操作员暂未选择处置，继续等待（可在对话里要求重新给出处置选项）")
+                if choice == "conflict":
+                    self._note(f"{self.stage}：操作员的选择互相冲突（勾了处置又输入“不采取处置”），等智能体重问")
         if self._matched and time.time() - self._last_match >= self.settle_s:
             ids = [o.id for o in self._options() if o.id in self._matched]
             self._matched = set()
@@ -244,9 +282,15 @@ class Director:
         self.log.append({"at": self.sim.engine.now().isoformat(timespec="seconds"), "text": text})
 
     @staticmethod
-    def _pick_branch(st: dict[str, Any], n: int) -> dict[str, Any]:
+    def _pick_branch(st: dict[str, Any], n: int, declined: bool = False) -> dict[str, Any]:
+        if declined:  # 明确不处置：有专门的分支走它，没有按已做的项数
+            for b in st["branches"]:
+                if (b.get("when") or {}).get("declined"):
+                    return b
         for b in st["branches"]:
             w = b.get("when") or {}
+            if w.get("declined"):
+                continue
             if int(w.get("min", 0)) <= n <= int(w.get("max", 10**6)):
                 return b
         raise ValueError(f"选 {n} 项没有对应的分支")

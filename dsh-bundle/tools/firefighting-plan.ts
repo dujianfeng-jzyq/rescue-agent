@@ -38,7 +38,7 @@ const stage: StageRunner = async ({ label, schema }) => {
   }
   return {
     ok: true,
-    structured: { optional_steps: ['leak_sealing', 'monitor_after'], step_notes: [{ key: 'inert_injection', note: '注氮口位置按现场确定' }], summary: '先注惰降氧，辅以回风侧堵漏，不封闭火区' },
+    structured: { optional_steps: ['leak_sealing', 'inert_injection', 'monitor_after'], step_notes: [{ key: 'inert_injection', note: '注氮口位置按现场确定' }], summary: '先注惰降氧，辅以回风侧堵漏，不封闭火区' },
     childId: 'cli-write',
   }
 }

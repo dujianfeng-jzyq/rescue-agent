@@ -47,17 +47,6 @@
      "team_size": null,
      "standby_team": null,
      "params": {}
-    },
-    {
-     "order": 2,
-     "type": "inert_injection",
-     "description": "向采空区注入惰性气体，降低氧浓度、抑制煤氧化（注氮流量由代码按漏风量和目标氧浓度估算，未给出时不写数值）",
-     "roadways": [],
-     "team_size": null,
-     "standby_team": null,
-     "params": {
-      "gas": "N2"
-     }
     }
    ],
    "basis": [
@@ -80,18 +69,9 @@
     "description": "处置前观测采空区束管、上隅角和回风巷的气体与温度，作为处置效果的对照；处置期间按指挥部确定的频次加密观测",
     "roadways_text": "",
     "params_text": ""
-   },
-   {
-    "order": 2,
-    "key": "inert_injection",
-    "type": "inert_injection",
-    "type_name": "注惰",
-    "description": "向采空区注入惰性气体，降低氧浓度、抑制煤氧化（注氮流量由代码按漏风量和目标氧浓度估算，未给出时不写数值）",
-    "roadways_text": "",
-    "params_text": "gas=N2"
    }
   ],
-  "step_count": 2,
+  "step_count": 1,
   "optional_steps": [],
   "materials": {},
   "supply": [],

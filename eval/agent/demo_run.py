@@ -6,10 +6,10 @@
 
     make demo-up 之后：
     RESCUE_SIM_CONTROL_URL=http://127.0.0.1:13090/sim RESCUE_INCIDENT_DIR=var/demo/incidents \\
-    DSH_HOME=var/demo/dsh-home RESCUE_DSH_URL='<网页端地址带 token>' STORY_ORANGE_OPTIONS='注浆|堵漏' \\
+    DSH_HOME=var/demo/dsh-home RESCUE_DSH_URL='<网页端地址带 token>' STORY_ORANGE_OPTIONS='注氮|注浆|堵漏' \\
     uv run --project mcp --with playwright python eval/agent/demo_run.py
 
-STORY_ORANGE_OPTIONS：橙色卡片上选哪些（| 分隔；注浆|堵漏 = 累计 3 项，回落；只选一项 = 累计 2 项，要求追加；空串 = 只做必做项，累计 1 项，升红）。
+STORY_ORANGE_OPTIONS：橙色卡片上选哪些（| 分隔；注氮|注浆|堵漏 = 3 项，回落；选两项 = 要求追加；只选一项 = 升红；不采取处置 = 在输入框输入这句话，明确不处置，升红；空串 = 点跳过，暂不决定，导演继续等）。
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from pathlib import Path
 from playwright.sync_api import Page, sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-os.environ.setdefault("STORY_ORANGE_OPTIONS", "注浆|堵漏")  # 演示脚本默认追加注浆、堵漏（累计 3 项，走回落分支）；story 模块读取这个环境变量
+os.environ.setdefault("STORY_ORANGE_OPTIONS", "注氮|注浆|堵漏")  # 演示脚本默认三项全选（走回落分支）；story 模块读取这个环境变量
 import run as runner  # noqa: E402
 import story  # noqa: E402
 from rescue_contract.incidents import IncidentStore  # noqa: E402

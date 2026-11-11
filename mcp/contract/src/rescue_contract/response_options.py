@@ -8,7 +8,9 @@
 - step：对应的矿井处置步骤类型（StepType 取值）——导演据此认出“这一项已经下发”；
 - how：智能体用哪个流程/工具落实（告诉智能体，不是权限）；
 - plan_key：防灭火方案里对应的步骤 key（skills/firefighting-plan/references/plan.yaml）；
-- always：True 表示这一项一定包含（不放进选择卡片，只在卡片说明里告知）；
+- always：True 表示这一项一定包含（不放进选择卡片，只在卡片说明里告知）。目前没有这样的项：橙色的注氮原来是必做，
+  2026-11-11 改为由操作员选（卡片上标“建议”），操作员也可以明确选“不采取处置”（安全取舍由项目负责人决定，待专家审定）；
+- suggested：True 表示卡片上标“（建议）”（仍由操作员选，不预先勾选）；
 - choosable：False 表示不由卡片选择（智能体按流程自己落实，导演只识别结果）。
 """
 
@@ -26,6 +28,7 @@ class ResponseOption:
     plan_key: str | None = None
     always: bool = False
     choosable: bool = True
+    suggested: bool = False
 
 
 # 预警等级 → 选项（等级名用代码里的 yellow / orange / red）
@@ -34,7 +37,7 @@ OPTIONS: dict[str, tuple[ResponseOption, ...]] = {
         ResponseOption("monitor", "观察跟进（加密监测）", "monitor", "start_monitoring", choosable=False),
     ),
     "orange": (
-        ResponseOption("inert", "注氮", "inert_injection", "draft_firefighting_plan → issue_firefighting_plan", plan_key="inert_injection", always=True),
+        ResponseOption("inert", "注氮", "inert_injection", "draft_firefighting_plan → issue_firefighting_plan", plan_key="inert_injection", suggested=True),
         ResponseOption("grout", "注浆", "grouting", "draft_firefighting_plan → issue_firefighting_plan", plan_key="grouting"),
         ResponseOption("leak_seal", "堵漏", "leak_sealing", "draft_firefighting_plan → issue_firefighting_plan", plan_key="leak_sealing"),
     ),

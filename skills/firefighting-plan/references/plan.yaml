@@ -22,10 +22,9 @@ required_steps:
   - key: monitor
     type: monitor
     description: 处置前观测采空区束管、上隅角和回风巷的气体与温度，作为处置效果的对照；处置期间按指挥部确定的频次加密观测
-  - key: inert_injection
-    type: inert_injection
-    description: 向采空区注入惰性气体，降低氧浓度、抑制煤氧化（注氮流量由代码按漏风量和目标氧浓度估算，未给出时不写数值）
 
+# 可选步骤：after 指向的步骤不在方案里时，接到那个步骤自己的 after 上（如没选注氮，注浆接在观测之后）。
+# 注惰原来是必备步骤；2026-11-11 改为可选：橙色由操作员在卡片上选（注氮标“建议”），也可以选“不采取处置”（占位，待专家审定）。
 optional_steps:
   - key: leak_sealing
     type: leak_sealing
@@ -33,6 +32,11 @@ optional_steps:
     roadways: leak
     label: 回风侧堵漏，减少向采空区漏风
     description: 回风侧堵漏，减少向采空区漏风
+  - key: inert_injection
+    type: inert_injection
+    after: monitor
+    label: 向采空区注氮
+    description: 向采空区注入惰性气体，降低氧浓度、抑制煤氧化（注氮流量由代码按漏风量和目标氧浓度估算，未给出时不写数值）
   - key: inhibitor_spray
     type: inhibitor_spray
     after: inert_injection

@@ -17,7 +17,8 @@
 7 复盘：review_timeline
 8 收尾：操作员确认处置结束，智能体完成跟踪计划、关闭事件
 
-橙色处置后 s3 是否走到红色取决于橙色卡片上追加了什么（STORY_ORANGE_OPTIONS，默认空串 = 点跳过、只做必做的注氮，约 70 小时升红；追加注浆、堵漏则受控）；受控时 48 矿井小时后由操作员注入“漏风突增”
+橙色处置后 s3 是否走到红色取决于橙色卡片上选了什么（STORY_ORANGE_OPTIONS，| 分隔的选项文字：默认“注氮”= 只注氮，约 70 小时升红；“注氮|注浆|堵漏”则受控；
+“不采取处置” = 在输入框输入这句话提交（明确不处置）；空串 = 点跳过（暂不决定，不下发任何处置））；受控时 48 矿井小时后由操作员注入“漏风突增”
 （顶板垮落，模拟矿井的 leak_change，系数 3）推到红色，并在输出里写明。漏风突增系数过大（8）会让封闭后的火区几百小时都降不到启封温度，演示选小一点。
 分级决策表是占位草案（skills/fire-incident-management/SKILL.md），这里的检查点按它写；表改了这里跟着改。
 复燃分支（启封后）不在这条主线里。
@@ -140,7 +141,7 @@ def open_duty_session(page: Page) -> None:
 
 
 # 现场条件的回答（操作员替总指挥确认）：按问题里的关键词给答案；选择题点包含答案文字的选项，填空题填进输入框
-FIELD_ANSWERS = [("温度", "28"), ("能见度", "20"), ("火源", "是"), ("水源", "是"), ("回风", "是"), ("谁确认", "总指挥"), ("指挥部决定", "决定封闭"), ("复评起点", "本次跟踪观测起点"), ("处置选项", os.environ.get("STORY_ORANGE_OPTIONS", ""))]  # 后两项是选择题：智能体就是否封闭向指挥部请示（操作员代表指挥部决定封闭）；还没有下发处置时复评起点按推荐项
+FIELD_ANSWERS = [("温度", "28"), ("能见度", "20"), ("火源", "是"), ("水源", "是"), ("回风", "是"), ("谁确认", "总指挥"), ("指挥部决定", "决定封闭"), ("复评起点", "本次跟踪观测起点"), ("处置选项", os.environ.get("STORY_ORANGE_OPTIONS", "注氮"))]  # 后两项是选择题：智能体就是否封闭向指挥部请示（操作员代表指挥部决定封闭）；还没有下发处置时复评起点按推荐项
 
 OPTION_KEYS = ("指挥部决定", "复评起点", "处置选项")  # 这些问题是选择题：点选项（输入框一直在，填进去会被当成自定义文字）
 
@@ -172,9 +173,9 @@ def _answer_questions(page: Page, max_questions: int) -> int:
         answer = max(hits)[1] if hits else None  # 同时出现多个关键词时取离输入框最近（最靠后）的那个
         if answer is None and known and "确认人" in head:  # 问现场条件确认人是谁（选项是各岗位）：总指挥确认
             answer = "总指挥"
-        if answer is None or answer == "":  # 答案为空串：多选卡片一项都不选，只能点“跳过”（提交按钮是灰的）
+        if answer is None or answer == "":  # 答案为空串：多选卡片一项都不选，只能点“跳过”（提交按钮是灰的；算暂不决定）
             # 不认识的问题：记下问题文字（事后分析智能体问了什么），点“跳过”让智能体按自己的判断继续，免得脚本卡在提问卡片上
-            say(f"  {'未识别的提问' if answer is None else '操作员选择不追加'}（跳过）：{' '.join(question.split())[-120:]}")
+            say(f"  {'未识别的提问' if answer is None else '操作员暂不决定'}（跳过）：{' '.join(question.split())[-120:]}")
             try:
                 card.get_by_role("button", name=re.compile("^(Skip|跳过)$")).first.click(timeout=5000)
             except Exception:  # noqa: BLE001  “跳过”点不动时关掉整张提问卡片（右上角“Dismiss all questions”）
@@ -187,7 +188,9 @@ def _answer_questions(page: Page, max_questions: int) -> int:
             page.wait_for_timeout(1500)
             continue
         option = card.get_by_text(answer, exact=False)
-        if any(k in head for k in OPTION_KEYS):  # 选择题：点选项（输入框一直在，填进去会被当成自定义文字）；选项文字对不上就点第 1 项（推荐项）
+        if answer == "不采取处置" and "处置选项" in head:  # 处置选项卡片上明确不处置：不勾选项，在输入框输入这句话再提交（问题文字里也有这几个字，不能按文字点）
+            box.first.fill(answer, timeout=5000)
+        elif any(k in head for k in OPTION_KEYS):  # 选择题：点选项（输入框一直在，填进去会被当成自定义文字）；选项文字对不上就点第 1 项（推荐项）
             if "|" in answer:  # 多选卡片（处置选项）：逐个点选；答案为空串表示一个都不选
                 for part in [x for x in answer.split("|") if x]:
                     card.get_by_text(part, exact=False).first.click(timeout=5000)
