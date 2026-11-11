@@ -58,7 +58,7 @@ from starlette.responses import HTMLResponse, JSONResponse
 
 from .director import Director, DirectorThread, load_flow
 from .engine import SimEngine, all_sensor_ids
-from .mine import EQUIPMENT, INVENTORY, MINE_ID, MINE_NAME, NETWORK, PANELS, RESCUE_TEAMS, SENSOR_BY_ID, SENSORS
+from .mine import EQUIPMENT, INVENTORY, MINE_ID, MINE_NAME, NETWORK, PANEL, PANELS, RESCUE_TEAMS, SENSOR_BY_ID, SENSORS
 from .scenarios import load_all, scenario_dir
 
 INSTRUCTIONS = (
@@ -498,6 +498,7 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
                     for iv in e._interventions if iv.source == "script"
                 ],
                 "scenario": {"id": e.scenario.id, "name": e.scenario.name, "duration_h": None if e.continuous else e.scenario.duration_h},
+                "panel": PANEL,  # 综采工作面的名称（RESCUE_SIM_PANEL）：演示脚本按它写提问，不用再另设环境变量
                 "now": e.now().isoformat(),
                 "elapsed_h": round(e.now_h(), 3),
                 "speed": e.clock.speed,

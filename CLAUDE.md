@@ -42,7 +42,7 @@ make skills-check             # 技能自检（结构、import、样例）
 make interface-doc            # 重新生成 rescue-mine 接口说明（工具或模型改动后；测试会检查它是最新的）
 python3 scripts/sim.py state|reset <场景>|advance <小时>|apply <处置>   # 模拟控制台（Docker 用 RESCUE_SIM_CONTROL_URL=http://127.0.0.1:13090/sim 和控制令牌）
 make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API_KEY）
-make demo-up / demo-down / demo-reset   # 演示环境（Docker，4 个容器）：网页端 13080、控制台 13090/console，数据在 var/demo/，令牌在 var/demo/tokens.env；与地图对应的工作面名要带 DEMO_PANEL=211016
+make demo-up / demo-down / demo-reset   # 演示环境（Docker，4 个容器）：网页端 13080、控制台 13090/console，数据在 var/demo/，令牌在 var/demo/tokens.env；工作面名缺省 211016（与地图对应），DEMO_PANEL=1201 换回原名
 make dev-story / make story   # 演示故事线（按等级脚本推进，14 项检查）；Docker 里直接跑 eval/agent/story.py，环境变量见其文件头
 python -m rescue_contract.conformance <URL> [--with-actions]   # 接口一致性检查；--with-actions 会真的执行通知/调度/处置，只对模拟矿井加
 python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清单取一次证据（Python 采集小工具）

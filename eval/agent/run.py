@@ -55,6 +55,12 @@ def sim(path: str, body: dict) -> dict:
         return json.loads(resp.read())
 
 
+def sim_get(path: str) -> dict:
+    req = urllib.request.Request(f"{SIM}{path}", headers={"Authorization": f"Bearer {TOKEN}"} if TOKEN else {})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())
+
+
 def setup_sim(case: dict) -> tuple[str, dict[str, str]]:
     """重置场景为手动时钟（评测期间不走），按 apply 在指定时刻施加处置，快进到用例时刻。
 

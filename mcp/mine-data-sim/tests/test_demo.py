@@ -150,6 +150,7 @@ def test_demo_routes():
     r = c.post("/sim/demo/inject", json={"scenario": "s4-escalation", "speed": 600}).json()
     assert r["injected"]["scenario"] == "s4-escalation" and r["speed"] == 600
     st = c.get("/sim/state").json()
+    assert st["panel"] == "1201"  # 演示脚本按它写提问（测试环境不设 RESCUE_SIM_PANEL）
     assert st["mode"] == "demo" and st["injected"] and [x["type"] for x in st["script"]] == ["stop_advance", "leak_change"]
     assert c.post("/sim/overrides", json={"sensor_id": "SM-1201-UC", "measurand": "CO", "mode": "fixed", "value": 40}).json()["active"]
     assert c.post("/sim/overrides", json={"sensor_id": "SM-1201-UC", "mode": "ramp", "value": 1}).status_code == 400

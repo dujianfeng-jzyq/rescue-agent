@@ -71,6 +71,8 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
   function renderLeft(s: StateData | null, failed: boolean): void {
     const inc = s?.incident ?? null
     const color = inc?.level ? (LEVEL_COLOR[inc.level] ?? '#7fb2e6') : '#5b6b80'
+    // 火区封闭后，密闭内测点断电，监听只能按束管读数判定，读数回落后会显示“无预警”；注明一句，免得被看成火已熄灭（2026-11-11 演示复看）
+    const sealed = inc ? s?.fireAreas.items.find((f) => f.status === 'sealed' && f.panel === inc.panel) : undefined
     const sit = section(
       '预警态势',
       inc
@@ -78,6 +80,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
             'div',
             { class: 'rm-situation', style: `--lv:${color}` },
             h('div', { class: 'rm-level' }, inc.level === 'none' ? '无预警' : (inc.levelName ?? '未研判')),
+            sealed && h('p', { class: 'rm-note rm-sealed-note' }, `火区已封闭${sealed.sealedAt ? `（${hm(sealed.sealedAt)}）` : ''}，读数为封闭后的束管监测；等级按读数判定，不代表火已熄灭`),
             h(
               'dl',
               { class: 'rm-kv' },

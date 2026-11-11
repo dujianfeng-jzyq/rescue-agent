@@ -55,7 +55,7 @@ const NAVY = `
 const CSS = `
 ${ON}, ${ON} body { background: #0b1522 !important; color-scheme: dark; }
 #rescue-map-host { position: fixed; inset: 0; z-index: 0; }
-${ON} { --rm-l: 372px; --rm-chat-w: 340px; --rm-r: calc(var(--rm-chat-w) + 32px); --rm-top: 68px; --rm-agent-h: 0px; }
+${ON} { --rm-l: 372px; --rm-chat-w: clamp(420px, 28vw, 560px); --rm-r: calc(var(--rm-chat-w) + 32px); --rm-top: 68px; --rm-agent-h: 0px; }
 ${ON}.rm-hide-left { --rm-l: 16px; }
 ${ON}.rm-hide-right.rm-hide-chat { --rm-r: 16px; }
 ${ON} #root { position: relative; z-index: 2; height: 100%; pointer-events: none; }
@@ -70,17 +70,23 @@ ${ON} ${CENTER} { position: absolute !important; right: 16px; width: var(--rm-ch
 ${ON}.rm-hide-right ${CENTER} { top: var(--rm-top); }
 ${ON} ${CENTER} > * { background: transparent !important; }
 ${ON}.rm-hide-chat ${CENTER} { display: none !important; }
-/* 人工确认卡片放到画面正中、压暗背景（2026-11-10 演示复看：右下角太不醒目，窄栏里要点显示不全）。
+/* 人工确认卡片和提问卡片（处置选项、现场条件）放到画面正中（2026-11-10 演示复看：右下角不醒目，窄栏里显示不全）。
    卡片仍是 DSH 会话组件里的原件，只改位置：会话列的 backdrop-filter 会让 fixed 定位相对它而不是视口，有卡片时去掉；
-   对话区被收起时也要显示卡片（列保留布局但不可见，只有卡片可见） */
-${ON} ${CENTER}:has([data-approval-key]) { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: rgba(9, 20, 38, 0.95) !important; }
-${ON}.rm-hide-chat ${CENTER}:has([data-approval-key]) { display: block !important; visibility: hidden; }
-${ON} ${CENTER} [data-approval-key] {
+   对话区被收起时也要显示卡片（列保留布局但不可见，只有卡片可见）。
+   外层（DSH 的 root/frame）只当定位容器：不加底色、边框和压暗（第八次复看：外面多一层背景），里面的卡片拉满宽度 */
+${ON} ${CENTER}:has([data-approval-key], [data-question-key]) { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: rgba(9, 20, 38, 0.95) !important; }
+${ON}.rm-hide-chat ${CENTER}:has([data-approval-key], [data-question-key]) { display: block !important; visibility: hidden; }
+${ON} ${CENTER} :is([data-approval-key], [data-question-key]) {
   visibility: visible; position: fixed !important; left: 50vw; top: 50vh; transform: translate(-50%, -50%); z-index: 100;
-  width: min(820px, calc(100vw - 32px)) !important; max-width: none !important; max-height: 82vh; overflow: auto; box-sizing: border-box; margin: 0 !important;
-  background: rgba(12, 28, 52, 0.99) !important; border: 1px solid rgba(245, 197, 24, 0.6) !important; border-radius: 12px !important;
-  box-shadow: 0 0 0 100vmax rgba(3, 8, 18, 0.6), 0 16px 60px rgba(0, 0, 0, 0.6) !important;
+  width: min(820px, calc(100vw - 32px)) !important; max-width: none !important; box-sizing: border-box; margin: 0 !important; padding: 0 !important;
+  background: transparent !important; border: 0 !important; box-shadow: none !important;
 }
+${ON} ${CENTER} :is([data-approval-key], [data-question-key]) > * {
+  width: 100% !important; max-width: none !important; max-height: 82vh !important; overflow: auto; box-sizing: border-box; margin: 0 !important;
+  background: rgb(12, 28, 52) !important; box-shadow: 0 16px 60px rgba(0, 0, 0, 0.65) !important;
+}
+${ON} ${CENTER} [data-approval-key] > * { border: 1px solid rgba(245, 197, 24, 0.7) !important; }
+${ON} ${CENTER} [data-question-key] > * { border: 1px solid rgba(90, 160, 255, 0.6) !important; }
 ${ON} ${CENTER} [data-approval-key] [role="group"] > div:first-child { font-size: 15px; line-height: 24px; }
 ${ON} ${CENTER} [data-approval-key] [role="group"] > div:first-child::first-line { font-size: 18px; }
 /* 会话组件里演示用不上的控件：视图标签（Chat/Trajectory）、内容宽度拖柄、轮次导航、权限模式、模型选择、附件按钮、用量统计 */
@@ -155,6 +161,7 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-sec h3::before { content: ''; width: 3px; height: 12px; border-radius: 2px; background: #4fd1ff; box-shadow: 0 0 8px #4fd1ff; }
 .rm-empty { color: #7f93ab; padding: 6px 0 8px; font-size: 12px; }
 .rm-note { margin: 6px 0 4px; color: #7f93ab; font-size: 11px; }
+.rm-sealed-note { margin: 0 0 6px; color: #d9b84a; font-size: 12px; }
 .rm-summary { margin: 8px 0 4px; color: #b9cbe0; font-size: 12px; }
 
 .rm-situation { padding: 4px 0 6px; }
@@ -282,7 +289,7 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
   .rm-sec-records { display: none; }
 }
 @media (max-width: 1100px) {
-  ${ON} { --rm-l: 312px; --rm-chat-w: 280px; }
+  ${ON} { --rm-l: 312px; --rm-chat-w: 360px; }
   .rm-left { width: 280px; }
   .rm-chips { display: none; }
 }

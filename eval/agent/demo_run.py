@@ -5,7 +5,7 @@
 直到导演结束。判定看事件库时间线和导演的记录。
 
     make demo-up 之后：
-    DEMO_PANEL=211016 RESCUE_SIM_CONTROL_URL=http://127.0.0.1:13090/sim RESCUE_INCIDENT_DIR=var/demo/incidents \\
+    RESCUE_SIM_CONTROL_URL=http://127.0.0.1:13090/sim RESCUE_INCIDENT_DIR=var/demo/incidents \\
     DSH_HOME=var/demo/dsh-home RESCUE_DSH_URL='<网页端地址带 token>' STORY_ORANGE_OPTIONS='注浆|堵漏' \\
     uv run --project mcp --with playwright python eval/agent/demo_run.py
 

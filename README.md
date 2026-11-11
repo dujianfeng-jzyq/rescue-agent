@@ -56,8 +56,8 @@ make demo-up        # 构建并启动 4 个容器（mine-sim、actions、sentine
 
 - 网页端 `http://<主机>:13080`；演示控制台 `http://<主机>:13090/console`，登录令牌是 `var/demo/tokens.env` 里的 `RESCUE_SIM_CONTROL_TOKEN`。
 - 矿井默认连续运行在常态，可以先讲解设计思路和界面、点地图让智能体研判。**在控制台“演示导演”区块点一次“开始演示”**，之后导演自己推进：监听器告警 → 唤醒值班会话 → 智能体研判；黄色自动提交加密监测，橙色弹**处置选项卡片**（勾选追加注浆、堵漏，不追加点跳过），红色智能体撤人、封闭（封闭方案先答**现场条件卡片**）。你在网页端回答卡片、点审批弹窗的 Allow once；走向由所选处置决定（橙色累计 3 项回落到黄色，只做 1 项升到红色），走完自动结束。演示中出现提权确认一律拒绝。
-- 带地图包（`var/map/`）时工作面名要对应：`DEMO_PANEL=211016 make demo-up`。
-- `make demo-reset`（同样要带 `DEMO_PANEL`）清空 `var/demo/` 的演示数据并回到常态，是重来一遍最干净的做法；`make demo-down` 停止，`make demo-logs` 看日志。
+- 工作面名缺省是 211016，与地图包（`var/map/`）对应；要用模拟矿井的原名 1201 时设 `DEMO_PANEL=1201`。
+- `make demo-reset` 清空 `var/demo/` 的演示数据并回到常态，是重来一遍最干净的做法；`make demo-down` 停止，`make demo-logs` 看日志。
 - 整条故事线（黄 → 橙 → 红 → 封闭 → 复评 → 启封 → 复盘 → 关闭事件）可由脚本扮演操作员自动走一遍：`make story`（本机用 `make dev-story`，Docker 见 `eval/agent/story.py` 的说明），约 12 分钟、14 项检查；`eval/agent/demo_run.py` 是上面“点一次开始演示”那套流程的脚本版（约 5 分钟）。
 
 ### 本机开发

@@ -12,6 +12,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 . scripts/lib/env.sh && load_env .env
+# 综采工作面的名称：缺省 211016，与地图包 var/map/mine_map.yaml 对上；环境变量或 .env 里的 DEMO_PANEL 优先（如 DEMO_PANEL=1201）
+export DEMO_PANEL="${DEMO_PANEL:-211016}"
 DEMO="$ROOT/var/demo"
 COMPOSE=(docker compose -f docker/compose.yml --env-file "$DEMO/tokens.env")
 

@@ -211,8 +211,23 @@ def _answer_questions(page: Page, max_questions: int) -> int:
 
 
 
-# 工作面名：模拟矿井可用 RESCUE_SIM_PANEL（Docker 为 DEMO_PANEL）换成与地图一致的名字，提问里要跟着换，否则智能体会去评估一个不存在的工作面
-PANEL = os.environ.get("RESCUE_SIM_PANEL") or os.environ.get("DEMO_PANEL") or "1201"
+_panel: str | None = None
+
+
+def panel() -> str:
+    """综采工作面的名称：提问里要跟着模拟矿井的名字（RESCUE_SIM_PANEL，Docker 演示缺省 211016），否则智能体会去评估一个不存在的工作面。
+
+    环境变量 RESCUE_SIM_PANEL / DEMO_PANEL 优先；没设就问模拟矿井（/sim/state 的 panel），不用每次手动带；都没有按 1201。"""
+    global _panel
+    if _panel is None:
+        _panel = os.environ.get("RESCUE_SIM_PANEL") or os.environ.get("DEMO_PANEL") or ""
+        if not _panel:
+            try:
+                _panel = str(runner.sim_get("/state").get("panel") or "")
+            except (OSError, ValueError) as e:
+                say(f"  （取不到模拟矿井的工作面名，按 1201：{e}）")
+        _panel = _panel or "1201"
+    return _panel
 SEAL_PROMPT = (
     "指挥部决定封闭 {panel} 采空区火区。现场条件由总指挥确认：灾区温度 28 ℃，能见度 20 米，火源已明确，水源、人力和物力充足，回风道畅通。"
     "请编制封闭方案，经合规审核通过后提交人工确认下发。"
@@ -341,7 +356,7 @@ def main(argv: list[str]) -> int:
         if not sealed:
             say(f"  智能体{'起草了封闭方案但没有走到下发' if drafted else '没有起草封闭方案'}，操作员下达封闭决定")
             ctx["operator_seal"] = True
-            tell(page, SEAL_PROMPT.format(panel=PANEL))
+            tell(page, SEAL_PROMPT.format(panel=panel()))
             settle()
             acts = actions(store, iid, b)
             sealed = ("issue_sealing_plan", "issued") in acts
@@ -373,7 +388,7 @@ def main(argv: list[str]) -> int:
         time.sleep(30)
         settle()  # 推进期间监听器可能又唤醒了智能体（跟踪到点、复评），先让它处理完
         # 评估不具备条件时（说明哪一项不满足）：不得下发；再推进 48 小时重新评估，最多 6 轮
-        prompt, ready, refused_ok, assessed = UNSEAL_PROMPT.format(panel=PANEL), False, True, False
+        prompt, ready, refused_ok, assessed = UNSEAL_PROMPT.format(panel=panel()), False, True, False
         for round_ in range(1, 7):
             b = b6 if round_ == 1 else count(store, iid)
             tell(page, prompt)
@@ -389,7 +404,7 @@ def main(argv: list[str]) -> int:
                 break
             advance(48)
             time.sleep(20)
-            prompt = f"又过了 48 小时。请重新评估 {PANEL} 采空区火区是否具备启封条件；具备的话提交启封方案，等我确认。"
+            prompt = f"又过了 48 小时。请重新评估 {panel()} 采空区火区是否具备启封条件；具备的话提交启封方案，等我确认。"
         check("启封：评估记入时间线", assessed)
         check("启封：条件不满足时没有下发启封", refused_ok)
         check("启封：具备条件后启封方案经确认下发", ready and ("approve_unsealing", "issued") in acts)
