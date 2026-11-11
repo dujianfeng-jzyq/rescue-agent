@@ -108,6 +108,11 @@ describe('buildState', () => {
     assert.equal(s.incident!.pendingAlerts, 1)
     assert.equal(s.agent.state, 'alert_pending')
     assert.equal(s.readings.panel, '211016', '读数的工作面跟随事件')
+    // 之后别的条目带了 level 字段（处置选择记的是卡片的等级）：等级仍取监听器的检测
+    await f.store.append(id, '2026-11-09T07:20:00', 'note', 'flow', { type: 'response_choice', level: 'orange', choice: 'none', option_ids: [], text: '操作员输入“不采取处置”' })
+    const s2 = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine() })
+    assert.equal(s2.incident!.levelName, '橙色')
+    assert.equal(s2.incident!.stageName, '加速氧化')
   })
 
   it('有待人工确认的指令时，智能体状态是“等待人工确认”，并带出待确认项', async () => {

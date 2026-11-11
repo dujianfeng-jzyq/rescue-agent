@@ -208,9 +208,14 @@ export function timelineOf(entries: Entry[]): TimelineItem[] {
 }
 
 /** 最近一条带检测摘要（check）的条目：告警或恢复。 */
+/**
+ * 监听器最近一次检测摘要（等级、阶段）。只看监听器写的条目：别的条目也可能带 level 字段
+ * （如处置选择 response_choice 的 level 是“这张卡片是哪一级的”），误当成检测会把等级显示成“未研判”（2026-11-11 演示）。
+ */
 function lastCheck(entries: Entry[]): Record<string, any> | null {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!
+    if (e.by !== 'sentinel') continue
     const c = e.data?.check ?? (e.data?.level !== undefined ? e.data : undefined)
     if (c && typeof c === 'object' && ('level' in c || 'level_name' in c)) return c as Record<string, any>
   }
