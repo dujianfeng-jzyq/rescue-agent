@@ -3,7 +3,8 @@
  *
  * 模型只做选择：从 explanation_options.py 给出的关注点、下一步清单里选编号，每项写一句说明，再写一句总述。
  * 阶段指令 = fire-assessment 的 SKILL.md 正文（每次运行读当前版本）+ 本阶段说明；输入是报告事实部分和清单。
- * 代码检查：编号来自清单、不重复、条数和字数不超限、说明文字里的数值都能在本次材料里找到。不合格就判失败，
+ * 代码检查：编号来自清单、不重复、条数和字数不超限、说明文字里的数值都能在本次材料里找到；
+ * 清单不允许撤人提醒（evacuation_reminder 为 false：没有实时红线报警、不建议升级、不是红色）时，说明文字里不能出现撤人字样。不合格就判失败，
  * 报告只含事实部分（流程照常完成）。这里只放纯逻辑；起子 Agent 的部分由 index.ts 注入（StageRunner）。
  */
 
@@ -23,7 +24,12 @@ export interface Options {
   focus_options: Option[]
   next_step_options: Option[]
   limits: Limits
+  /** 本次能不能写撤人提醒（explanation_options.py 按实时报警、升级建议、预警等级算出）；不是 true 一律按不能 */
+  evacuation_reminder?: boolean
 }
+
+/** 撤人字样：不允许撤人提醒时，总述、说明、理由里都不能出现 */
+const EVACUATION_WORDS = /撤人|撤离|撤出/
 
 export interface Explanation {
   summary: string
@@ -68,6 +74,9 @@ export function stagePrompt(opts: { skillName: string; skillVersion: string; ski
     `- summary 写一句总述（不超过 ${l.max_summary_chars} 字）。`,
     '- 只能用清单里的 id。说明、理由、总述里不写清单和报告里没有的数值：不换算、不估算、不相加、不计数、不归纳界限；不写序号；不引用条文；不声称已执行任何处置。',
     '- 写不出合规的说明时，note、reason 留空字符串。',
+    ...(opts.options.evacuation_reminder === true
+      ? []
+      : ['- 本次没有实时红线报警、不建议升级、预警等级不是红色：说明、理由、总述里不要写撤人（含“撤离”“撤出”）提醒。受威胁人数只是研判数字，矿井报警平台的越限报警不是红线报警，都不是撤人的依据。']),
     '',
     `以下是技能 ${opts.skillName}（${opts.skillVersion}）的说明，供判断时参考：`,
     '',
@@ -117,6 +126,7 @@ export function checkExplanation(raw: unknown, o: Options, material: string): { 
     return { ok: false, problems: ['结构化结果不完整'] }
   }
   const l = o.limits
+  const noEvacuation = o.evacuation_reminder !== true
   const resolve = (list: any[], options: Option[], text: 'note' | 'reason', max: number, what: string) => {
     const byId = new Map(options.map((x) => [x.id, x.label]))
     const seen = new Set<string>()
@@ -130,6 +140,7 @@ export function checkExplanation(raw: unknown, o: Options, material: string): { 
       if (words.length > l.max_note_chars) problems.push(`${what} ${id} 的说明超过 ${l.max_note_chars} 字`)
       const bad = ungrounded(words, material)
       if (bad.length) problems.push(`${what} ${id} 的说明里有记录中找不到的数值：${bad.join('、')}`)
+      if (noEvacuation && EVACUATION_WORDS.test(words)) problems.push(`${what} ${id} 的说明里有撤人提醒，但本次不满足撤人提醒的条件`)
       return { id, label: byId.get(id) ?? id, [text]: words }
     })
   }
@@ -140,5 +151,6 @@ export function checkExplanation(raw: unknown, o: Options, material: string): { 
   if (summary.length > l.max_summary_chars) problems.push(`总述超过 ${l.max_summary_chars} 字`)
   const bad = ungrounded(summary, material)
   if (bad.length) problems.push(`总述里有记录中找不到的数值：${bad.join('、')}`)
+  if (noEvacuation && EVACUATION_WORDS.test(summary)) problems.push('总述里有撤人提醒，但本次不满足撤人提醒的条件（没有实时红线报警、不建议升级、不是红色）')
   return problems.length ? { ok: false, problems } : { ok: true, explanation: { summary, focus, next_steps: next } }
 }

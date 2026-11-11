@@ -14,6 +14,7 @@ const OPTIONS: Options = {
     { id: 'escalate_emergency', label: '提请指挥人员决定是否升级为应急响应' },
   ],
   limits: { max_focus: 2, max_next_steps: 2, max_note_chars: 40, max_summary_chars: 60 },
+  evacuation_reminder: true,
 }
 const MATERIAL = '束管CO最大值(ppm) 1629.09 ≥ 1000；受威胁 11 人；BT-1201-G1 乙烯 4.397 ppm；2026-11-04 20:00:00'
 
@@ -52,6 +53,29 @@ describe('研判说明：结构化结果核对', () => {
     assert.ok(!r.ok)
     const all = r.problems.join('\n')
     for (const want of ['关注点应选 1–2 项', '重复：level', '不在清单里：nope', '1600', '下一步应选 1–2 项', '总述超过 60 字', '150']) assert.match(all, new RegExp(want))
+  })
+  it('不满足撤人提醒条件（如橙色、不建议升级）时，总述、说明、理由里写撤人都判失败；字段缺失按不满足', () => {
+    const orange = { ...OPTIONS, next_step_options: [OPTIONS.next_step_options[1]!], evacuation_reminder: false }
+    const r = checkExplanation(
+      {
+        summary: '橙色预警，受威胁 11 人，撤人按预案立即执行',
+        focus: [{ id: 'personnel', note: '受威胁人员需撤离' }],
+        next_steps: [{ id: 'escalate_emergency', reason: '人员尽快撤出' }],
+      },
+      orange,
+      MATERIAL,
+    )
+    assert.ok(!r.ok)
+    const all = r.problems.join('\n')
+    for (const want of ['总述里有撤人提醒', '关注点 personnel 的说明里有撤人提醒', '下一步 escalate_emergency 的说明里有撤人提醒']) assert.match(all, new RegExp(want))
+    const { evacuation_reminder: _, ...missing } = orange
+    assert.ok(!checkExplanation({ summary: '橙色预警，撤人按预案执行', focus: [{ id: 'level', note: '' }], next_steps: [{ id: 'escalate_emergency', reason: '' }] }, missing, MATERIAL).ok)
+    assert.ok(checkExplanation({ summary: '橙色预警，受威胁 11 人，加密监测', focus: [{ id: 'level', note: '' }], next_steps: [{ id: 'escalate_emergency', reason: '' }] }, orange, MATERIAL).ok)
+  })
+  it('提示词：不满足撤人提醒条件时写明不要写撤人，满足时不写这一条', () => {
+    const args = { skillName: 'fire-assessment', skillVersion: '1', skillBody: '', facts: '' }
+    assert.match(stagePrompt({ ...args, options: { ...OPTIONS, evacuation_reminder: false } }), /不要写撤人/)
+    assert.doesNotMatch(stagePrompt({ ...args, options: OPTIONS }), /不要写撤人/)
   })
   it('结构不完整', () => {
     assert.deepEqual(checkExplanation({ summary: 'x' }, OPTIONS, MATERIAL), { ok: false, problems: ['结构化结果不完整'] })

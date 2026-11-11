@@ -2,12 +2,15 @@
 
 模型只能从这里选（选项编号），说明文字由代码检查；关注点的文字照抄各结果记录，不另算数。
 输入：{"warning", "stage", "alarms", "trend", "explosion", "personnel", "escalation"}，各为相应脚本的输出。
-输出 result：focus_options、next_step_options（每项 id、label）、limits。
+输出 result：focus_options、next_step_options（每项 id、label）、limits、evacuation_reminder。
+
+evacuation_reminder：本次能不能写撤人提醒（有实时红线报警、研判建议升级或预警等级为红色）。不能时，
+模型写的总述、说明、理由里出现撤人字样由插件判为不合格（橙色、不建议升级时写“立即撤人”会误导操作员）。
 """
 
 from _skill import load_reference, main, record_result
 
-VERSION = "explanation-options/1.0.0"
+VERSION = "explanation-options/1.1.0"
 NAMES = ["warning", "stage", "alarms", "trend", "explosion", "personnel", "escalation"]
 
 
@@ -59,6 +62,11 @@ def conditions(r):
     }
 
 
+def evacuation_reminder(r):
+    """有实时红线报警，或进入应急响应（研判建议升级、预警等级红色）时才提醒按预案撤人；与 commander 预设的撤人提醒规则一致。"""
+    return bool(r["alarms"]["alarms"]) or bool(r["escalation"]["recommend"]) or r["warning"]["level"] == "red"
+
+
 def run(data, _args):
     r = {n: record_result(data, n) for n in NAMES}
     cfg = load_reference("explanation.yaml")
@@ -73,6 +81,7 @@ def run(data, _args):
         "focus_options": focus_options(r),
         "next_step_options": steps,
         "limits": cfg["limits"],
+        "evacuation_reminder": evacuation_reminder(r),
     }
     return result, {"limits": cfg["limits"], "conditions": cond, "status": cfg["status"]}, []
 

@@ -1,5 +1,5 @@
 {
- "algorithm_version": "explanation-options/1.0.0",
+ "algorithm_version": "explanation-options/1.1.0",
  "params": {
   "limits": {
    "max_focus": 4,
@@ -99,6 +99,7 @@
    "max_next_steps": 3,
    "max_note_chars": 80,
    "max_summary_chars": 120
-  }
+  },
+  "evacuation_reminder": false
  }
 }

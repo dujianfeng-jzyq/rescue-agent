@@ -67,7 +67,7 @@ version: 0.1.0
 | `stage.py` | warning 的结果 | 自燃发展阶段 |
 | `trend.py` | 证据、warning 的结果 | 触发指标来源测点的趋势 |
 | `personnel.py` | 证据（`collect.yaml` 的 assessment）、warning 的结果 | 受威胁人员与避灾路线 |
-| `explanation_options.py` | 研判各脚本的结果 | “研判说明”阶段的选择清单（关注点、下一步） |
+| `explanation_options.py` | 研判各脚本的结果 | “研判说明”阶段的选择清单（关注点、下一步）和能否写撤人提醒（`evacuation_reminder`：有实时红线报警、建议升级或红色才能写） |
 
 沙箱里试算（输入文件按上表组织成 JSON 对象，键名即输入名）：
 
