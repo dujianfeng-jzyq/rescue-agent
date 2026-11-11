@@ -331,9 +331,27 @@ def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) ->
                 out.append(f"待补充（下发时由确认人把关）：{'、'.join(missing)}")
             return out
         if tool == "notify_evacuation":
-            persons = body.get("persons") or []
-            dest = sorted({str(p[-1]) for p in (body.get("routes") or {}).values() if isinstance(p, list) and p})
-            return [f"补充撤人名单 {len(persons)} 人"] + ([f"撤往：{'、'.join(dest)}"] if dest else [])
+            persons = [str(p) for p in body.get("persons") or []]
+            routes = {str(k): v for k, v in (body.get("routes") or {}).items() if isinstance(v, list) and v}
+            # 去向的中文名从引用的人员记录取（避难硐室、出口）；取不到就用节点编号（2026-11-11 演示：弹窗只写了“撤往：N8”）
+            names: dict[str, str] = {}
+            if body.get("record_id") and records is not None:
+                try:
+                    for g in _result(records.get(str(body["record_id"]))).get("threatened") or []:
+                        r = g.get("escape_route") or {}
+                        if r.get("target") and r.get("target_name"):
+                            names[str(r["target"])] = str(r["target_name"])
+                except (RecordNotFound, RecordTampered, ValueError):
+                    pass
+            dest = sorted({str(v[-1]) for v in routes.values()})
+            out = [f"补充撤人名单 {len(persons)} 人"]
+            if dest:
+                out.append(f"撤往：{'、'.join(f'{names[d]}（{d}）' if d in names else d for d in dest)}")
+            # 没有可达避灾路线的人要让确认人看到（名单里有人、却没有路线）
+            stranded = [p for p in persons if p not in routes]
+            if stranded and routes:
+                out.append(f"没有可达避灾路线 {len(stranded)} 人：{'、'.join(stranded)}（需人工研判）")
+            return out
         if tool == "issue_dispatch_order":
             # 引用了方案记录：物资和地点的中文名从方案的“需调运”明细取（与明细逐条对应）；没有就用编号
             named: dict[tuple, dict[str, Any]] = {}

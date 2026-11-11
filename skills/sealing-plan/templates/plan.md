@@ -7,7 +7,7 @@
 - 灾区甲烷：{{compose.result.plan.context.methane_pct}} %；是否继续上升：{{compose.result.plan.context.methane_rising}}
 - 氧浓度：{{compose.result.plan.context.o2_pct}} %{{#compose.result.explosion.worst_sensor_id}}（{{.}}）{{/compose.result.explosion.worst_sensor_id}}
 - 爆炸危险性：{{compose.result.explosion.overall_name}}（爆炸三角形，多测点取最不利）
-- 火区封闭时间：{{compose.result.plan.context.sealed_at}}
+- 火区封闭时间：{{compose.result.sealed_at_text}}
 - 灾区温度：{{compose.result.plan.context.area_temperature_c}} ℃；能见度：{{compose.result.plan.context.visibility_m}} 米
 - 火源是否明确：{{compose.result.plan.context.fire_source_confirmed}}；水源、人力和物力是否充足：{{compose.result.plan.context.water_supply_sufficient}}；回风道是否畅通：{{compose.result.plan.context.return_airway_clear}}
 

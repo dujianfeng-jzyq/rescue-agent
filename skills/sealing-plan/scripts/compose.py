@@ -111,6 +111,16 @@ def select(sk, sel):
     return steps, seals, notes, str(sel.get("summary") or "").strip()
 
 
+def sealed_at_text(sealed_at, ev):
+    """火区封闭时间的显示：首次封闭时火区还没封闭，台账里没有封闭时间是正常的，不能写成“缺失”（2026-11-11 演示：合规审核把它当成缺失条件）。
+    只有火区台账没取到时才是缺失。"""
+    if sealed_at:
+        return str(sealed_at)
+    if isinstance(ev.get("fire_areas"), list):
+        return "尚未封闭（火区台账里本工作面没有已封闭的火区，本方案为首次封闭）"
+    return "缺失（火区台账取不到）"
+
+
 def run(data, _args):
     sk = record_result(data, "skeleton")
     ev = evidence(data)
@@ -205,6 +215,7 @@ def run(data, _args):
         "has_shortages": bool(shortages),
         "missing_inputs": sk["missing_inputs"],
         "has_missing": bool(sk["missing_inputs"]),
+        "sealed_at_text": sealed_at_text(ctx.get("sealed_at"), ev),
         "human_inputs": sk["human_inputs"],
         "has_human_inputs": bool(sk["human_inputs"]),
         "explosion": sk["explosion"],

@@ -136,6 +136,10 @@ def test_summary_facts_come_from_records_and_arguments(records):
     r = check("escalate_emergency", {"escalation": {"reason": "x", "recommended_level": "应急响应", "record_id": esc}}, records)
     assert r["summary"]["facts"] == ["升级理由：预警等级 红色（危险），达到 红色（危险）", "规程依据：第39条"]
     evac = {"notice": {"reason": "x", "persons": ["P1", "P2", "P3"], "routes": {"P1": ["N1", "N8"], "P2": ["N2", "N8"]}}}
-    assert check("notify_evacuation", evac, records)["summary"]["facts"] == ["补充撤人名单 3 人", "撤往：N8"]
+    assert check("notify_evacuation", evac, records)["summary"]["facts"] == ["补充撤人名单 3 人", "撤往：N8", "没有可达避灾路线 1 人：P3（需人工研判）"]
+    # 引用了人员记录：去向写中文名（从记录的避灾路线取）
+    pe = put(records, "fire-assessment", "personnel", {"threatened": [{"persons": ["P1"], "escape_route": {"reachable": True, "nodes": ["N1", "N8"], "target": "N8", "target_name": "避难硐室"}}]})
+    evac = {"notice": {"reason": "x", "record_id": pe, "persons": ["P1"], "routes": {"P1": ["N1", "N8"]}}}
+    assert check("notify_evacuation", evac, records)["summary"]["facts"] == ["补充撤人名单 1 人", "撤往：避难硐室（N8）"]
     r = check("publish_warning", warn(records, record_id="RS-20261104T200000-zzzzzz"), records)
     assert not r["ok"] and r["summary"]["facts"] == []  # 没通过预检的不给要点

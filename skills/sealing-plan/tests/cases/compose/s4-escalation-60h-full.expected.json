@@ -479,6 +479,7 @@
    }
   ],
   "has_missing": true,
+  "sealed_at_text": "尚未封闭（火区台账里本工作面没有已封闭的火区，本方案为首次封闭）",
   "human_inputs": [
    {
     "field": "area_temperature_c",
