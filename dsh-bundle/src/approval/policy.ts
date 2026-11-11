@@ -145,6 +145,16 @@ export async function precheck(
   signal: AbortSignal,
   fetchImpl: FetchLike,
 ): Promise<Verdict> {
+  // guard 的每个工具都登记在分级表里（actions 的 test_every_guard_tool_is_in_the_action_policy），不在表里的名字 guard 上不存在：
+  // 直接拦下，不弹人工确认（2026-11-11 演示：智能体把只读工具写成 mcp__actions__get_response_options，操作员被要求确认一个不存在的工具，批了才报 unknown tool）。
+  // 比“没有登记按 C 级弹确认”更严，不放宽任何东西
+  if (!config.policies.some((p) => p.tool === rawName)) {
+    return {
+      kind: 'deny',
+      code: 'RESCUE_UNKNOWN_TOOL',
+      reason: `guard（actions）没有 ${rawName} 这个工具，指令已拦截，没有弹人工确认。要用的如果是同名的只读工具，直接按名称调用（不带 mcp__actions__ 前缀）。`,
+    }
+  }
   const timeout = AbortSignal.timeout(config.precheckTimeoutMs)
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (config.token) headers.Authorization = `Bearer ${config.token}`

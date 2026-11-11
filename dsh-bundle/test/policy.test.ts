@@ -122,6 +122,14 @@ describe('precheck', () => {
     assert.equal(v.kind, 'deny')
   })
 
+  it('guard 上不存在的工具（不在分级表里）→ 直接 deny，不调预检、不弹确认', async () => {
+    const { fetch, calls } = fakeFetch(() => ({ json: { ok: true, problems: [] } }))
+    const v = await precheck('get_response_options', { level: 'orange' }, config, signal, fetch)
+    assert.equal(v.kind === 'deny' ? v.code : '', 'RESCUE_UNKNOWN_TOOL')
+    assert.match(v.kind === 'deny' ? v.reason : '', /不带 mcp__actions__ 前缀/)
+    assert.equal(calls.length, 0)
+  })
+
   it('配置了令牌时带认证头', async () => {
     const { fetch, calls } = fakeFetch(() => ({ json: { ok: true, problems: [] } }))
     await precheck('publish_warning', {}, { ...config, token: 't0k' }, signal, fetch)
