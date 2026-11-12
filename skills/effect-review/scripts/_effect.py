@@ -15,9 +15,12 @@ EFFECT_NAMES = {
 }
 
 
-def evaluate(since: datetime, now: datetime, before, after, markers, cfg: dict[str, Any], flat: float = 0.0) -> dict[str, Any]:
+def evaluate(
+    since: datetime, now: datetime, before, after, markers, cfg: dict[str, Any], flat: float = 0.0, min_increase: float | None = None
+) -> dict[str, Any]:
     """比较处置前后同一测点同一参数的上升速率，判定效果。before / after 是可用读数（已排除可疑数据）；
-    markers：同测点标志气体处置前后的可用读数，用于判断是否新出现；flat：|速率| 小于它按 0 处理。"""
+    markers：同测点标志气体处置前后的可用读数，用于判断是否新出现；flat：|速率| 小于它按 0 处理；
+    min_increase：未满观测期时提前判恶化要求速率至少加快多少（每小时），None 不提前判。"""
     observed_h = (now - since).total_seconds() / 3600
     rate_before, rate_after = slope_per_hour(before), slope_per_hour(after)
 
@@ -34,12 +37,31 @@ def evaluate(since: datetime, now: datetime, before, after, markers, cfg: dict[s
         if not any(r["value"] >= limit for r in pre) and any(r["value"] >= limit for r in post):
             new_markers.append(gas)
 
-    if observed_h < cfg["min_observe_h"]:
-        effect = "insufficient"
-        basis.append(f"处置后已观测 {observed_h:.1f} 小时，少于 {cfg['min_observe_h']} 小时")
-    elif new_markers:
+    # 坏消息早报，好消息等满观测期（2026-11-12 演示：未处置 9.5 小时，束管新出现 C2H4、CO 速率是起点前的 7 倍，
+    # 原来先判观测时长，结论却是“观测时间不足”）：新出现标志气体随时判恶化；速率明显加快观测满 early.min_observe_h 就判恶化；
+    # 已受控、需继续处置仍要观测满 min_observe_h。
+    early = cfg["early_worsening"]
+    faster = (
+        min_increase is not None
+        and ra is not None
+        and rb is not None
+        and ra > 0
+        and ra >= max(rb, 0.0) * early["rate_ratio"]
+        and ra - max(rb, 0.0) >= min_increase
+    )
+    if new_markers:
         effect = "worsening"
         basis.append(f"处置后新出现标志气体：{'、'.join(new_markers)}")
+    elif observed_h < cfg["min_observe_h"]:
+        if faster and observed_h >= early["min_observe_h"]:
+            effect = "worsening"
+            basis.append(
+                f"处置后已观测 {observed_h:.1f} 小时（未满 {cfg['min_observe_h']} 小时），速率 {rate_after:.3f}/h ≥ 处置前 {rate_before:.3f}/h × {early['rate_ratio']}，"
+                f"且加快不少于 {min_increase}/h，明显加快"
+            )
+        else:
+            effect = "insufficient"
+            basis.append(f"处置后已观测 {observed_h:.1f} 小时，少于 {cfg['min_observe_h']} 小时")
     elif ra is None or rb is None:
         effect = "insufficient"
         basis.append("处置前或处置后可用读数不足，无法计算速率")

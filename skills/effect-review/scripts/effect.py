@@ -109,7 +109,7 @@ def run(data, _args):
             pre, _ = usable(gas, start, since, "CO")
             post, _ = usable(gas, since, now, "CO")
             markers[gas] = (pre, post)
-        out = evaluate(since, now, before, after, markers, cfg, cfg["flat_rate"][m])
+        out = evaluate(since, now, before, after, markers, cfg, cfg["flat_rate"][m], cfg["early_worsening"]["min_increase"].get(m))
         points.append({"sensor_id": sid, "measurand": m, "source": s["source"], **out})
     res = overall(points, since, now, cfg["review_interval_h"])
     options = data.get("options") or {}
@@ -151,7 +151,7 @@ def run(data, _args):
         "escalation_suggested": res["overall"] == "worsening",
         "method": METHOD,
     }
-    params = {k: cfg[k] for k in ("baseline_h", "min_observe_h", "review_interval_h", "controlled_rate", "slowdown_ratio", "flat_rate", "markers")}
+    params = {k: cfg[k] for k in ("baseline_h", "min_observe_h", "early_worsening", "review_interval_h", "controlled_rate", "slowdown_ratio", "flat_rate", "markers")}
     return result, params, sorted(set(warnings))
 
 

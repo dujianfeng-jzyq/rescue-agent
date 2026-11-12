@@ -3,6 +3,14 @@
  "params": {
   "baseline_h": 12,
   "min_observe_h": 12,
+  "early_worsening": {
+   "min_observe_h": 2,
+   "rate_ratio": 1.5,
+   "min_increase": {
+    "CO": 1.0,
+    "TEMP": 0.5
+   }
+  },
   "review_interval_h": 12,
   "controlled_rate": 0.0,
   "slowdown_ratio": 0.5,

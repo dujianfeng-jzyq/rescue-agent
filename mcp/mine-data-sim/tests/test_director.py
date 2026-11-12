@@ -416,3 +416,87 @@ def test_manual_controls_are_refused_while_directing():
     assert c.post("/sim/advance", json={"hours": 1}).status_code == 409
     assert c.post("/sim/pause", json={"paused": False}).status_code == 409
     assert c.post("/sim/pause", json={"paused": True}).json()["ok"]
+
+
+def _declined_into_red_with_followup(tmp_path):
+    """橙色输入“不采取处置” → 往红色跳（jump_h 20）；途中 2 小时有跟踪计划到点，先跳 2 小时，还剩 18 小时。"""
+    from datetime import timedelta
+
+    sim, store, hb, d = make(tmp_path)
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5, "红色": 80})
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["monitor"])
+    drive(d, fake, lambda: d.state == "holding")
+    assert d.stage == "橙色"
+    at = sim.engine.now().isoformat(timespec="seconds")
+    store.append(fake.iid, at, "note", "flow", {"type": "response_choice", "level": "orange", "choice": "none", "option_ids": []})
+    d.tick()
+    assert d.state == "running" and d.stage == "红色"
+    now = sim.engine.now().replace(tzinfo=None, microsecond=0)
+    store.append(fake.iid, at, "followup_added", "agent", {"followup_id": "FU-x", "due_at": (now + timedelta(hours=2)).isoformat(timespec="seconds"), "expect": "x"})
+    t0 = sim.engine.now_h()
+    d.tick()
+    assert abs(sim.engine.now_h() - (t0 + 2)) < 1e-6 and abs(d._jump_left - 18) < 1e-6
+    return sim, store, fake, d
+
+
+def test_rechoice_after_worsening_goes_back_to_orange(tmp_path):
+    """2026-11-12：橙色不处置后复评恶化，智能体重问，操作员这次选了三项（经 guard 执行）→ 导演回到橙色，按三项走分支（受控回落）。"""
+    sim, store, fake, d = _declined_into_red_with_followup(tmp_path)
+    at = sim.engine.now().isoformat(timespec="seconds")
+    store.append(fake.iid, at, "note", "flow", {"type": "response_choice", "level": "orange", "choice": "measures", "option_ids": ["inert", "grout", "leak_seal"]})
+    d.tick()
+    assert d.state == "holding" and d.stage == "橙色"
+    assert "重新选择" in d.status()["log"][-1]["text"]
+    d.tick()
+    assert d.state == "holding"  # 记下了选择，还要等矿井执行
+    guard_executes(sim, "inert_injection", "grouting", "leak_sealing")
+    d.tick()
+    assert d.state == "ending"
+    assert d.chosen[-1] == {"stage": "橙色", "options": ["inert", "grout", "leak_seal"]}
+
+
+def test_rechoice_declined_again_resumes_the_remaining_jump(tmp_path):
+    """重问后操作员仍输入“不采取处置” → 回到红色，接着跳剩下的 18 小时（不从 20 小时重新跳）。"""
+    sim, store, fake, d = _declined_into_red_with_followup(tmp_path)
+    at = sim.engine.now().isoformat(timespec="seconds")
+    store.append(fake.iid, at, "note", "flow", {"type": "response_choice", "level": "orange", "choice": "none", "option_ids": []})
+    d.tick()
+    assert d.state == "holding" and d.stage == "橙色"
+    d.tick()
+    assert d.state == "running" and d.stage == "红色"
+    assert abs(d._jump_left - 18) < 1e-6
+    assert [c.get("declined") for c in d.chosen if c["stage"] == "橙色"] == [True, True]
+
+
+def test_skip_or_conflict_after_the_decision_does_not_go_back(tmp_path):
+    """重问时点“跳过”（暂不决定）或选择冲突不回退：之前的决定照旧，导演继续推进（冻结时钟等下一次重问会卡住）。"""
+    sim, store, fake, d = _declined_into_red_with_followup(tmp_path)
+    at = sim.engine.now().isoformat(timespec="seconds")
+    store.append(fake.iid, at, "note", "flow", {"type": "response_choice", "level": "orange", "choice": "undecided", "option_ids": []})
+    store.append(fake.iid, at, "note", "flow", {"type": "response_choice", "level": "orange", "choice": "conflict", "option_ids": ["grout"]})
+    d.tick()
+    assert d.state == "running" and d.stage == "红色"
+
+
+def test_adding_measures_after_one_option_recedes(tmp_path):
+    """橙色只选注氮 → 往红色推进；复评恶化后追加注浆、堵漏（经 guard 执行）→ 回到橙色，累计三项，受控回落。红色的处置不触发回退。"""
+    sim, store, hb, d = make(tmp_path)
+    fake = FakeSentinel(sim, store, hb, {"黄色": 35.5, "橙色": 37.5, "红色": 80})
+    d.start()
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["monitor"])
+    drive(d, fake, lambda: d.state == "holding")
+    d.choose(["inert"])
+    assert d.state == "running" and d.stage == "红色"
+    guard_executes(sim, "evacuate")  # 红色的处置：不是重新选择橙色
+    d.tick()
+    assert d.state == "running" and d.stage == "红色"
+    guard_executes(sim, "grouting", "leak_sealing")
+    d.tick()
+    assert d.state == "holding" and d.stage == "橙色"
+    assert [o["id"] for o in d.status()["options"] if o["done"]] == ["inert"]
+    d.tick()
+    assert d.state == "ending"
+    assert d.chosen[-1] == {"stage": "橙色", "options": ["grout", "leak_seal"]}

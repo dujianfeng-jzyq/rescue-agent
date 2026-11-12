@@ -207,7 +207,16 @@ def effect_inputs() -> dict[tuple[str, str, str], dict]:
         (ER, "effect", "s2-inerting-48h-to-54h-insufficient"): {"evidence": effect_evidence("s2-slow-oxidation", 48, inert[:1], 54)},
         (ER, "effect", "s3-inerting-40h-to-64h-worsening"): {"evidence": effect_evidence("s3-accelerating", 40, [("inert_injection", {"rate_m3_h": 600}, None)], 64)},
         (ER, "effect", "s4-sealed-48h-to-72h-monitors-off"): {"evidence": effect_evidence("s4-escalation", 48, [("temporary_seal", {}, None), ("permanent_seal", {}, None)], 72)},
+        # 坏消息早报、好消息等满观测期（2026-11-12）：未满 min_observe_h 时，新出现标志气体或速率明显加快判恶化，常态抖动、轻微加快仍不足
+        (ER, "effect", "s3-untreated-32h-to-33h30m-new-marker"): {"evidence": effect_evidence("s3-accelerating", 32, [], 33.5), "options": UNTREATED},
+        (ER, "effect", "s3-untreated-40h-to-46h-early-worsening"): {"evidence": effect_evidence("s3-accelerating", 40, [], 46), "options": UNTREATED},
+        (ER, "effect", "s3-untreated-40h-to-41h-insufficient"): {"evidence": effect_evidence("s3-accelerating", 40, [], 41), "options": UNTREATED},
+        (ER, "effect", "s2-untreated-48h-to-54h-mild-insufficient"): {"evidence": effect_evidence("s2-slow-oxidation", 48, [], 54), "options": UNTREATED},
+        (ER, "effect", "s1-untreated-24h-to-30h-noise-insufficient"): {"evidence": effect_evidence("s1-normal", 24, [], 30), "options": UNTREATED},
     }
+
+
+UNTREATED = {"treated": False, "since_source": "未采取处置，从加密监测的开始时间起观察"}
 
 
 def effect_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:

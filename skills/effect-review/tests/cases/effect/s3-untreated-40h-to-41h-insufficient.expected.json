@@ -1,0 +1,253 @@
+{
+ "algorithm_version": "effect/1.0.0",
+ "params": {
+  "baseline_h": 12,
+  "min_observe_h": 12,
+  "early_worsening": {
+   "min_observe_h": 2,
+   "rate_ratio": 1.5,
+   "min_increase": {
+    "CO": 1.0,
+    "TEMP": 0.5
+   }
+  },
+  "review_interval_h": 12,
+  "controlled_rate": 0.0,
+  "slowdown_ratio": 0.5,
+  "flat_rate": {
+   "CO": 0.01,
+   "TEMP": 0.01,
+   "C2H4": 0.001,
+   "C2H2": 0.001,
+   "CO2": 0.001
+  },
+  "markers": {
+   "C2H4": 0.05,
+   "C2H2": 0.05
+  }
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "since": "2026-11-04T00:00:00",
+  "as_of": "2026-11-04T01:00:00",
+  "observed_h": 1.0,
+  "next_review_at": "2026-11-04T13:00:00",
+  "observed_h_at_next_review": 13.0,
+  "overall": "insufficient",
+  "overall_name": "未采取处置：观测时间不足，暂不下结论",
+  "basis": [
+   "全部测点观测时间或数据不足"
+  ],
+  "evaluated": 8,
+  "judged": 0,
+  "counts": {
+   "已受控": 0,
+   "需继续处置": 0,
+   "恶化": 0,
+   "观测时间不足，暂不下结论": 8
+  },
+  "treated": false,
+  "since_label": "观察起点（未采取处置）",
+  "before_label": "起点前",
+  "after_label": "起点后",
+  "at_label": "起点时",
+  "since_source": "未采取处置，从加密监测的开始时间起观察",
+  "counts_text": "停止上升 0 个、上升减缓 0 个、恶化 0 个、观测时间不足 8 个",
+  "counts_by_type": [
+   {
+    "type": "采空区束管",
+    "measurand": "CO",
+    "total": 3,
+    "counts": {
+     "观测时间不足": 3
+    },
+    "counts_text": "观测时间不足 3 个"
+   },
+   {
+    "type": "安全监控",
+    "measurand": "CO",
+    "total": 2,
+    "counts": {
+     "观测时间不足": 2
+    },
+    "counts_text": "观测时间不足 2 个"
+   },
+   {
+    "type": "采空区测温",
+    "measurand": "TEMP",
+    "total": 3,
+    "counts": {
+     "观测时间不足": 3
+    },
+    "counts_text": "观测时间不足 3 个"
+   }
+  ],
+  "points": [
+   {
+    "sensor_id": "BT-1201-G1",
+    "measurand": "CO",
+    "effect": "insufficient",
+    "effect_name": "观测时间不足",
+    "value_at_since": 173.248,
+    "latest": 199.275,
+    "change_since": 26.027,
+    "rate_before_per_hour": 11.195,
+    "rate_after_per_hour": null,
+    "rate_reduction_pct": null,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后已观测 1.0 小时，少于 12 小时"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "BT-1201-G2",
+    "measurand": "CO",
+    "effect": "insufficient",
+    "effect_name": "观测时间不足",
+    "value_at_since": 176.014,
+    "latest": 202.069,
+    "change_since": 26.055,
+    "rate_before_per_hour": 11.423,
+    "rate_after_per_hour": null,
+    "rate_reduction_pct": null,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后已观测 1.0 小时，少于 12 小时"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "BT-1201-G3",
+    "measurand": "CO",
+    "effect": "insufficient",
+    "effect_name": "观测时间不足",
+    "value_at_since": 56.417,
+    "latest": 63.771,
+    "change_since": 7.354,
+    "rate_before_per_hour": 3.359,
+    "rate_after_per_hour": null,
+    "rate_reduction_pct": null,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后已观测 1.0 小时，少于 12 小时"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "SM-1201-RET",
+    "measurand": "CO",
+    "effect": "insufficient",
+    "effect_name": "观测时间不足",
+    "value_at_since": 34.752,
+    "latest": 37.286,
+    "change_since": 2.534,
+    "rate_before_per_hour": 2.107,
+    "rate_after_per_hour": 2.669,
+    "rate_reduction_pct": -26.7,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后已观测 1.0 小时，少于 12 小时"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "SM-1201-UC",
+    "measurand": "CO",
+    "effect": "insufficient",
+    "effect_name": "观测时间不足",
+    "value_at_since": 40.739,
+    "latest": 46.223,
+    "change_since": 5.484,
+    "rate_before_per_hour": 2.49,
+    "rate_after_per_hour": 4.221,
+    "rate_reduction_pct": -69.5,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后已观测 1.0 小时，少于 12 小时"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "TP-1201-G1",
+    "measurand": "TEMP",
+    "effect": "insufficient",
+    "effect_name": "观测时间不足",
+    "value_at_since": 63.738,
+    "latest": 65.52,
+    "change_since": 1.782,
+    "rate_before_per_hour": 1.91,
+    "rate_after_per_hour": 1.782,
+    "rate_reduction_pct": 6.7,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后已观测 1.0 小时，少于 12 小时"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "TP-1201-G2",
+    "measurand": "TEMP",
+    "effect": "insufficient",
+    "effect_name": "观测时间不足",
+    "value_at_since": 66.136,
+    "latest": 66.343,
+    "change_since": 0.207,
+    "rate_before_per_hour": 1.83,
+    "rate_after_per_hour": 0.207,
+    "rate_reduction_pct": 88.7,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后已观测 1.0 小时，少于 12 小时"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "TP-1201-G3",
+    "measurand": "TEMP",
+    "effect": "insufficient",
+    "effect_name": "观测时间不足",
+    "value_at_since": 30.364,
+    "latest": 29.76,
+    "change_since": -0.604,
+    "rate_before_per_hour": 0.258,
+    "rate_after_per_hour": -0.604,
+    "rate_reduction_pct": 334.5,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后已观测 1.0 小时，少于 12 小时"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   }
+  ],
+  "sealed_off": [],
+  "sealed_off_text": "",
+  "escalation_suggested": false,
+  "method": "逐测点处置前后速率比较后汇总（任一恶化→恶化；全部已受控→已受控；否则需继续处置；观测不足的测点不参与）。判据为演示占位值，需按本矿制度审定"
+ }
+}

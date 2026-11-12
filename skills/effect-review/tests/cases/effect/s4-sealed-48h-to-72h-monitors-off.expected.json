@@ -3,6 +3,14 @@
  "params": {
   "baseline_h": 12,
   "min_observe_h": 12,
+  "early_worsening": {
+   "min_observe_h": 2,
+   "rate_ratio": 1.5,
+   "min_increase": {
+    "CO": 1.0,
+    "TEMP": 0.5
+   }
+  },
   "review_interval_h": 12,
   "controlled_rate": 0.0,
   "slowdown_ratio": 0.5,
@@ -28,11 +36,6 @@
   "observed_h_at_next_review": 36.0,
   "overall": "worsening",
   "overall_name": "恶化",
-  "treated": true,
-  "since_label": "处置开始",
-  "before_label": "处置前",
-  "after_label": "处置后",
-  "at_label": "处置时",
   "basis": [
    "恶化的测点：BT-1201-G1/CO、BT-1201-G2/CO、BT-1201-G3/CO、TP-1201-G3/TEMP"
   ],
@@ -44,6 +47,11 @@
    "恶化": 4,
    "观测时间不足，暂不下结论": 0
   },
+  "treated": true,
+  "since_label": "处置开始",
+  "before_label": "处置前",
+  "after_label": "处置后",
+  "at_label": "处置时",
   "since_source": "调用方给出",
   "counts_text": "已受控 0 个、需继续处置 2 个、恶化 4 个、观测时间不足 0 个",
   "counts_by_type": [

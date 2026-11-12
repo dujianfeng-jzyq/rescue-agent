@@ -3,6 +3,14 @@
  "params": {
   "baseline_h": 12,
   "min_observe_h": 12,
+  "early_worsening": {
+   "min_observe_h": 2,
+   "rate_ratio": 1.5,
+   "min_increase": {
+    "CO": 1.0,
+    "TEMP": 0.5
+   }
+  },
   "review_interval_h": 12,
   "controlled_rate": 0.0,
   "slowdown_ratio": 0.5,
@@ -28,11 +36,6 @@
   "observed_h_at_next_review": 36.0,
   "overall": "continuing",
   "overall_name": "需继续处置",
-  "treated": true,
-  "since_label": "处置开始",
-  "before_label": "处置前",
-  "after_label": "处置后",
-  "at_label": "处置时",
   "basis": [
    "参与判定的 8 个测点中 2 个已受控、6 个需继续处置，无恶化"
   ],
@@ -44,6 +47,11 @@
    "恶化": 0,
    "观测时间不足，暂不下结论": 0
   },
+  "treated": true,
+  "since_label": "处置开始",
+  "before_label": "处置前",
+  "after_label": "处置后",
+  "at_label": "处置时",
   "since_source": "指挥人员给出",
   "counts_text": "已受控 2 个、需继续处置 6 个、恶化 0 个、观测时间不足 0 个",
   "counts_by_type": [

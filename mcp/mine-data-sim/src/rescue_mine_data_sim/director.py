@@ -13,6 +13,11 @@
 点“跳过”（暂不决定）或选择冲突时继续等，
 分支可以改过程参数（`params`/`scale`）。`apply_options: true` 时导演自己把所选操作施加到模拟矿井（控制台代替选项卡片的过渡期）；
 智能体经 guard 下发时由 guard 经 rescue-mine 执行，导演就不再重复施加。
+
+重新选择（2026-11-12）：某一级（有可选处置的，即橙色）走完分支、导演已往下一级推进时，复评结论恶化会让智能体重新弹出这一级的卡片
+（代码判断，见 dsh-bundle 的 priorChoice）。操作员这次又做了决定（选了处置并经 guard 执行、记下“选了处置”，或输入“不采取处置”）时，
+导演回到这一级等待，已做的项累计，按新的总数重新走分支；下一级还没跳完的矿井小时留着，再回到下一级时接着跳。
+只认操作员真的又做了决定，不认复评结论本身：智能体没有重问时导演照常推进，不会停下来等一张不会来的卡片。点“跳过”不回退。
 """
 
 from __future__ import annotations
@@ -110,6 +115,8 @@ class Director:
         self._target: datetime | None = None
         self._deadline = 0.0
         self._jump_left = 0.0  # 本段还要跳的矿井小时（途中遇到跟踪计划到点分几次跳）
+        self._resume: tuple[str, float] | None = None  # 回到上一级重新选择时，被打断的阶段和它还要跳的矿井小时
+        self._decided: tuple[str, float, int] | None = None  # 最近一次走分支：阶段、真实时间、处置日志长度（认重新选择用）
         self._end_at_h = 0.0
         self._outcome = ""
         self.waiting: str | None = None  # 正在等什么（给控制台看）
@@ -158,6 +165,7 @@ class Director:
             self.sim.resumed_wall = time.time()
             self._demo_log_idx = len(self.sim.engine.action_log)  # 本次演示从这里开始的处置
             self.chosen, self.log, self._seen, self._outcome, self._done = [], [], set(), "", []
+            self._resume, self._decided = None, None
             self._start_wall = time.time()
             self._begin_running("黄色", first=True)
             self._note("开始演示：注入事故，等预警")
@@ -200,6 +208,8 @@ class Director:
         for iv in fx.get("interventions") or []:
             self.sim.engine.apply(iv["type"], dict(iv.get("params") or {}), [], "demo-script")
         self._done = []
+        self._operator_choices()  # 这一级已记下的选择都算处理过：之后只认新的决定（认重新选择用）
+        self._decided = (self.stage, time.time(), len(self.sim.engine.action_log))
         self._note(f"{self.stage}：选择 {names}；{branch.get('note', '')}".rstrip("；"))
         self.sim.resumed_wall = time.time()
         if "goto" in branch:
@@ -312,7 +322,8 @@ class Director:
     def _begin_running(self, stage: str, first: bool) -> None:
         self.state, self.stage = "running", stage
         self._phase, self._target = "advance", None
-        self._jump_left = float(self.flow["stages"][stage].get("jump_h", 0))
+        resume, self._resume = self._resume, None
+        self._jump_left = resume[1] if resume and resume[0] == stage else float(self.flow["stages"][stage].get("jump_h", 0))
         self.sim.engine.clock.set_paused(True)
 
     def _heartbeat_mine_now(self) -> datetime | None:
@@ -394,7 +405,49 @@ class Director:
         hb = self._heartbeat_mine_now()
         return (hb is not None and self._target is not None and hb >= self._target) or time.time() >= self._deadline
 
+    def _rechoice(self) -> bool:
+        """上一级走完分支后，操作员又对上一级做了决定（复评恶化后智能体重问）：回到上一级等待。见模块说明。"""
+        if self._decided is None or self._decided[0] == self.stage:
+            return False
+        stage, wall, log_idx = self._decided
+        opts = options_for(stage)
+        steps = {o.step for o in opts if o.choosable}
+        if not steps:
+            return False
+        acted = any(iv.source == "action" and iv.type in steps for iv in self.sim.engine.action_log[log_idx:])
+        if not acted and not self._new_decision(stage, wall):
+            return False
+        self._resume = (str(self.stage), self._jump_left)
+        self._note(f"{stage}：复评后操作员重新选择处置，回到{stage}等待（{self.stage}还要跳 {self._jump_left:g} 矿井小时，之后接着跳）")
+        last = self.chosen[-1] if self.chosen and self.chosen[-1]["stage"] == stage else {}
+        self.state, self.stage, self.waiting = "holding", stage, None
+        self._done = list(last.get("options") or [])
+        self._matched, self._last_match = set(), 0.0
+        self._log_idx, self._hold_wall = log_idx, wall  # 从走分支之后看：这期间执行的处置和记下的选择都算
+        self.sim.engine.clock.set_paused(True)
+        return True
+
+    def _new_decision(self, stage: str, since_wall: float) -> bool:
+        """走分支之后智能体记下的、这一级操作员的新决定（选了处置或不采取处置；跳过、冲突不算）。只看不消费。"""
+        if self.store is None:
+            return False
+        for inc in self.store.list():
+            for e in self.store.entries(inc["incident_id"]):
+                d = e.get("data") or {}
+                if e["kind"] != "note" or d.get("type") != "response_choice" or e["event_id"] in self._seen_choice:
+                    continue
+                if LEVEL_NAMES.get(str(d.get("level")), d.get("level")) != stage or d.get("choice") not in ("measures", "none"):
+                    continue
+                try:
+                    if datetime.fromisoformat(e["wall"]).timestamp() >= since_wall - 1:  # 事件时间戳截到秒
+                        return True
+                except ValueError:
+                    continue
+        return False
+
     def _tick_running(self) -> None:
+        if self._rechoice():
+            return
         eng, st = self.sim.engine, self.flow["stages"][self.stage]
         if self._phase == "advance":
             if self._hold_for_agent():

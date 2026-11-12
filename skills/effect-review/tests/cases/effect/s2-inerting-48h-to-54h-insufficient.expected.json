@@ -3,6 +3,14 @@
  "params": {
   "baseline_h": 12,
   "min_observe_h": 12,
+  "early_worsening": {
+   "min_observe_h": 2,
+   "rate_ratio": 1.5,
+   "min_increase": {
+    "CO": 1.0,
+    "TEMP": 0.5
+   }
+  },
   "review_interval_h": 12,
   "controlled_rate": 0.0,
   "slowdown_ratio": 0.5,
@@ -28,11 +36,6 @@
   "observed_h_at_next_review": 18.0,
   "overall": "insufficient",
   "overall_name": "观测时间不足，暂不下结论",
-  "treated": true,
-  "since_label": "处置开始",
-  "before_label": "处置前",
-  "after_label": "处置后",
-  "at_label": "处置时",
   "basis": [
    "全部测点观测时间或数据不足"
   ],
@@ -44,6 +47,11 @@
    "恶化": 0,
    "观测时间不足，暂不下结论": 8
   },
+  "treated": true,
+  "since_label": "处置开始",
+  "before_label": "处置前",
+  "after_label": "处置后",
+  "at_label": "处置时",
   "since_source": "调用方给出",
   "counts_text": "已受控 0 个、需继续处置 0 个、恶化 0 个、观测时间不足 8 个",
   "counts_by_type": [
