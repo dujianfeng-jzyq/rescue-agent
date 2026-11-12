@@ -14,6 +14,7 @@
 | 各版本设计 | 第二版 `docs/design-v2.md`；第三版 `design-v3.md`（rescue-mine、常驻监听与事件、专家型智能体）；第四版 `design-v4-map.md`（地图界面）、`design-v4-evacuation.md`（撤人路线）；第五版 `design-v5-demo-flow.md`（演示导演、选项卡片、批准超时） |
 | 设计决策 | `docs/decisions/`（ADR 0001–0009） |
 | 待专家审定的阈值、判据和参数（集中清单） | `docs/expert-review.md` |
+| 接真实矿井（演示、只读接入、试运行）要准备什么 | `docs/real-mine-integration.md` |
 | rescue-mine 接口（代码生成，`make interface-doc`） | `docs/rescue-mine-interface.md` |
 | 真实 DSH 上的验证记录与已知问题（#1–#42） | `docs/validation-checklist.md` |
 | 智能体一致性检测（期望决策与实际比较） | `docs/eval-consistency.md`；评测用法见 `eval/README.md` |
