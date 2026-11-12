@@ -171,11 +171,18 @@ const choiceOf = (e: TimelineEntry, level: string): ChoiceKind | undefined =>
  * - 暂未决定或冲突 → 要问（冲突时 conflict 为 true，卡片上提醒）；
  * - 下发了方案或选了不处置 → 之后只要复评没有给出“恶化”就不再问；最近一次复评是恶化 → 要问（追加处置）；
  * - 都没有 → 照常问。
+ * 火区封闭方案已下发（之后没有启封）→ 不问：封闭后不再选注氮、注浆、堵漏这类橙色处置，按封闭后的流程跟踪
+ * （2026-11-12 演示：封闭注惰后乙烯被稀释，研判一度为橙色；那时复评若是恶化，原来会弹出橙色处置卡片）。
  */
-export function priorChoice(entries: TimelineEntry[], levelRaw: string): { ask: boolean; issued_at?: string; declined_at?: string; conflict?: boolean; review?: string; reason: string } {
+export function priorChoice(entries: TimelineEntry[], levelRaw: string): { ask: boolean; issued_at?: string; declined_at?: string; sealed_at?: string; conflict?: boolean; review?: string; reason: string } {
   const level = normalizeLevel(levelRaw)
   const tool = PLAN_TOOL[level]
   if (!tool) return { ask: true, reason: '这一级不按卡片选处置' }
+  const sealed = entries.findLastIndex((e) => isIssued(e, 'issue_sealing_plan'))
+  if (sealed >= 0 && !entries.slice(sealed + 1).some((e) => isIssued(e, 'approve_unsealing'))) {
+    const at = entries[sealed]!.at
+    return { ask: false, sealed_at: at, reason: `${at} 已下发火区封闭方案，封闭后不再选橙色处置` }
+  }
   const i = entries.findLastIndex((e) => isIssued(e, tool) || ['none', 'undecided', 'conflict'].includes(choiceOf(e, level) ?? ''))
   if (i < 0) return { ask: true, reason: '这一级还没有下发过方案，操作员也没有选过' }
   const last = entries[i]!
@@ -202,7 +209,9 @@ export function applyPriorChoice<T extends { card: any; note?: string; prior?: P
   out.prior = prior
   if (!prior.ask) {
     out.card = null
-    out.note = prior.declined_at
+    out.note = prior.sealed_at
+      ? `${prior.reason}：不问操作员，也不下发防灭火方案；按封闭后的流程跟踪（登记复评）。`
+      : prior.declined_at
       ? `${prior.reason}：不再问操作员，也不下发处置；继续跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出卡片。`
       : `${prior.reason}：不再问操作员，也不重新下发同样的方案；继续按已下发的方案跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出追加处置的卡片。`
     return out

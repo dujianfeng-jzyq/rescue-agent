@@ -140,4 +140,19 @@ describe('橙色是否再问（priorChoice，按事件时间线）', () => {
   it('其他等级不按卡片判断', () => {
     assert.equal(priorChoice([plan('2026-11-03T20:00:00')], 'red').ask, true)
   })
+
+  it('火区封闭方案已下发后不再问橙色处置，即使复评恶化；启封之后照常判断（2026-11-12）', () => {
+    const act = (at: string, tool: string, status = 'issued') => ({ at, kind: 'note', by: 'guard', data: { type: 'action', tool, status } })
+    const declined = choice('2026-11-03T21:11:23', 'none')
+    const sealed = act('2026-11-04T15:11:23', 'issue_sealing_plan')
+    const t = [declined, sealed, review('2026-11-04T17:11:23', 'worsening')]
+    const p = priorChoice(t, 'orange')
+    assert.equal(p.ask, false)
+    assert.equal(p.sealed_at, '2026-11-04T15:11:23')
+    const out = applyPriorChoice({ ...describeOptions(levels, 'orange') } as any, p)
+    assert.equal(out.card, null)
+    assert.match(out.note!, /已下发火区封闭方案/)
+    assert.equal(priorChoice([declined, act('2026-11-04T15:11:23', 'issue_sealing_plan', 'rejected'), review('2026-11-04T17:11:23', 'worsening')], 'orange').ask, true, '被拒的封闭方案不算')
+    assert.equal(priorChoice([...t, act('2026-11-20T08:00:00', 'approve_unsealing'), review('2026-11-20T10:00:00', 'worsening')], 'orange').ask, true, '启封之后复燃照常问')
+  })
 })
