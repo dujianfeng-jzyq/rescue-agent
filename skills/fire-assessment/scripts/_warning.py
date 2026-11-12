@@ -78,9 +78,14 @@ def assess(ev: dict[str, Any], thresholds: dict[str, Any], window_h: float, rate
     dq: list[str] = []
     notes: list[str] = []
 
-    def usable(sid: str, m: str, sibling: str | None = None) -> list[dict[str, Any]]:
+    def lowest(key: str) -> float | None:
+        """该指标最低一级的预警阈值：读数卡住但达到它时按保守处理保留（check_series 的 keep_at_or_above）"""
+        vals = [lv[key] for lv in thresholds.values() if isinstance(lv, dict) and isinstance(lv.get(key), int | float)]
+        return min(vals) if vals else None
+
+    def usable(sid: str, m: str, sibling: str | None = None, key: str | None = None) -> list[dict[str, Any]]:
         sib = series(ev, sid, sibling, window_h) if sibling else None
-        rep = check_series(f"{sid}/{m}", series(ev, sid, m, window_h), sib)
+        rep = check_series(f"{sid}/{m}", series(ev, sid, m, window_h), sib, keep_at_or_above=lowest(key) if key else None)
         dq.extend(rep.flags)
         return rep.usable
 
@@ -89,7 +94,11 @@ def assess(ev: dict[str, Any], thresholds: dict[str, Any], window_h: float, rate
         uc, ret = [], []
         notes.append(SEALED_NOTE)
     else:
-        uc = usable(f"SM-{panel}-UC", "CO")
+        # 测点按模拟矿井的编号规则找（待办：对接真实矿井前改为按证据里测点组的角色找）；找不到时写明，不让缺失悄悄发生
+        for sid, what in ((f"SM-{panel}-UC", "上隅角 CO 不参与分级"), (f"SM-{panel}-RET", "上隅角 CO 无法与回风巷交叉校核")):
+            if not series(ev, sid, "CO", window_h):
+                dq.append(f"证据里没有 {sid}/CO 的读数，{what}")
+        uc = usable(f"SM-{panel}-UC", "CO", key="uc_co_ppm")
         ret = usable(f"SM-{panel}-RET", "CO")
     uc_co = uc[-1]["value"] if uc else None
     src: dict[str, dict[str, str]] = {}
@@ -103,7 +112,7 @@ def assess(ev: dict[str, Any], thresholds: dict[str, Any], window_h: float, rate
     tube_co = tube_rate = c2h4 = c2h2 = graham = None
     tubes = [s for s in panel_sensors if s["source"] == "bundle_tube"]
     for t in tubes:
-        co = usable(t["id"], "CO")
+        co = usable(t["id"], "CO", key="tube_co_ppm")
         if not co:
             continue
         last = co[-1]["value"]
@@ -125,7 +134,7 @@ def assess(ev: dict[str, Any], thresholds: dict[str, Any], window_h: float, rate
                 if n2[-1]["value"] > 85:
                     notes.append(f"{t['id']} 氮气浓度 {n2[-1]['value']:.1f}%，可能处于注氮影响范围，格雷哈姆系数偏低失真")
         for m, cur in (("C2H4", "c2h4"), ("C2H2", "c2h2")):
-            s = usable(t["id"], m, sibling="CO")  # 未出现时恒为 0，用同测点 CO 判断测点是否在工作
+            s = usable(t["id"], m, sibling="CO", key=f"{cur}_ppm")  # 未出现时恒为 0，用同测点 CO 判断测点是否在工作
             if s:
                 v = s[-1]["value"]
                 prev = c2h4 if cur == "c2h4" else c2h2

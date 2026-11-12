@@ -3,8 +3,9 @@
 读数是证据里的字典：{sensor_id, measurand, ts, value, quality}，ts 为矿井时间（ISO 8601，不带时区）。
 由 mcp/fire-model 的 quality.py、warning.slope_per_hour 迁移，判据不变。
 
-本文件在 fire-assessment、explosion-triangle 两个技能里各有一份，内容必须相同
-（mcp/contract/tests/test_skill_scripts.py 检查）。改动时两份一起改。
+本文件以 fire-assessment 的为准，复制到 explosion-triangle、sealing-plan、effect-review、unsealing-plan、firefighting-plan，
+内容必须相同（mcp/contract/tests/test_skill_scripts.py 检查）。改动时一起改。
+尖峰倍数、卡值点数、校核容差等参数写在这里，没有放进 references/（待办：随真实矿井数据调整时挪出去，并标注占位值）。
 
 TODO(算法): 现在是简单规则，阶段 2 用历史数据调整阈值，必要时引入统计模型。
 """
@@ -49,19 +50,40 @@ def detect_stuck(rs: list[Reading], min_points: int = 6) -> bool:
     return len(vals) >= min_points and max(vals) - min(vals) < 1e-9
 
 
+def _spike_limit(neigh: list[float], factor: float) -> float:
+    return factor * max(statistics.median(neigh), 0.1)
+
+
 def spike_indices(rs: list[Reading], factor: float = 4.0, floor: float = 5.0) -> set[int]:
-    """单点超过前后邻居中位数的 factor 倍（且超过 floor），视为尖峰。"""
+    """孤立尖峰：单点超过前后邻居中位数的 factor 倍（且超过 floor），**而且下一个读数回落**。
+
+    两条保护（2026-11-11 代码复查第 4 轮，原来真实的突升前两个读数会被当尖峰剔除，等级晚 2 个采样周期才上去）：
+    - 后面还没有读数的点（最新读数）不判尖峰：真假要等后续读数，宁可多报，不晚报（见 rising_tail 的提示）；
+    - 下一个读数仍然很高（台阶式上升）不是孤立尖峰。
+    """
     vals = [r.get("value") for r in rs]
     out = set()
     for i, v in enumerate(vals):
         if v is None:
             continue
-        neigh = [x for x in vals[max(0, i - 4) : i] + vals[i + 1 : i + 5] if x is not None]
+        after = [x for x in vals[i + 1 : i + 5] if x is not None]
+        if not after:
+            continue
+        neigh = [x for x in vals[max(0, i - 4) : i] if x is not None] + after
         if len(neigh) >= 3:
-            med = statistics.median(neigh)
-            if v > floor and v > factor * max(med, 0.1):
+            limit = _spike_limit(neigh, factor)
+            if v > floor and v > limit and after[0] <= limit:
                 out.add(i)
     return out
+
+
+def rising_tail(rs: list[Reading], factor: float = 4.0, floor: float = 5.0) -> float | None:
+    """最新读数相对之前的读数突升（按尖峰的同一判据），后面还没有读数确认时返回它，否则 None。"""
+    vals = [r["value"] for r in _valid(rs)]
+    if len(vals) < 4:
+        return None
+    v, before = vals[-1], vals[-5:-1]
+    return v if v > floor and v > _spike_limit(before, factor) else None
 
 
 def _constant_zero(rs: list[Reading], min_points: int = 6) -> bool:
@@ -69,23 +91,32 @@ def _constant_zero(rs: list[Reading], min_points: int = 6) -> bool:
     return len(vals) >= min_points and max(abs(v) for v in vals) < 1e-9
 
 
-def check_series(name: str, rs: list[Reading], sibling: list[Reading] | None = None) -> QualityReport:
+def check_series(name: str, rs: list[Reading], sibling: list[Reading] | None = None, keep_at_or_above: float | None = None) -> QualityReport:
     """检查单个测点单个参数的序列（按时间排好序）。
 
     `sibling` 是同一测点上另一个持续变化的参数（如束管的 CO）。乙烯、乙炔等标志气体在出现之前
     真实读数就是 0：若序列恒为 0 而同测点的 sibling 仍在变化，说明测点在工作，按“未检出”保留，
     不判卡值。不给 sibling 或 sibling 也不变时，恒 0 仍按卡值排除（宁可判缺数，不把卡在 0 读成未检出）。
+
+    `keep_at_or_above`（定级用，取该指标最低一级预警阈值）：读数长时间不变、但最新值达到它时不排除，按保守处理保留并注明——
+    火情中 CO 传感器打满量程、读数停在最大值是常见情况，排除会让等级掉下来（2026-11-11 代码复查第 4 轮，用户选 A）。
+    低于它的卡值照旧排除（传感器故障不误报）。不给时（缺省）照旧排除，如监听的“必需测点失效”仍按卡值报。
     """
     flags = []
     missing = sum(1 for r in rs if r.get("quality") == "missing")
     if missing:
         flags.append(f"{name}：{missing} 个点缺数")
     if detect_stuck(rs) and not (_constant_zero(rs) and sibling is not None and not detect_stuck(sibling)):
-        flags.append(f"{name}：读数长时间不变，疑似卡值，已排除")
-        return QualityReport(usable=[], flags=flags)
+        last = _valid(rs)[-1]["value"]
+        if keep_at_or_above is None or last < keep_at_or_above:
+            flags.append(f"{name}：读数长时间不变，疑似卡值，已排除")
+            return QualityReport(usable=[], flags=flags)
+        flags.append(f"{name}：读数长时间不变（{last:g}，疑似卡值或满量程），已达到预警阈值 {keep_at_or_above:g}，按保守处理保留，需现场核实")
     spikes = spike_indices(rs)
     if spikes:
         flags.append(f"{name}：{len(spikes)} 个孤立尖峰，疑似干扰，已剔除")
+    if (jump := rising_tail(rs)) is not None:
+        flags.append(f"{name}：最新读数突升（{jump:g}），后面还没有读数确认，按保守处理保留")
     usable = [r for i, r in enumerate(rs) if i not in spikes and _ok(r)]
     return QualityReport(usable=usable, flags=flags)
 
