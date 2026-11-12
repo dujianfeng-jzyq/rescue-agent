@@ -332,5 +332,8 @@ describe('跟踪参数文件', () => {
     const p = await followupParams(join(import.meta.dirname, '..', '..', 'skills'))
     assert.deepEqual(Object.keys(p.level_cap_h ?? {}).sort(), ['blue', 'orange', 'red', 'yellow'])
     assert.ok(Object.values(p.level_cap_h!).every((h) => h > 0 && h <= p.max_after_h))
+    // 等级越高，复评间隔上限不能越长
+    const c = p.level_cap_h!
+    assert.ok(c.blue! >= c.yellow! && c.yellow! >= c.orange! && c.orange! >= c.red!, JSON.stringify(c))
   })
 })
