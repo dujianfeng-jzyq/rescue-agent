@@ -25,7 +25,7 @@ def run(data, _args):
 
     reasons = []
     if LEVELS.index(w["level"]) >= LEVELS.index(cfg["level_at_least"]):
-        reasons.append(f"预警等级 {w['level_name']}，达到 {NAMES[cfg['level_at_least']]}")
+        reasons.append(f"预警等级 {w['level_name']}，达到升级条件（不低于 {NAMES[cfg['level_at_least']]}）")
     if st["stage"] in cfg["stages"]:
         reasons.append(f"自燃发展阶段 {st['stage_name']}")
     if cfg.get("effect_worsening") and eff and eff.get("overall") == "worsening":

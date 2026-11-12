@@ -185,6 +185,7 @@ def run(data, _args):
         r["continuous"] = r["item_type"] in continuous  # 持续供应：总量照算，不算缺口
     shortages = [r for r in rows if not r["sufficient"] and not r["continuous"]]
     dispatch = dispatch_lines(rows, stock, seals, ev["network"], cfg.get("dispatch") or {})
+    road_names = {r["id"]: r.get("name") for r in ev["network"]["roadways"]}
 
     plan = {
         "plan_id": sk["plan_id"],
@@ -204,7 +205,8 @@ def run(data, _args):
         "step_count": len(plan_steps),
         "optional_steps": [s["key"] for s in steps if s["key"] not in {r["key"] for r in sk["required_steps"]}],
         "seal_roadways": seals,
-        "seal_walls_text": "、".join(seals),
+        # 给人看的写巷道名称（确认弹窗、简报）；编号在 seal_roadways
+        "seal_walls_text": "、".join(road_names.get(r) or r for r in seals),
         "materials": materials,
         "supply": rows,
         "dispatch_lines": dispatch,  # 需调运：台账里有的物资从存放点运到各密闭处（调度单按它下发，由 guard 从记录取）

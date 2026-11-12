@@ -519,8 +519,14 @@ def test_evacuation_list_is_filled_from_the_personnel_record(world):
     assert not r.is_error, r.content[0].text
     payload = world.rows()[-1]["payload"]
     assert payload["persons"] == face + ret and payload["routes"] == {p: ["N3", "N2", "N8"] for p in face}
+    # 通知正文由代码按记录生成，智能体写的“补充撤人”不用（2026-11-11 演示：智能体写的说明有错字原样发到了矿井）
+    assert payload["reason"] != "补充撤人"
+    assert "补充撤人名单 3 人" in payload["reason"] and f"其中 1 人（{ret[0]}）" in payload["reason"] and rid in payload["reason"]
+    assert "不替代、不延迟预案撤人" in payload["reason"]
     # 没有记录也没有名单：拦下
     assert world.call("notify_evacuation", {"notice": {"reason": "x"}}).is_error
+    # 指挥人员另外点名：要写原因
+    assert world.call("notify_evacuation", {"notice": {"persons": face}}).is_error
 
 # ── 启封审批（approve_unsealing，按启封评估记录）──
 
@@ -593,7 +599,7 @@ def test_precheck_summary_for_unsealing(world_s5):
     out = precheck("approve_unsealing", {"record_id": rid}, world_s5.holder.engine.now(), world_s5.records)
     assert out["ok"], out["problems"]
     names = [c["name"] for c in out["summary"]["checks"]]
-    assert "启封条件" in names and "方案类型、时效与红线" in names
+    assert "启封条件" in names and "方案类型与时效红线" in names
     assert out["summary"]["action"].startswith("批准启封 1201 采空区火区启封方案")
     assert out["notes"] and "不可逆" in out["notes"][0]  # 确认人要把关的事项
     bad = precheck("approve_unsealing", {"record_id": rid}, world_s5.holder.engine.now().replace(year=2027), world_s5.records)

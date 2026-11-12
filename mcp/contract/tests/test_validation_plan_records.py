@@ -55,7 +55,7 @@ def test_reviewed_plan_passes(records):
     s = r["summary"]
     assert s["record_ids"] == [rid]
     assert s["action"] == "下发 1201 采空区火区封闭方案（SP-1201-202611042000）"
-    assert [c["name"] for c in s["checks"]] == ["引用记录", "记录时效", "合规审核", "方案记录", "方案类型、时效与红线"]
+    assert [c["name"] for c in s["checks"]] == ["引用记录", "记录时效", "合规审核", "方案记录", "方案类型与时效红线"]
     assert all(c["ok"] for c in s["checks"])
     assert s["human_items"] == REVIEW["result"]["human_items"] and s["human_items"]
     assert s["facts"][0].startswith("步骤：") and any(f.startswith("密闭巷道：") for f in s["facts"])  # 要点取自方案记录

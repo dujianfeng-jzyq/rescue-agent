@@ -197,7 +197,7 @@ def unseal_from_record(
     if rec.panel and plan.panel != rec.panel:
         return fail("工作面", f"方案的工作面 {plan.panel} 与记录的工作面 {rec.panel} 不符")
     problems = validate_plan(tool, plan, now)
-    checks.append(ApprovalCheck(name="方案类型、时效与红线", ok=not problems, detail="；".join(problems) or "通过（与下发时的强制校验同一套规则）"))
+    checks.append(ApprovalCheck(name="方案类型与时效红线", ok=not problems, detail="；".join(problems) or "通过（与下发时的强制校验同一套规则）"))
     if problems:
         return None, problems, [], checks
     return plan, [], ["启封是不可逆的现场动作：请确认现场已具备启封的组织条件（救护队、通风、断电、撤人）"], checks
@@ -242,7 +242,7 @@ def plan_from_record(
     if rec.panel and plan.panel != rec.panel:
         return fail("工作面", f"方案的工作面 {plan.panel} 与记录的工作面 {rec.panel} 不符")
     problems = validate_plan(tool, plan, now)
-    checks.append(ApprovalCheck(name="方案类型、时效与红线", ok=not problems, detail="；".join(problems) or "通过（与下发时的强制校验同一套规则）"))
+    checks.append(ApprovalCheck(name="方案类型与时效红线", ok=not problems, detail="；".join(problems) or "通过（与下发时的强制校验同一套规则）"))
     if problems:
         return None, problems, [], checks
     return plan, [], [str(x) for x in r.get("human_items") or []], checks
@@ -266,7 +266,26 @@ def evacuation_from_record(notice: dict[str, Any], records: RecordStore | None) 
                 persons.append(str(pid))
             if route.get("reachable") and route.get("nodes") and pid not in routes:
                 routes[str(pid)] = [str(n) for n in route["nodes"]]
-    return {**notice, "persons": persons, "routes": routes} if persons else notice
+    if not persons:
+        return notice
+    return {**notice, "persons": persons, "routes": routes, "reason": evacuation_reason(r, persons, routes, str(notice["record_id"]))}
+
+
+def evacuation_reason(result: dict[str, Any], persons: list[str], routes: dict[str, list[str]], record_id: str) -> str:
+    """按人员记录生成撤人通知正文（不用智能体写的文字）：人数、去向、走不通的人，以及“补充、不替代预案撤人”。"""
+    panel = str(result.get("panel") or "").strip()
+    head = f"{panel} 工作面" if panel else "受影响区域"
+    targets = []
+    for g in result.get("threatened") or []:
+        route = g.get("escape_route") or {}
+        if route.get("reachable") and (name := route.get("target_name") or route.get("target")) and name not in targets:
+            targets.append(str(name))
+    blocked = [p for p in persons if p not in routes]
+    parts = [f"{head}补充撤人名单 {len(persons)} 人" + (f"，撤往 {'、'.join(targets)}" if targets else "")]
+    if blocked:
+        parts.append(f"其中 {len(blocked)} 人（{'、'.join(blocked)}）避开受污染巷道后没有可达避灾路线，需人工研判")
+    parts.append(f"本通知是预案撤人的补充，不替代、不延迟预案撤人；依据人员记录 {record_id}")
+    return "；".join(parts) + "。"
 
 
 def dispatch_from_record(order: dict[str, Any], records: RecordStore | None) -> dict[str, Any]:
@@ -444,6 +463,7 @@ __all__ = [
     "check_warning_record",
     "dispatch_from_record",
     "evacuation_from_record",
+    "evacuation_reason",
     "plan_from_record",
     "precheck",
     "validate_plan",

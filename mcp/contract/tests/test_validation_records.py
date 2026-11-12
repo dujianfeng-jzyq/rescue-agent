@@ -132,9 +132,9 @@ def test_summary_facts_come_from_records_and_arguments(records):
     rid = put(records, "fire-assessment", "warning", {"level": "red", "level_name": "红色（危险）", "triggered": ["红色（危险）：乙烯(ppm) 2.09 ≥ 2.0"]})
     r = check("publish_warning", warn(records, record_id=rid), records)
     assert r["summary"]["facts"] == ["预警等级：红色（危险）", "触发条件：红色（危险）：乙烯(ppm) 2.09 ≥ 2.0"]
-    esc = put(records, "emergency-escalation", "escalation", {"recommend": True, "reasons": ["预警等级 红色（危险），达到 红色（危险）"], "articles": [{"document": "矿山救援规程", "article": "第39条"}]})
+    esc = put(records, "emergency-escalation", "escalation", {"recommend": True, "reasons": ["预警等级 红色（危险），达到升级条件（不低于 红色（危险））"], "articles": [{"document": "矿山救援规程", "article": "第39条"}]})
     r = check("escalate_emergency", {"escalation": {"reason": "x", "recommended_level": "应急响应", "record_id": esc}}, records)
-    assert r["summary"]["facts"] == ["升级理由：预警等级 红色（危险），达到 红色（危险）", "规程依据：第39条"]
+    assert r["summary"]["facts"] == ["升级理由：预警等级 红色（危险），达到升级条件（不低于 红色（危险））", "规程依据：第39条"]
     evac = {"notice": {"reason": "x", "persons": ["P1", "P2", "P3"], "routes": {"P1": ["N1", "N8"], "P2": ["N2", "N8"]}}}
     assert check("notify_evacuation", evac, records)["summary"]["facts"] == ["补充撤人名单 3 人", "撤往：N8", "没有可达避灾路线 1 人：P3（需人工研判）"]
     # 引用了人员记录：去向写中文名（从记录的避灾路线取）
@@ -143,3 +143,21 @@ def test_summary_facts_come_from_records_and_arguments(records):
     assert check("notify_evacuation", evac, records)["summary"]["facts"] == ["补充撤人名单 1 人", "撤往：避难硐室（N8）"]
     r = check("publish_warning", warn(records, record_id="RS-20261104T200000-zzzzzz"), records)
     assert not r["ok"] and r["summary"]["facts"] == []  # 没通过预检的不给要点
+
+
+def test_evacuation_reason_is_generated_from_the_record():
+    """撤人通知正文按记录生成：人数、去向、走不通的人、“补充、不替代预案撤人”。"""
+    from rescue_contract.validation import evacuation_reason
+
+    result = {
+        "panel": "1201",
+        "threatened": [
+            {"persons": ["P1", "P2"], "escape_route": {"reachable": True, "nodes": ["N3", "N2", "N8"], "target": "N8", "target_name": "1201避难硐室"}},
+            {"persons": ["P3"], "escape_route": {"reachable": False}},
+        ],
+    }
+    text = evacuation_reason(result, ["P1", "P2", "P3"], {"P1": ["N3", "N8"], "P2": ["N3", "N8"]}, "RS-20261104T200000-aaaaaa")
+    assert text == (
+        "1201 工作面补充撤人名单 3 人，撤往 1201避难硐室；其中 1 人（P3）避开受污染巷道后没有可达避灾路线，需人工研判；"
+        "本通知是预案撤人的补充，不替代、不延迟预案撤人；依据人员记录 RS-20261104T200000-aaaaaa。"
+    )

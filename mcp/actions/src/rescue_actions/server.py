@@ -303,8 +303,8 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
     @server.tool()
     async def notify_evacuation(notice: EvacuationNotice) -> ActionReceipt:
         """发布补充撤人名单与避灾路线（确认人：调度员）。这是对预案撤人的补充，不替代、不延迟预案撤人。
-        record_id 照抄 run_fire_assessment 返回的 record_ids.personnel，persons 留空：名单和可达的避灾路线由本服务按记录的受威胁人员填写。
-        persons 只在指挥人员另外点名时填（人员编号，如 C001）。"""
+        record_id 照抄 run_fire_assessment 返回的 record_ids.personnel，persons 和 reason 留空：名单、可达的避灾路线和通知正文由本服务按记录填写。
+        persons 只在指挥人员另外点名时填（人员编号，如 C001），这时 reason 写撤人原因。"""
         notice = EvacuationNotice.model_validate(evacuation_from_record(notice.model_dump(mode="json"), record_store))
         await reject_if("notify_evacuation", notice, await evacuation_problems(notice), [notice.record_id] if notice.record_id else [])
         where = {p.person_id: p.roadway_id for p in await md.personnel()}
@@ -326,6 +326,8 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
             return [f"取不到井下人员定位，无法核对撤人名单：{exc}"]
         if not notice.persons:
             return ["撤人名单为空：给出人员记录（record_ids.personnel，且研判算出了受威胁人员）或人员编号"]
+        if not notice.reason.strip():
+            return ["指挥人员另外点名时要写撤人原因（reason）；按人员记录填名单时由本服务生成"]
         unknown = sorted(p for p in notice.persons if p not in where)
         return [f"名单里的人员不在井下人员定位中：{unknown}（已升井或编号有误）"] if unknown else []
 

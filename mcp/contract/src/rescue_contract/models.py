@@ -407,7 +407,9 @@ class DispatchOrder(_Model):
 
 
 class EvacuationNotice(_Model):
-    reason: str
+    # 通知正文。给了 record_id 且名单留空时由 guard 按记录生成（evacuation_from_record），智能体写的不用：
+    # 2026-11-11 演示里智能体写的说明有错字（“预案撕人”）原样发到了矿井。只有指挥人员另外点名时才用这里的文字。
+    reason: str = ""
     # person_id。留空并给 record_id 时，由 guard 按人员记录的受威胁人员和可达避灾路线填写（evacuation_from_record）：
     # 名单不用智能体抄（2026-11-10 演示复看：智能体把名单写成一句话被拦）
     persons: list[str] = Field(default_factory=list)

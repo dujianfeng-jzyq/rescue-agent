@@ -254,7 +254,7 @@
    "R-1201-IN",
    "R-1201-RET"
   ],
-  "seal_walls_text": "R-1201-IN、R-1201-RET",
+  "seal_walls_text": "1201运输巷、1201回风巷",
   "materials": {
    "temporary_seal": {
     "kind": "temporary",
