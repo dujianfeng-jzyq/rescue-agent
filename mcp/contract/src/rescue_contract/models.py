@@ -474,7 +474,8 @@ class Record(_Model):
     """证据、结果或报告。只新增、不修改；报告和指令按编号引用，发布前重算 content_sha256。
 
     content_sha256 = sha256(canonical_json(content))，规范化方式见 rescue_contract.canonical（RFC 8785）；
-    content 为字符串时是其 UTF-8 字节的 sha256。
+    content 为字符串时是其 UTF-8 字节的 sha256。只覆盖 content，不覆盖 source、kind、panel、as_of：
+    防篡改靠记录目录的写权限（只有证据插件能写），见 rescue_contract.records。
     """
 
     record_id: str = Field(pattern=RECORD_ID_PATTERN)

@@ -66,7 +66,7 @@
   │
   ├─ DSH tools/pre-execute ── rescue-approval
   │     1. POST actions:/redlines/check {tool, arguments}
-  │        └ rescue_contract.validation.precheck：方案类型 + 记录时效 + 记录核对（重算 content_sha256）+ 红线引擎
+  │        └ rescue_contract.validation.precheck：方案类型 + 记录时效 + 记录核对（重算 content_sha256，只覆盖内容）+ 红线引擎
   │        不通过 → deny(RESCUE_RED_LINE)；不可达/超时 → deny(RESCUE_PRECHECK_UNAVAILABLE)
   │     2. 通过 → ask：确认弹窗显示 ApprovalSummary（要做什么、要点、人工确认项、核对结果、引用的记录；要点由代码从记录取）
   │
@@ -114,7 +114,7 @@
 
 | 文件 | 写入方 | 用途 |
 | --- | --- | --- |
-| `var/records/` | 证据插件（DSH 进程） | 证据、结果、报告记录（只新增不修改），指令发布时按编号核对 |
+| `var/records/` | 证据插件（DSH 进程） | 证据、结果、报告记录（只新增不修改），指令发布时按编号核对。`content_sha256` 只覆盖内容，来源、时效、工作面不在哈希里：防篡改靠只有 DSH 进程能写这个目录 |
 | `var/incidents/` | 监听器、事件插件、唤醒插件、审批插件、guard | 事件库（只追加）；`sentinel/` 下是监听器状态和心跳，`duty-session.json` 是值班会话编号 |
 | `var/actions-ledger.jsonl` | guard | 已发布指令台账（含记录编号、Origin、矿井回执、事件编号） |
 | `var/audit/tool-actions.jsonl` | rescue-audit | 所有指令类工具调用结果（含被拦截、被拒绝） |

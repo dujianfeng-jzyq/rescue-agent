@@ -100,7 +100,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "证据、结果或报告。只新增、不修改；报告和指令按编号引用，发布前重算 content_sha256。\n\ncontent_sha256 = sha256(canonical_json(content))，规范化方式见 rescue_contract.canonical（RFC 8785）；\ncontent 为字符串时是其 UTF-8 字节的 sha256。",
+  "description": "证据、结果或报告。只新增、不修改；报告和指令按编号引用，发布前重算 content_sha256。\n\ncontent_sha256 = sha256(canonical_json(content))，规范化方式见 rescue_contract.canonical（RFC 8785）；\ncontent 为字符串时是其 UTF-8 字节的 sha256。只覆盖 content，不覆盖 source、kind、panel、as_of：\n防篡改靠记录目录的写权限（只有证据插件能写），见 rescue_contract.records。",
   "properties": {
     "record_id": {
       "pattern": "^(EV|RS|RP)-\\d{8}T\\d{6}-[a-z0-9]{6}$",

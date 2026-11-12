@@ -60,6 +60,8 @@ def test_reviewed_plan_passes(records):
     assert s["human_items"] == REVIEW["result"]["human_items"] and s["human_items"]
     assert s["facts"][0].startswith("步骤：") and any(f.startswith("密闭巷道：") for f in s["facts"])  # 要点取自方案记录
     assert any(f.startswith(("物资缺口", "物资：")) for f in s["facts"])
+    # 人工确认的现场条件写明值和确认人（2026-11-11 代码复查第 2 轮）
+    assert "人工确认的现场条件：灾区温度（℃） 35（确认人 救护队带队指挥员）；回风道是否畅通 是（确认人 通风部门负责人）" in s["facts"]
     plan, problems, _, _ = plan_from_record("issue_sealing_plan", rid, records, NOW)
     assert not problems and isinstance(plan, Plan) and plan.record_id == rid and plan.kind == "sealing"
 

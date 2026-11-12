@@ -76,9 +76,9 @@ export interface Redline {
 
 export interface SealingOptions {
   panel: string
+  /** 现场条件的人工输入：只来自现场条件卡片（index.ts 的 resolveFieldChoices），不收模型直接填的值 */
   humanInputs?: HumanInput[]
-  leakM3Min?: number
-  targetO2Pct?: number
+  // 漏风量、目标氧浓度（注氮流量的输入）暂不收：没有卡片，方案里列为待补充（2026-11-11 代码复查第 2 轮）
   origin: Origin
   signal?: AbortSignal
   onEvent?: (e: FlowEvent) => void
@@ -166,8 +166,6 @@ export async function draftPlan(ev: Evidence, opts: SealingOptions, flow: PlanFl
     skInputs.personnel = personnel.record_id
     skOptions.human_inputs = opts.humanInputs ?? []
   }
-  if (opts.leakM3Min !== undefined) skOptions.leak_m3_min = opts.leakM3Min
-  if (opts.targetO2Pct !== undefined) skOptions.target_o2_pct = opts.targetO2Pct
   const skeletonRec = await step('skeleton', () => script(SP, 'skeleton', skInputs, skOptions))
   const sk = content(skeletonRec) as Skeleton
   // 操作员选定的可选步骤（处置选项卡片）：必须都在清单里，按清单顺序；以它为准，模型不能增减

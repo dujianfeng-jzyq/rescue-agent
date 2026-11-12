@@ -27,6 +27,14 @@ describe('研判说明：数值核对', () => {
     assert.deepEqual(ungrounded('CO 1629.090 ppm、11 人', MATERIAL), [])
     assert.deepEqual(ungrounded('约 1600 ppm，煤温约 150 ℃', MATERIAL), ['1600', '150'])
   })
+
+  it('日期、时刻要在材料里出现；中文数字加单位判不合格（代码复查第 2 轮）', () => {
+    const m = '证据时间 2026-11-04T20:00:00，处置开始 2026-11-04 08:30'
+    assert.deepEqual(ungrounded('截至 2026-11-04 20:00，8:30 开始处置', m), [])
+    assert.deepEqual(ungrounded('预计 14:30 到达，2026-11-05 复评', m), ['2026-11-05', '14:30'])
+    assert.deepEqual(ungrounded('约两小时后到达，三人受威胁，观测十二 小时', m), ['两小时（请用阿拉伯数字照抄记录）', '三人（请用阿拉伯数字照抄记录）', '十二小时（请用阿拉伯数字照抄记录）'])
+    assert.deepEqual(ungrounded('一旦氧浓度上升，进一步注氮；爆炸三角形无法判定，十分危险', m), [])
+  })
 })
 
 describe('研判说明：结构化结果核对', () => {

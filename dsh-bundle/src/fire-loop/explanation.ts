@@ -72,7 +72,7 @@ export function stagePrompt(opts: { skillName: string; skillVersion: string; ski
     `- 从“关注点清单”里选 1–${l.max_focus} 项最需要指挥人员注意的（按重要性排序），每项 note 写一句说明（不超过 ${l.max_note_chars} 字，可以为空）；`,
     `- 从“下一步清单”里选 1–${l.max_next_steps} 项，每项 reason 写一句理由（不超过 ${l.max_note_chars} 字，可以为空）；`,
     `- summary 写一句总述（不超过 ${l.max_summary_chars} 字）。`,
-    '- 只能用清单里的 id。说明、理由、总述里不写清单和报告里没有的数值：不换算、不估算、不相加、不计数、不归纳界限；不写序号；不引用条文；不声称已执行任何处置。',
+    '- 只能用清单里的 id。说明、理由、总述里不写清单和报告里没有的数值：不换算、不估算、不相加、不计数、不归纳界限；数值、日期、时刻用阿拉伯数字照抄材料，不写“两小时”“三人”这类中文数字，不写材料里没有的时刻；不写序号；不引用条文；不声称已执行任何处置。',
     '- 写不出合规的说明时，note、reason 留空字符串。',
     ...(opts.options.evacuation_reminder === true
       ? []
@@ -112,10 +112,31 @@ export function numbersIn(text: string): string[] {
   return t.match(NUM) ?? []
 }
 
-/** 文字里出现、材料里找不到的数值（按数值比较：1.50 与 1.5 相同） */
+const DATE = /\d{4}-\d{2}-\d{2}/g
+const CLOCK = /(?<![\d.])(\d{1,2}):(\d{2})(?::\d{2})?(?![\d.])/g
+// 中文数字加计量、计数单位（“两小时”“三人”“十二条”）：数值一律用阿拉伯数字照抄记录，中文写法核对不了，直接判不合格。
+// 单独的“一”太常见（“一旦”“进一步”“一次”），不查；“一十”“一百”这类仍查
+const CHINESE_QUANTITY = /(?:[两二三四五六七八九十百千万]|一[十百千万])[零〇一二两三四五六七八九十百千万]*\s*(?:个|名|人|小时|分钟|天|米|处|条|次|倍|度|台|吨|立方)/g
+
+/** 文字里的日期（yyyy-mm-dd）和时刻（hh:mm，补成两位小时） */
+export function timesIn(text: string): string[] {
+  const dates = text.match(DATE) ?? []
+  const clocks = [...text.matchAll(CLOCK)].map((m) => `${m[1]!.padStart(2, '0')}:${m[2]}`)
+  return [...dates, ...clocks]
+}
+
+/**
+ * 文字里出现、材料里找不到的数值：数值按值比较（1.50 与 1.5 相同）；日期、时刻也要在材料里出现（编造的“预计 14:30 到达”不放过）；
+ * 中文数字加单位一律算找不到（2026-11-11 代码复查第 2 轮）。
+ */
 export function ungrounded(text: string, material: string): string[] {
   const pool = new Set(numbersIn(material).map((x) => Number(x)))
-  return numbersIn(text).filter((x) => !pool.has(Number(x)))
+  const times = new Set(timesIn(material))
+  return [
+    ...numbersIn(text).filter((x) => !pool.has(Number(x))),
+    ...timesIn(text).filter((x) => !times.has(x)),
+    ...(text.match(CHINESE_QUANTITY) ?? []).map((x) => `${x.replace(/\s+/g, '')}（请用阿拉伯数字照抄记录）`),
+  ]
 }
 
 /** 核对模型的结构化结果，返回解析后的说明或问题清单 */

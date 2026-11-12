@@ -51,7 +51,7 @@ export interface ReviewChoice {
 const ROLE = (stage: string, flow: string) =>
   `你是固定流程 ${flow} 的“${stage}”阶段。只用 structured_output 提交结果，不要调用任何其他工具，不要向人提问。`
 const NUMBERS =
-  '说明、概述里不写清单、现场条件和条文里没有的数值：不换算、不估算、不相加、不计数、不归纳界限；不写序号；不声称已执行任何处置。写不出合规的说明时留空字符串。'
+  '说明、概述里不写清单、现场条件和条文里没有的数值：不换算、不估算、不相加、不计数、不归纳界限；数值、日期、时刻用阿拉伯数字照抄材料，不写“两小时”“三人”这类中文数字，不写材料里没有的时刻；不写序号；不声称已执行任何处置。写不出合规的说明时留空字符串。'
 
 const show = (v: unknown) => (v === null || v === undefined ? '缺失' : v === true ? '是' : v === false ? '否' : String(v))
 

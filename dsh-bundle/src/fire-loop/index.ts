@@ -335,10 +335,10 @@ export function apply(ctx: Context, config: Config) {
         ],
       },
       execute: async (raw: unknown, exec: any) => {
-        const args = raw as { panel: string; human_inputs?: HumanInput[]; leak_m3_min?: number; target_o2_pct?: number; selected_options?: string[]; field_choices?: { field: string; choice: string }[]; confirmed_by?: string }
-        // 封闭方案：卡片上的答案原文 → 人工输入（换不成数值的报错让智能体重问）；已经用 human_inputs 给了的字段不重复
-        const given = new Set((args.human_inputs ?? []).map((h) => h.field))
-        const humanInputs: HumanInput[] = [...(args.human_inputs ?? []), ...resolveFieldChoices(fieldConditions, (args.field_choices ?? []).filter((x) => !given.has(x.field)), args.confirmed_by)]
+        const args = raw as { panel: string; selected_options?: string[]; field_choices?: { field: string; choice: string }[]; confirmed_by?: string }
+        // 封闭方案：现场条件只来自卡片上的答案原文，由代码换成数值或 true/false（换不了就报错让智能体重问）。
+        // 不再收模型直接填的 human_inputs、漏风量、目标氧浓度（2026-11-11 代码复查第 2 轮：那是绕过卡片的旁路，确认人也由模型写）
+        const humanInputs: HumanInput[] = resolveFieldChoices(fieldConditions, args.field_choices ?? [], args.confirmed_by)
         // 防灭火方案：操作员在处置选项卡片上选的选项编号 → 方案的可选步骤 key（代码校验，不认识的报错）
         const forcedSteps = flow === FIREFIGHTING && Array.isArray(args.selected_options) ? planKeysFor(responseOptions, 'orange', args.selected_options.map(String)) : undefined
         if (forcedSteps && forcedSteps.length === 0)
@@ -355,8 +355,6 @@ export function apply(ctx: Context, config: Config) {
           const out: any = await draft(evidence, {
             panel: String(args.panel),
             humanInputs,
-            ...(typeof args.leak_m3_min === 'number' ? { leakM3Min: args.leak_m3_min } : {}),
-            ...(typeof args.target_o2_pct === 'number' ? { targetO2Pct: args.target_o2_pct } : {}),
             origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
             signal: exec.signal,
             maxRounds: config.sealingMaxRounds,
@@ -400,26 +398,10 @@ export function apply(ctx: Context, config: Config) {
     '经 actions 红线预检和“合规审核”阶段（只引用条文索引给出的条文），不通过时自动修改重审，轮数有上限。' +
     '完整方案和审核意见已作为文件交付（网页端右侧预览）；回答时把 brief_markdown（方案要点）原样单独成段放进回答，不要改写、不要贴完整方案、不要另写分析；next_step 是给你的下一步说明，不用贴。' +
     'result.verdict 为 pass 时，下发用 issue_sealing_plan，参数只给 record_id = result.issue_record_id（不要提交方案内容）；' +
-    '不通过时照实转告，不要绕过。返回 human_input_request 时用 ask_user 逐项询问（写明确认人），带着 human_inputs 重新调用。' +
-    '人工确认项（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）只能由人提供，不要替人填写。方案结构和参数为开发占位值。',
+    '不通过时照实转告，不要绕过。返回 human_input_request 时先调 get_field_conditions，把卡片问给操作员，带着 field_choices 和 confirmed_by 重新调用。' +
+    '人工确认项（灾区温度、能见度、火源是否明确、水源是否充足、回风道是否畅通）只经现场条件卡片由人提供；注氮流量需要的漏风量和目标氧浓度暂不收，方案里列为待补充，由确认人把关。方案结构和参数为开发占位值。',
     {
     panel: { type: 'string', required: true, description: '工作面编号，如 1201' },
-    human_inputs: {
-      type: 'array',
-      description: '人工确认的现场条件（只填指挥人员明确给出的）：[{field, value, confirmed_by, note?}]，field 取 area_temperature_c、visibility_m、fire_source_confirmed、water_supply_sufficient、return_airway_clear',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          field: { type: 'string', required: true, enum: ['area_temperature_c', 'visibility_m', 'fire_source_confirmed', 'water_supply_sufficient', 'return_airway_clear'] },
-          value: { type: 'json', required: true, description: '温度、能见度为数值；其余为 true / false' },
-          confirmed_by: { type: 'string', required: true, description: '确认人（姓名或岗位）' },
-          note: { type: 'string' },
-        },
-      },
-    },
-    leak_m3_min: { type: 'number', description: '采空区漏风量（m³/min），指挥人员给出时才填；与 target_o2_pct 一起用于由代码估算注氮流量' },
-    target_o2_pct: { type: 'number', description: '注氮的目标氧浓度（%），指挥人员给出时才填' },
     field_choices: {
       type: 'array',
       description: '现场条件卡片（get_field_conditions）上的答案：[{field: 问题 id, choice: 答案原文}]，原文是操作员选的标签或输入的文字，不要改写；由代码换成数值或 true/false。被跳过的题不要传',

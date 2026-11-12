@@ -3,6 +3,7 @@
  *
  * 只有 DSH 进程（证据插件）写记录目录；bash 沙箱写不了，actions 只读并重算 content_sha256。
  * 只新增不覆盖：先写临时文件，再用硬链接放到目标名（目标已存在则失败）。
+ * content_sha256 只覆盖 content（source、kind、panel、as_of 不在内），只能发现内容被误改；防篡改靠写权限（见 rescue_contract.records）。
  */
 
 import { randomInt } from 'node:crypto'

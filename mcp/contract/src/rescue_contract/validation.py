@@ -346,6 +346,15 @@ def dispatch_from_record(order: dict[str, Any], records: RecordStore | None) -> 
     }
 
 
+def _show(v: Any) -> str:
+    """人工输入值的显示：布尔写“是 / 否”，整数值的浮点数去掉“.0”。"""
+    if isinstance(v, bool):
+        return "是" if v else "否"
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
 def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) -> list[str]:
     """审批弹窗的要点：确认人要批的到底是什么。全部由代码从记录（或撤人、调度的指令参数）取，不经模型改写；
     取不到就不给（要点只是给人看的摘要，核对仍按 checks）。"""
@@ -380,6 +389,10 @@ def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) ->
                 out.append(f"密闭巷道：{pr['seal_walls_text']}")
             short = [str(s.get("label") or s.get("item_type")) for s in pr.get("shortages") or []]
             out.append(f"物资缺口 {len(short)} 项：{'、'.join(short)}" if short else "物资：台账无缺口")
+            # 人工输入的现场条件（来自现场条件卡片）：写明值和确认人，让确认人看到哪些条件是人给的、谁确认的
+            given = [f"{h.get('label') or h.get('field')} {_show(h.get('value'))}（确认人 {h.get('confirmed_by')}）" for h in pr.get("human_inputs") or [] if isinstance(h, dict)]
+            if given:
+                out.append(f"人工确认的现场条件：{'；'.join(given)}")
             missing = [str(m.get("label") or m.get("field")) for m in pr.get("missing_inputs") or []]
             if missing:
                 out.append(f"待补充（下发时由确认人把关）：{'、'.join(missing)}")
