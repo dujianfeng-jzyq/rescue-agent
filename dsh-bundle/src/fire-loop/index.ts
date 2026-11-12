@@ -24,7 +24,7 @@ import { defineTool, Schema } from '../adapter/dsh.ts'
 import { markdownToDocx } from '../evidence/docx.ts'
 import type RescueEvidence from '../evidence/index.ts'
 import type RescueKnowledge from '../knowledge/index.ts'
-import { FLOW, runFireAssessment } from './assessment.ts'
+import { FLOW, previousWarningRecord, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
 import { describeFieldCard, loadFieldConditions, resolveFieldChoices } from './field-conditions.ts'
 import { applyPriorChoice, describeOptions, interpretChoice, loadResponseOptions, planKeysFor, priorChoice } from './response-options.ts'
@@ -87,12 +87,12 @@ export function apply(ctx: Context, config: Config) {
       // 依据的数据时间（记录的 as_of）一并记下：告警是否已被这次处理覆盖按它判断，不按写入时间线的先后
       const asOf = await evidenceAsOf(recordIds, (rid) => ev.evidence.getRecord(rid))
       // 复评的结论和下次复评时刻也记下：add_followup 的缺省到点、get_response_options 要不要再问都按它判断
-      // 研判的预警等级也记下：add_followup 按当前等级限复评间隔
+      // 研判的预警等级也记下：add_followup 按当前等级限复评间隔；预警等级记录的编号：下一次研判按它做定级回差
       const review =
         type === 'effect_review'
           ? { overall: out.result?.overall, next_review_at: out.result?.next_review_at?.slice?.(0, 19) }
           : type === 'assessment'
-            ? { level: out.result?.warning?.level }
+            ? { level: out.result?.warning?.level, warning_record_id: out.record_ids?.warning }
             : {}
       const note = { type, text: String(out.card?.summary ?? ''), record_ids: recordIds, ...(asOf ? { as_of: asOf } : {}), ...Object.fromEntries(Object.entries(review).filter(([, v]) => typeof v === 'string')) }
       const id = await noteOnIncident(incidents, panel, note, async () => String((await ev.mineData.call('get_clock', {})).now).slice(0, 19))
@@ -185,9 +185,11 @@ export function apply(ctx: Context, config: Config) {
         append(parent.session, 'tool-workflow/run-start', { runId, name: `${args.panel} 工作面研判` })
         let stopReason = 'completed'
         try {
+          const previousWarning = incidents ? await previousWarningRecord(incidents, String(args.panel), (id) => evidence.getRecord(id)) : undefined
           const out: any = await runFireAssessment(evidence, {
             panel: String(args.panel),
             includePersonnel: Boolean(args.include_personnel),
+            ...(previousWarning ? { previousWarning } : {}),
             origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
             signal: exec.signal,
             // 风险图导出到会话工作区（records/<会话>/），网页端经 /api/file 显示

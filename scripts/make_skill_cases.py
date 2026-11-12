@@ -113,6 +113,7 @@ def build_inputs() -> dict[tuple[str, str, str], dict]:
         (FA, "check", "s4-escalation-60h-vs-45h"): {"evidence": s4_60, "baseline": run(FA, "check", {"evidence": s4_45})},
         (FA, "check", "s1-normal-24h-data-gap"): {"evidence": stale_evidence(s1_24, "tubes", "BT-1201-G2", 4)},
         (FA, "check", "s5-sealed-24h-power-off-not-failed"): {"evidence": s5_24},
+        **hysteresis_inputs(),
         (XT, "explosion_triangle", "s6-sensor-faults-36h-panel"): {"evidence": s6_36},
         (XT, "explosion_triangle", "s1-normal-24h-g1-zone-ii"): {"evidence": s1_24, "options": {"sensor_id": "BT-1201-G1"}},
         (XT, "explosion_triangle", "manual-sample"): {
@@ -148,6 +149,20 @@ def review_choice(scope: dict, fail: str | None = None, human: str | None = None
         c = "fail" if it["id"] == fail else "needs_human" if it["id"] == human else "pass"
         items.append({"id": it["id"], "conclusion": c, "articles": ["第84条"] if it["id"] == "sequence" else [], "note": "密闭位置需现场确认" if c != "pass" else ""})
     return {"items": items, "summary": "按必备步骤先注惰后封闭"}
+
+
+def hysteresis_inputs() -> dict[tuple[str, str, str], dict]:
+    """定级回差（2026-11-12）：封闭火区 s5 在 39～42 小时越过红色阈值往下降。40 小时按阈值为橙色、乙烯 1.88 仍不低于红色的解除值，
+    保持红色；42 小时乙烯、束管 CO 都低于解除值，降为橙色。监听器以基线的等级为上一次，同样保持。"""
+    s5 = {h: evidence("s5-sealed-fire-area", h) for h in (36, 40, 42)}
+    held = run(FA, "warning", {"evidence": s5[40], "previous": run(FA, "warning", {"evidence": s5[36]})})
+    c36, c40 = (evidence("s5-sealed-fire-area", h, "check") for h in (36, 40))
+    return {
+        (FA, "warning", "s5-sealed-40h-held-red"): {"evidence": s5[40], "previous": run(FA, "warning", {"evidence": s5[36]})},
+        (FA, "warning", "s5-sealed-42h-released-orange"): {"evidence": s5[42], "previous": held},
+        (FA, "warning", "s5-sealed-40h-no-previous-orange"): {"evidence": s5[40]},
+        (FA, "check", "s5-sealed-40h-held-vs-36h"): {"evidence": c40, "baseline": run(FA, "check", {"evidence": c36})},
+    }
 
 
 def sealing_inputs() -> dict[tuple[str, str, str], dict]:

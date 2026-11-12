@@ -24,6 +24,9 @@
     "c2h2_ppm": 0.1
    }
   },
+  "hysteresis": {
+   "band": 0.2
+  },
   "window_h": 24,
   "rate_window_h": 12,
   "status": "placeholder"
@@ -123,6 +126,16 @@
   "notes": [
    "BT-1201-G1 氮气浓度 87.4%，可能处于注氮影响范围，格雷哈姆系数偏低失真"
   ],
-  "method": "阈值分级（references/thresholds.yaml）。阈值为演示占位值，需按本矿自然发火预测预报制度设定；自燃发展阶段与等级独立判定"
+  "method": "阈值分级（references/thresholds.yaml）。阈值为演示占位值，需按本矿自然发火预测预报制度设定；自燃发展阶段与等级独立判定",
+  "level_raw": "red",
+  "level_raw_name": "红色（危险）",
+  "hysteresis": {
+   "band": 0.2,
+   "previous_level": null,
+   "previous_level_name": null,
+   "previous_as_of": null,
+   "held": false,
+   "basis": []
+  }
  }
 }

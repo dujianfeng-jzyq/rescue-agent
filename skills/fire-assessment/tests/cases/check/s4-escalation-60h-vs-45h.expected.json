@@ -31,6 +31,9 @@
    "upper_corner": 0.75,
    "return": 0.75
   },
+  "hysteresis": {
+   "band": 0.2
+  },
   "status": "placeholder",
   "thresholds_status": "placeholder"
  },
@@ -42,6 +45,15 @@
   "as_of": "2026-11-04T20:00:00",
   "level": "red",
   "level_name": "红色（危险）",
+  "level_raw": "red",
+  "hysteresis": {
+   "band": 0.2,
+   "previous_level": "orange",
+   "previous_level_name": "橙色（严重）",
+   "previous_as_of": "2026-11-04T05:00:00",
+   "held": false,
+   "basis": []
+  },
   "triggered": [
    "红色（危险）：束管CO最大值(ppm) 1629.09 ≥ 1000；乙烯(ppm) 4.40 ≥ 2.0"
   ],

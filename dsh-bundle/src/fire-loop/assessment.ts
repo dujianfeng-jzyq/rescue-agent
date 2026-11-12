@@ -40,6 +40,8 @@ export interface AssessmentOptions {
   onEvent?: (e: FlowEvent) => void
   /** 跑阶段“研判说明”的子 Agent；不给时跳过该阶段（报告只含事实部分） */
   stage?: StageRunner
+  /** 本事件上一次研判的预警等级记录（定级回差：没回落到解除值以下不降级）；没有不给 */
+  previousWarning?: string
   /** 按文档和条号取条文原文（知识库插件的条文索引）；升级建议里的条文用它 */
   getArticles: (document: string, articles: string[]) => { document: string; article: string; content: string | null; source: string }[]
 }
@@ -62,6 +64,30 @@ export interface AssessmentOutcome {
 }
 
 const content = (r: RescueRecord) => (r.content as any).result
+
+interface TimelineReader {
+  findOpen(category: string, panel: string): Promise<{ incident_id: string } | undefined | null>
+  entries(id: string): Promise<{ kind: string; by?: string; data?: Record<string, any> }[]>
+}
+
+/**
+ * 定级回差用的“上一次”：本工作面未关闭火情事件里最近一次研判记下的预警等级记录（研判写进时间线时带 warning_record_id）。
+ * 只认 fire-assessment/warning 的结果记录、同一工作面；没有事件、没记过或记录读不到时不给（不做回差，按阈值定级）。
+ */
+export async function previousWarningRecord(incidents: TimelineReader, panel: string, getRecord: (id: string) => Promise<RescueRecord>): Promise<string | undefined> {
+  const inc = await incidents.findOpen('fire', panel)
+  if (!inc) return undefined
+  const note = (await incidents.entries(inc.incident_id)).findLast((e) => e.kind === 'note' && e.data?.type === 'assessment' && typeof e.data?.warning_record_id === 'string')
+  if (!note) return undefined
+  const id = String(note.data!.warning_record_id)
+  try {
+    const r = await getRecord(id)
+    const src = r.source as any
+    return r.panel === panel && src?.skill === FA && src?.script === 'warning' ? id : undefined
+  } catch {
+    return undefined
+  }
+}
 
 export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): Promise<AssessmentOutcome> {
   const runId = `FA-${Date.now().toString(36)}-${randomInt(36 ** 4).toString(36).padStart(4, '0')}`
@@ -95,7 +121,8 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
   const evidence = await step('evidence', () => ev.collectEvidence({ skill: FA, kind: 'assessment', panel: opts.panel, origin }))
   const E = evidence.record_id
   await step('alarms', () => script(FA, 'alarms', { evidence: E }))
-  await step('warning', () => script(FA, 'warning', { evidence: E }))
+  // 证据放第一个：结果记录的工作面和时刻取第一个输入的
+  await step('warning', () => script(FA, 'warning', { evidence: E, ...(opts.previousWarning ? { previous: opts.previousWarning } : {}) }))
   await step('stage', () => script(FA, 'stage', { warning: ids.warning! }))
   await step('trend', () => script(FA, 'trend', { evidence: E, warning: ids.warning! }))
   await step('explosion', () => script('explosion-triangle', 'explosion_triangle', { evidence: E }))

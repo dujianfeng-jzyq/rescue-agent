@@ -31,6 +31,9 @@
    "upper_corner": 0.75,
    "return": 0.75
   },
+  "hysteresis": {
+   "band": 0.2
+  },
   "status": "placeholder",
   "thresholds_status": "placeholder"
  },
@@ -42,6 +45,15 @@
   "as_of": "2026-11-03T08:00:00",
   "level": "none",
   "level_name": "无",
+  "level_raw": "none",
+  "hysteresis": {
+   "band": 0.2,
+   "previous_level": null,
+   "previous_level_name": null,
+   "previous_as_of": null,
+   "held": false,
+   "basis": []
+  },
   "triggered": [],
   "stage": "no_sign",
   "stage_name": "未见自燃征兆",

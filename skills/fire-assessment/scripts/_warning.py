@@ -60,6 +60,42 @@ def classify(ind: dict[str, float | None], thresholds: dict[str, Any]) -> tuple[
     return level, reasons
 
 
+def hold_level(level: str, ind: dict[str, float | None], thresholds: dict[str, Any], previous: str | None, band: float) -> tuple[str, list[str]]:
+    """定级回差：按阈值算出的等级低于上一次时，上一次那一级（及中间各级）的任一指标仍不低于“阈值 ×（1 − band）”就保持该级。
+    返回（等级，保持的依据；没有保持为空）。读不到数的指标不算“仍不低于”（不因缺数保持）。
+    2026-11-12 演示：封闭注惰后乙烯被稀释，从 2.07 落到 1.82（红色阈值 2.0），等级红→橙，数小时后积聚回 2.10 又升红。"""
+    if previous not in LEVELS or LEVELS.index(previous) <= LEVELS.index(level):
+        return level, []
+    for name in reversed(LEVELS[LEVELS.index(level) + 1 : LEVELS.index(previous) + 1]):
+        hits = [
+            f"{LABELS[k]} {ind[k]:.2f} ≥ 解除值 {v * (1 - band):.3g}（阈值 {v} × (1 − {band:g})）"
+            for k, v in (thresholds.get(name) or {}).items()
+            if ind.get(k) is not None and ind[k] >= v * (1 - band)
+        ]
+        if hits:
+            return name, [f"{NAMES[name]}（保持：上一次为 {NAMES[previous]}，指标未回落到解除值以下）：" + "；".join(hits)]
+    return level, []
+
+
+def apply_hold(w: dict[str, Any], thresholds: dict[str, Any], previous: str | None, previous_as_of: str | None, band: float) -> dict[str, Any]:
+    """把回差加到 assess 的结果上：level 是采用的等级，level_raw 是按阈值直接算出的等级，hysteresis 写明依据。"""
+    raw = w["level"]
+    level, held = hold_level(raw, w["values"], thresholds, previous, band)
+    out = {**w, "level_raw": raw, "level_raw_name": NAMES[raw], "level": level, "level_name": NAMES[level]}
+    out["hysteresis"] = {
+        "band": band,
+        "previous_level": previous,
+        "previous_level_name": NAMES.get(previous or ""),
+        "previous_as_of": previous_as_of,
+        "held": bool(held),
+        "basis": held,
+    }
+    if held:
+        out["triggered"] = held
+        out["notes"] = [*w["notes"], f"按阈值为 {NAMES[raw]}；上一次（{previous_as_of}）为 {NAMES[previous]}，指标未回落到解除值以下，保持 {NAMES[level]}"]
+    return out
+
+
 def classify_stage(ind: dict[str, float | None], cfg: dict[str, Any]) -> tuple[str, list[str]]:
     """按指标判定阶段，返回（阶段，依据）。自高到低，满足该阶段任一条件即是。"""
     for name in ("intense", "accelerating", "slow_oxidation"):

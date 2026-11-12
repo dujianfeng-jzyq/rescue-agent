@@ -1,0 +1,107 @@
+{
+ "algorithm_version": "check/1.0.0",
+ "params": {
+  "anomaly": {
+   "new_alarm": true,
+   "level_up": true,
+   "stage_up": true,
+   "required_failed": true,
+   "data_gap": true
+  },
+  "required": {
+   "tubes": [
+    "CO",
+    "O2"
+   ],
+   "upper_corner": [
+    "CO",
+    "CH4"
+   ],
+   "return": [
+    "CO",
+    "CH4"
+   ]
+  },
+  "sealed_exempt": [
+   "upper_corner",
+   "return"
+  ],
+  "data_gap_h": {
+   "tubes": 3,
+   "upper_corner": 0.75,
+   "return": 0.75
+  },
+  "hysteresis": {
+   "band": 0.2
+  },
+  "status": "placeholder",
+  "thresholds_status": "placeholder"
+ },
+ "warnings": [
+  "检测判据为开发初稿（占位值），待专家评审"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T00:00:00",
+  "level": "red",
+  "level_name": "红色（危险）",
+  "level_raw": "orange",
+  "hysteresis": {
+   "band": 0.2,
+   "previous_level": "red",
+   "previous_level_name": "红色（危险）",
+   "previous_as_of": "2026-11-03T20:00:00",
+   "held": true,
+   "basis": [
+    "红色（危险）（保持：上一次为 红色（危险），指标未回落到解除值以下）：乙烯(ppm) 1.88 ≥ 解除值 1.6（阈值 2.0 × (1 − 0.2)）"
+   ]
+  },
+  "triggered": [
+   "红色（危险）（保持：上一次为 红色（危险），指标未回落到解除值以下）：乙烯(ppm) 1.88 ≥ 解除值 1.6（阈值 2.0 × (1 − 0.2)）"
+  ],
+  "stage": "accelerating",
+  "stage_name": "加速氧化",
+  "stage_basis": [
+   "乙烯(ppm) 1.878 ≥ 0.05"
+  ],
+  "alarms": [],
+  "alarm_count": 0,
+  "failed_required": [],
+  "missing_groups": [],
+  "stale_required": [],
+  "sealed": true,
+  "sealed_exempt": [
+   "return",
+   "upper_corner"
+  ],
+  "data_quality": [],
+  "notes": [
+   "火区已封闭：上隅角、回风巷安全监控测点在密闭内断电，不参与分级，按束管监测",
+   "BT-1201-G1 氮气浓度 95.2%，可能处于注氮影响范围，格雷哈姆系数偏低失真",
+   "BT-1201-G2 氮气浓度 95.5%，可能处于注氮影响范围，格雷哈姆系数偏低失真",
+   "按阈值为 橙色（严重）；上一次（2026-11-03T20:00:00）为 红色（危险），指标未回落到解除值以下，保持 红色（危险）"
+  ],
+  "anomaly": false,
+  "escalated": false,
+  "reasons": [],
+  "compared_with": "基线检测（矿井时间 2026-11-03T20:00:00）",
+  "baseline_state": {
+   "level": "red",
+   "stage": "accelerating",
+   "alarm_keys": [],
+   "failed": [],
+   "missing_groups": [],
+   "stale": [],
+   "nominal": false
+  },
+  "state": {
+   "level": "red",
+   "stage": "accelerating",
+   "alarm_keys": [],
+   "failed": [],
+   "missing_groups": [],
+   "stale": [],
+   "nominal": false
+  }
+ }
+}

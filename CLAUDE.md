@@ -13,6 +13,7 @@
 | 为什么这样做（总体方案和路线） | `docs/implementation-plan.md` |
 | 各版本设计 | 第二版 `docs/design-v2.md`；第三版 `design-v3.md`（rescue-mine、常驻监听与事件、专家型智能体）；第四版 `design-v4-map.md`（地图界面）、`design-v4-evacuation.md`（撤人路线）；第五版 `design-v5-demo-flow.md`（演示导演、选项卡片、批准超时） |
 | 设计决策 | `docs/decisions/`（ADR 0001–0009） |
+| 待专家审定的阈值、判据和参数（集中清单） | `docs/expert-review.md` |
 | rescue-mine 接口（代码生成，`make interface-doc`） | `docs/rescue-mine-interface.md` |
 | 真实 DSH 上的验证记录与已知问题（#1–#42） | `docs/validation-checklist.md` |
 | 智能体一致性检测（期望决策与实际比较） | `docs/eval-consistency.md`；评测用法见 `eval/README.md` |
@@ -22,7 +23,7 @@
 ## 状态（2026-11-10）
 
 第二至第五版都已实施并合入 `main`：技能 + 插件 + 固定流程（二）；rescue-mine / guard / 常驻监听与事件 / 专家型智能体（三）；通风图地图界面与撤人路线（四）；按预警等级的演示导演、处置选项卡片、批准超时自动处理（五）。第一版的 Python 服务已删除。
-阈值、场景参数、技能判据、分支参数、选项表都是**开发占位值**，待专家审定，不要声称它们“正确”。
+阈值、场景参数、技能判据、分支参数、选项表都是**开发占位值**，待专家审定，不要声称它们“正确”；新增或发现待审事项时加进 `docs/expert-review.md`。
 待办和遗留见 `docs/progress-log.md` 各版本末尾。
 
 ## 常用命令
