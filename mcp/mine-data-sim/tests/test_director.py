@@ -63,6 +63,16 @@ def test_alert_level_prefers_the_structured_field():
     assert alert_level({"summary": "新的实时报警"}) is None
 
 
+def test_alert_level_ignores_non_level_alerts():
+    """跟踪计划到点、矿井报警不是升级：摘要里带着“不升为红色”这样的期望也不能认成红色（2026-11-12 演示卡在橙色）。"""
+    due = "跟踪计划到点：操作员决定不采取处置、只继续监测；211016 采空区发火指标不再恶化，预警等级不升为红色（计划 2026-11-04T03:12:21）"
+    assert alert_level({"cause": "followup_due", "summary": due}) is None
+    assert alert_level({"cause": "mine_alarm", "summary": "矿井报警平台：预警等级升为红色"}) is None
+    assert alert_level({"cause": "anomaly", "level_to": "red", "summary": "x"}) == "红色"
+    assert alert_level({"cause": "anomaly", "summary": "预警等级由 橙色（严重） 升为 红色（危险）"}) == "红色"
+    assert level_of("预警等级不升为红色") is None
+
+
 def test_flow_valid_and_rejects_bad():
     bad = {"incident": "x", "stages": {"橙色": {"options": [{"id": "a"}], "branches": [{"goto": "不存在"}]}}}  # 选项不在流程文件里写
     with pytest.raises(ValueError):
@@ -343,13 +353,16 @@ def test_jump_stops_at_a_pending_followup(tmp_path):
     from datetime import timedelta
 
     due_at = (due + timedelta(hours=2)).isoformat(timespec="seconds")
-    store.append(fake.iid, due.isoformat(timespec="seconds"), "followup_added", "agent", {"followup_id": "FU-x", "due_at": due_at, "expect": "x"})
+    expect = "操作员决定不采取处置、只继续监测；预警等级不升为红色"  # 2026-11-12 演示：这句曾被认成升为红色，导演停在红色
+    store.append(fake.iid, due.isoformat(timespec="seconds"), "followup_added", "agent", {"followup_id": "FU-x", "due_at": due_at, "expect": expect})
     d.tick()
     assert abs(sim.engine.now_h() - (t0 + 2)) < 1e-6
     assert "FU-x" in d.status()["log"][-1]["text"]
     store.append(fake.iid, due_at, "followup_due", "sentinel", {"followup_id": "FU-x"})  # 监听器写到点（之后由智能体复评）
+    store.append(fake.iid, due_at, "alert", "sentinel", {"cause": "followup_due", "summary": f"跟踪计划到点：{expect}（计划 {due_at}）", "followup_id": "FU-x", "expect": expect})
     fake.poll()
     d.tick()  # 等监听器检测完
+    assert d.state == "running" and d.stage == "红色"  # 到点告警不是升级，不进入等待
     d.tick()  # 跳剩下的 18 小时
     assert abs(sim.engine.now_h() - (t0 + 20)) < 1e-6
     assert "接近红色预警" in d.status()["log"][-1]["text"]

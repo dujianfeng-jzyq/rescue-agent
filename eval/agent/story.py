@@ -83,12 +83,14 @@ def count(store: IncidentStore, iid: str) -> int:
 
 
 def has_alert(store: IncidentStore, word: str) -> str | None:
-    """含 word 的告警所在事件编号（任一事件）。"""
+    """升为 word 的等级告警所在事件编号（任一事件）。只看 cause 为 anomaly 的告警：跟踪计划到点的摘要里
+    可能带着“预警等级不升为红色”这样的期望，不是升级（同导演 alert_level，2026-11-12）。"""
     for v in store.list():
         if v["status"] == "closed":  # 上一次演示残留的已关闭事件不算
             continue
         for e in store.entries(v["incident_id"]):
-            if e["kind"] == "alert" and f"升为 {word}" in str((e.get("data") or {}).get("summary", "")):
+            d = e.get("data") or {}
+            if e["kind"] == "alert" and d.get("cause") == "anomaly" and f"升为 {word}" in str(d.get("summary", "")):
                 return v["incident_id"]
     return None
 

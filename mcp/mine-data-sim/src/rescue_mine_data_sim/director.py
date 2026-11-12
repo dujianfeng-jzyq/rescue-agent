@@ -29,7 +29,7 @@ import yaml
 from rescue_contract.response_options import LEVEL_NAMES, ResponseOption, options_for
 
 LEVELS = ("黄色", "橙色", "红色")
-LEVEL_RE = re.compile(r"升为\s*(黄色|橙色|红色)")
+LEVEL_RE = re.compile(r"(?<!不)升为\s*(黄色|橙色|红色)")
 
 
 def level_of(summary: str) -> str | None:
@@ -39,7 +39,12 @@ def level_of(summary: str) -> str | None:
 
 def alert_level(data: dict[str, Any]) -> str | None:
     """告警升到的等级（中文名）：优先读监听器写的结构化字段 level_to，没有（旧告警）再解析摘要文字。
-    原来只解析文字，监听器的措辞一改，导演就认不出升级（2026-11-12 代码复查第 5 轮）。"""
+    原来只解析文字，监听器的措辞一改，导演就认不出升级（2026-11-12 代码复查第 5 轮）。
+    只有等级告警（cause 为 anomaly）才算升级：跟踪计划到点、矿井报警等告警的摘要里可能带着智能体写的期望
+    （如“预警等级不升为红色”），曾被文字解析误认成升为红色，导演停在红色等一张不会来的卡片（2026-11-12 演示）。"""
+    cause = data.get("cause")
+    if cause is not None and cause != "anomaly":
+        return None
     lv = data.get("level_to")
     if isinstance(lv, str):
         return LEVEL_NAMES.get(lv)  # 蓝色等不在演示流程里的等级为 None
