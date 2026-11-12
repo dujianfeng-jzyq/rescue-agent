@@ -105,19 +105,27 @@ export function freshnessOf(age: number | null): EvacuationView['freshness'] {
   return age <= FRESH_H ? 'fresh' : age <= HIDE_H ? 'grey' : 'hidden'
 }
 
-function midpoint(pts: Pt[]): Pt {
-  // 折线按长度的一半处取点，不是顶点的平均（折线弯的时候平均点会落到线外）
+/** 折线上按长度比例 frac（0 起点，1 终点）取的点，不是顶点的平均（折线弯的时候平均点会落到线外） */
+export function pointAlong(pts: Pt[], frac: number): Pt {
   const seg = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i]![0], p[1] - pts[i]![1]))
-  let half = seg.reduce((a, b) => a + b, 0) / 2
+  let rest = seg.reduce((a, b) => a + b, 0) * Math.min(Math.max(frac, 0), 1)
   for (let i = 0; i < seg.length; i++) {
-    if (half <= seg[i]! || i === seg.length - 1) {
-      const t = seg[i]! === 0 ? 0 : Math.min(half / seg[i]!, 1)
+    if (rest <= seg[i]! || i === seg.length - 1) {
+      const t = seg[i]! === 0 ? 0 : Math.min(rest / seg[i]!, 1)
       return [pts[i]![0] + (pts[i + 1]![0] - pts[i]![0]) * t, pts[i]![1] + (pts[i + 1]![1] - pts[i]![1]) * t]
     }
-    half -= seg[i]!
+    rest -= seg[i]!
   }
   return pts[0]!
 }
+
+const midpoint = (pts: Pt[]): Pt => pointAlong(pts, 0.5)
+
+/**
+ * 污染巷道的时间标签放在入口一端往里一点：到达时间是烟气到这条巷道入口（风流上游端）的时间，
+ * 放在中点或末端会让人以为整条巷道或下游端也是这个时间。不放正好在节点上，免得和上一条巷道的线、标签叠在一起。
+ */
+export const CONTAMINATION_LABEL_FRAC = 0.15
 
 /** 一条巷道在图上的折线（按 from→to 的方向）：起点节点 → 途经点 → 终点节点；缺节点位置返回缺的节点编号。 */
 function roadwayPath(r: NetworkRoadway, map: MineMap): { pts: Pt[] } | { missing: string[] } {
@@ -158,7 +166,7 @@ export function evacuationView(record: RecordLike & { as_of?: string }, network:
     const r = roads.get(c.roadway_id)
     const path = r ? roadwayPath(r, map) : { missing: [String(c.roadway_id)] }
     const drawn = 'pts' in path
-    if (drawn && show) figures.push({ id: `auto:evac:cont:${c.roadway_id}`, type: 'line', kind: 'contaminated', points: path.pts, value: c.arrival_min, text: `约 ${c.arrival_min} 分钟`, stale })
+    if (drawn && show) figures.push({ id: `auto:evac:cont:${c.roadway_id}`, type: 'line', kind: 'contaminated', points: path.pts, at: pointAlong(path.pts, CONTAMINATION_LABEL_FRAC), value: c.arrival_min, text: `约 ${c.arrival_min} 分钟到达`, stale })
     return { roadwayId: String(c.roadway_id), name: nameOf(c.roadway_id), arrivalMin: Number(c.arrival_min), drawn }
   })
 
@@ -212,7 +220,7 @@ export function evacuationView(record: RecordLike & { as_of?: string }, network:
       if (missing.size === 0 && pts.length >= 2) {
         route.drawn = true
         if (show) {
-          figures.push({ id: `auto:evac:route:${rid}`, type: 'line', kind: 'route', points: pts, text: route.walkMin === null ? undefined : `约 ${route.walkMin} 分钟`, stale })
+          figures.push({ id: `auto:evac:route:${rid}`, type: 'line', kind: 'route', points: pts, at: midpoint(pts), text: route.walkMin === null ? undefined : `约 ${route.walkMin} 分钟`, stale })
           const tgt = nodes.get(String(er.target))
           const at = map.nodes[String(er.target)]
           if (at) figures.push({ id: `auto:evac:target:${rid}`, type: 'target', kind: tgt?.is_refuge ? 'refuge' : 'exit', at, text: route.targetName ?? undefined, stale })

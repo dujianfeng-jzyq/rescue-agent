@@ -75,6 +75,20 @@ interface Fig {
 }
 
 const FIG_GREY = '#8a8f98'
+
+/** 折线按长度的一半处取点（顶点下标的中间可能是终点：两点的折线取到的就是终点） */
+function lengthMidpoint(pts: [number, number][]): [number, number] {
+  const seg = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i]![0], p[1] - pts[i]![1]))
+  let half = seg.reduce((a, b) => a + b, 0) / 2
+  for (let i = 0; i < seg.length; i++) {
+    if (half <= seg[i]! || i === seg.length - 1) {
+      const t = seg[i]! === 0 ? 0 : Math.min(half / seg[i]!, 1)
+      return [pts[i]![0] + (pts[i + 1]![0] - pts[i]![0]) * t, pts[i]![1] + (pts[i + 1]![1] - pts[i]![1]) * t]
+    }
+    half -= seg[i]!
+  }
+  return pts[0]!
+}
 /** 污染巷道的颜色：到达越早越红（按本批污染巷道的相对到达时间，只是显示，数值以文字为准） */
 function contaminationColor(rel: number): string {
   const r = Math.min(Math.max(rel, 0), 1)
@@ -538,6 +552,7 @@ export class MapView {
     }
     f.el?.remove()
     this.figs.delete(id)
+    if (f.data.kind === 'contaminated') this.recolorContaminated()
     this.dirty = true
   }
 
@@ -546,7 +561,7 @@ export class MapView {
     const stale = !!d.stale
     if (d.type === 'line' && d.points && d.points.length >= 2) {
       const contaminated = d.kind === 'contaminated'
-      const color = stale ? FIG_GREY : contaminated ? contaminationColor(this.contaminationRel(d)) : '#35c46a'
+      const color = stale ? FIG_GREY : contaminated ? contaminationColor(0) : '#35c46a'
       const geom = new LineGeometry()
       geom.setPositions(d.points.flatMap(([x, y]) => [x, y, contaminated ? 1 : 1.5]))
       const mat = new LineMaterial({ color: new Color(color).getHex(), linewidth: contaminated ? 7 : 4, transparent: true, opacity: stale ? 0.45 : contaminated ? 0.6 : 0.95, dashed: !contaminated, dashSize: 14, gapSize: 9, worldUnits: false, depthWrite: false })
@@ -555,9 +570,11 @@ export class MapView {
       if (!contaminated) line.computeLineDistances()
       line.renderOrder = contaminated ? 1 : 2
       this.scene.add(line)
-      const mid = d.points[Math.floor(d.points.length / 2)]!
+      // 标签位置：服务端给的 at（污染巷道在入口一端），没有就按长度取中点
+      const at = d.at ?? lengthMidpoint(d.points)
       const el = d.text ? this.figLabel(d, `rm-fig rm-fig-${d.kind}`) : undefined
-      this.figs.set(d.id, { data: d, line, el, x: mid[0], y: mid[1] })
+      this.figs.set(d.id, { data: d, line, el, x: at[0], y: at[1] })
+      if (contaminated) this.recolorContaminated()
     } else if ((d.type === 'group' || d.type === 'target') && d.at) {
       const el = this.figLabel(d, `rm-fig rm-fig-${d.type} rm-fig-${d.kind}`)
       this.figs.set(d.id, { data: d, el, x: d.at[0], y: d.at[1] })
@@ -565,13 +582,22 @@ export class MapView {
     this.dirty = true
   }
 
-  /** 污染巷道到达时间在本批里的相对位置（0 最早，1 最晚），只用来上色 */
-  private contaminationRel(d: MapFigure): number {
-    const vs = [...this.figs.values(), { data: d }].map((f) => f.data).filter((f) => f.kind === 'contaminated' && typeof f.value === 'number').map((f) => f.value as number)
-    if (vs.length < 2 || typeof d.value !== 'number') return 0
+  /**
+   * 污染巷道按到达时间重新上色：在当前全部污染巷道里算相对位置（0 最早，1 最晚），只是显示，数值以文字为准。
+   * 每次增删图元后整批重算——逐条画时只看已画的几条，颜色会随画的先后变（先画的总是“最晚”）。
+   */
+  private recolorContaminated(): void {
+    const cont = [...this.figs.values()].filter((f) => f.data.kind === 'contaminated' && f.line)
+    const vs = cont.map((f) => f.data.value).filter((v): v is number => typeof v === 'number')
     const lo = Math.min(...vs)
     const hi = Math.max(...vs)
-    return hi === lo ? 0 : (d.value - lo) / (hi - lo)
+    for (const f of cont) {
+      if (f.data.stale) continue
+      const v = f.data.value
+      const rel = typeof v === 'number' && hi > lo ? (v - lo) / (hi - lo) : 0
+      ;(f.line!.material as LineMaterial).color.set(contaminationColor(rel))
+    }
+    this.dirty = true
   }
 
   private figLabel(d: MapFigure, cls: string): HTMLDivElement {

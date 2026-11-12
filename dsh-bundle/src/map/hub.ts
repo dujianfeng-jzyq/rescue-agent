@@ -36,8 +36,9 @@ export interface MapFigure {
   /** line：contaminated | route；group：threatened | blocked；target：exit | refuge */
   kind: string
   points?: [number, number][]
+  /** group/target：位置；line：标签位置（可选，没有时按长度取中点） */
   at?: [number, number]
-  /** 旁边的短文字（照抄记录里的值，如“约 1.6 分钟”“9 人”） */
+  /** 旁边的短文字（照抄记录里的值，如“约 1.6 分钟到达”“9 人”） */
   text?: string
   /** 数值：污染巷道的到达时间（分钟，用于着色）、一组的人数；记录原值 */
   value?: number | null
@@ -122,6 +123,7 @@ export class MapHub {
     const pt = (p: unknown): boolean => Array.isArray(p) && p.length === 2 && num(p[0]) && num(p[1])
     if (f.type === 'line') {
       if (!Array.isArray(f.points) || f.points.length < 2 || f.points.length > MAX_POINTS || !f.points.every(pt)) throw new Error(`折线要 2 到 ${MAX_POINTS} 个有效的点`)
+      if (f.at !== undefined && !pt(f.at)) throw new Error('折线的 at（标签位置）要是 [x, y]')
     } else if (!pt(f.at)) throw new Error(`${f.type} 图元需要 at：[x, y]`)
     if (f.value !== undefined && f.value !== null && !num(f.value)) throw new Error('value 要是数字')
     return { ...f, ...(f.text === undefined ? {} : { text: f.text.slice(0, 60) }) }

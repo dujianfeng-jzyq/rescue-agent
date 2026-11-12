@@ -116,6 +116,7 @@ describe('MapHub 图元（撤人路线等，只由代码生成）', () => {
     assert.throws(() => hub.emit({ op: 'figure', fig: { id: 'g', type: 'group', kind: 'threatened' } }), /需要 at/)
     assert.throws(() => hub.emit({ op: 'figure', fig: { id: 'g', type: 'blob' as never, kind: '' } }), /类型只能是/)
     assert.throws(() => hub.emit({ op: 'figure', fig: { ...line('x'), value: 'a' as never } }), /value 要是数字/)
+    assert.throws(() => hub.emit({ op: 'figure', fig: { ...line('x'), at: [1] as never } }), /标签位置/)
     assert.equal(hub.snapshot().seq, 0, '被拒绝的图元不占序号')
   })
 

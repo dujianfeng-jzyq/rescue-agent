@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
 
-import { ageHours, evacuationView, freshnessOf, latestPersonnelRecord } from '../src/map/evacuation.ts'
+import { ageHours, CONTAMINATION_LABEL_FRAC, evacuationView, freshnessOf, latestPersonnelRecord, pointAlong } from '../src/map/evacuation.ts'
 import type { Network } from '../src/map/evacuation.ts'
 import { EMPTY_MAP } from '../src/map/mapping.ts'
 import type { MineMap } from '../src/map/mapping.ts'
@@ -57,8 +57,26 @@ describe('evacuationView（s4 红色阶段的真实记录）', () => {
     const cont = v.figures.filter((f) => f.kind === 'contaminated')
     assert.deepEqual(cont.map((f) => f.id), ['auto:evac:cont:R-1201-FACE', 'auto:evac:cont:R-1201-RET', 'auto:evac:cont:R-RET-MAIN', 'auto:evac:cont:R-RET-SHAFT'])
     assert.equal(fig('auto:evac:cont:R-1201-RET').value, 1.6)
-    assert.equal(fig('auto:evac:cont:R-1201-RET').text, '约 1.6 分钟')
+    assert.equal(fig('auto:evac:cont:R-1201-RET').text, '约 1.6 分钟到达')
     assert.deepEqual(fig('auto:evac:cont:R-1201-FACE').points, [POS.N3, POS.N4])
+  })
+
+  it('污染巷道的时间标签在入口一端（风流上游）往里一点，不在中点或末端', () => {
+    // 到达时间是烟气到巷道入口的时间：R-1201-FACE 是 N3 → N4，标签在 N3 一端
+    const f = fig('auto:evac:cont:R-1201-FACE')
+    const [a, b] = [POS.N3, POS.N4]
+    const k = CONTAMINATION_LABEL_FRAC
+    assert.ok(k > 0 && k < 0.5)
+    assert.deepEqual(f.at, [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k])
+  })
+
+  it('pointAlong 按长度取点（不是顶点下标）', () => {
+    // 两点折线：0.5 是中点，不是终点
+    assert.deepEqual(pointAlong([[0, 0], [10, 0]], 0.5), [5, 0])
+    // 折线 0→(10,0)→(10,30)：总长 40，0.5 处在第二段的 10 处
+    assert.deepEqual(pointAlong([[0, 0], [10, 0], [10, 30]], 0.5), [10, 10])
+    assert.deepEqual(pointAlong([[0, 0], [10, 0], [10, 30]], 0), [0, 0])
+    assert.deepEqual(pointAlong([[0, 0], [10, 0], [10, 30]], 1), [10, 30])
   })
 
   it('撤人路线：沿路线节点的顺序接起来（第一段巷道反向），起点是该组所在巷道的中点，终点是避难硐室', () => {
