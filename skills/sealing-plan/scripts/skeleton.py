@@ -118,7 +118,7 @@ def run(data, _args):
     if not threatened:
         missing.append({"field": "evacuate_roadways", "label": "撤人巷道", "value_type": "text", "kind": "note", "note": "未算出受威胁人员所在巷道，撤人范围按预案确定"})
     if leak is None or target is None:
-        missing.append({"field": "inert_rate", "label": "注氮流量", "value_type": "number", "kind": "calculation", "note": "给出漏风量 leak_m3_min 和目标氧浓度 target_o2_pct 后由代码按注氮稀释公式估算"})
+        missing.append({"field": "inert_rate", "label": "注氮流量", "value_type": "number", "kind": "calculation", "note": "漏风量和目标氧浓度目前没有输入途径（待专家定），注氮流量需现场确定，由确认人把关"})
     elif o2 is None:
         missing.append({"field": "inert_rate", "label": "注氮流量", "value_type": "number", "kind": "calculation", "note": "没有可用的束管氧浓度，不能估算注氮流量"})
 

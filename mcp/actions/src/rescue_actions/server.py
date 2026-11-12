@@ -270,7 +270,7 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
     @server.tool()
     async def publish_warning(notice: WarningNotice) -> ActionReceipt:
         """发布自燃预警等级（确认人：通风部门负责人）。record_id 照抄 run_fire_assessment 返回的 record_ids.warning；
-        等级必须与记录里的计算结果一致，人工改等级时在 override_reason 写明理由。summary 留空：预警正文由本服务按记录生成。"""
+        等级必须与记录里的计算结果一致；指挥人员要求调高时在 override_reason 写明理由，不能调低。summary 留空：预警正文由本服务按记录生成。"""
         result, now = await checked("publish_warning", "notice", notice, notice.record_id)
         message = warning_message(notice, record_result(notice.record_id), notice.record_id)
         panel = record_panel(notice.record_id)

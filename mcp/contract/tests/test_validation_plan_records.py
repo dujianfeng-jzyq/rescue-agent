@@ -66,6 +66,23 @@ def test_reviewed_plan_passes(records):
     assert not problems and isinstance(plan, Plan) and plan.record_id == rid and plan.kind == "sealing"
 
 
+def test_missing_inputs_are_listed_for_the_confirmer(records):
+    """缺现场条件时方案仍能下发，缺什么逐条列在“请确认人把关”；合规审核已列过的不重复（2026-11-12 用户决定）。"""
+    minimal = json.loads((SKILLS / "sealing-plan/tests/cases/compose/s4-escalation-60h-minimal.expected.json").read_text(encoding="utf-8"))
+    rid = reviewed(records, compose=minimal, review=with_result(REVIEW, plan=minimal["result"]["plan"]))
+    r = check(rid, records)
+    assert r["ok"], r["problems"]
+    items = r["summary"]["human_items"]
+    assert items[: len(REVIEW["result"]["human_items"])] == REVIEW["result"]["human_items"]  # 审核列过的在前、原样
+    added = items[len(REVIEW["result"]["human_items"]) :]
+    assert added == [
+        "灾区温度（℃）：未经现场条件卡片提供，请确认已掌握现场情况",
+        "回风道是否畅通：未经现场条件卡片提供，请确认已掌握现场情况",
+        "注氮流量：漏风量和目标氧浓度目前没有输入途径（待专家定），注氮流量需现场确定，由确认人把关",
+    ]
+    assert not any(f.startswith("待补充") for f in r["summary"]["facts"])
+
+
 def test_review_not_passed(records):
     rid = reviewed(records, review=with_result(REVIEW, verdict="fail", verdict_name="不通过"))
     r = check(rid, records)

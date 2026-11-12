@@ -167,6 +167,16 @@ def test_rl088_unknown_temperature_fails_closed():
     assert "RL-088" in ids(p)
 
 
+def test_rl088_unknown_visibility_fails_closed():
+    """能见度未知按不放行（2026-11-12 用户决定）；温度、能见度都满足才放行。"""
+    p = plan(
+        PlanKind.FIREFIGHTING,
+        [(StepType.ENTER_DISASTER_AREA, {"team_size": 6, "standby_team": True})],
+        visibility_m=None,
+    )
+    assert any(v.rule_id == "RL-088" and "能见度" in v.message for v in check_plan(p))
+
+
 def test_rl088_low_visibility_blocked():
     p = plan(
         PlanKind.FIREFIGHTING,

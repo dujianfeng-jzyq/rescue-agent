@@ -155,7 +155,10 @@ def _rl088(plan: Plan) -> list[Violation]:
                     s,
                 )
             )
-        if ctx.visibility_m is not None and ctx.visibility_m < 1:
+        # 能见度未知按不放行（2026-11-12 用户决定，与温度一致；原来未知时放行，不符合“未知按不通过”）
+        if ctx.visibility_m is None:
+            out.append(_v("RL-088", "第88条", "缺少能见度数据，无法确认能否进入，按不放行处理（经现场条件卡片补充）。", s))
+        elif ctx.visibility_m < 1:
             out.append(_v("RL-088", "第88条", "能见度小于1米的巷道严禁进入。", s))
     return out
 

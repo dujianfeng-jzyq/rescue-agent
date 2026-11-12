@@ -167,10 +167,10 @@ def test_warning_text_comes_from_the_record_not_the_agent(world):
 
 
 def test_overridden_warning_text_states_the_computed_level_and_reason(world):
-    rid = world.result_record("fire-assessment", "warning", {"level": "red", "level_name": "红色（危险）"})
-    world.call("publish_warning", warning_args(rid, level="orange", override_reason="现场复核测点故障"))
+    rid = world.result_record("fire-assessment", "warning", {"level": "orange", "level_name": "橙色（严重）"})
+    world.call("publish_warning", warning_args(rid, level="red", override_reason="现场发现明火"))
     (notice,) = world.holder.notices
-    assert notice["level"] == "orange" and "橙色预警。人工调整等级，计算结果为红色（危险），理由：现场复核测点故障" in notice["message"]
+    assert notice["level"] == "red" and "红色预警。人工调整等级，计算结果为橙色（严重），理由：现场发现明火" in notice["message"]
 
 
 def test_warning_location_must_name_the_panel_exactly(world):
@@ -205,9 +205,13 @@ def test_start_monitoring_needs_a_fresh_warning_record(world):
 def test_warning_level_must_match_the_record(world):
     rid = world.result_record("fire-assessment", "warning", {"level": "red"})
     r = world.call("publish_warning", warning_args(rid, level="yellow"))
-    assert r.is_error and "计算结果 红色 不一致" in r.content[0].text
+    assert r.is_error and "不能低于" in r.content[0].text and "计算 红色" in r.content[0].text
     assert world.holder.notices == [] and world.rows()[-1]["status"] == "rejected"
+    # 只能往高调：写了理由也不能调低（2026-11-12 用户决定）
     r = world.call("publish_warning", warning_args(rid, level="yellow", override_reason="现场判断"))
+    assert r.is_error and "不能低于" in r.content[0].text and world.holder.notices == []
+    up = world.result_record("fire-assessment", "warning", {"level": "yellow"})
+    r = world.call("publish_warning", warning_args(up, level="red", override_reason="现场判断"))
     assert not r.is_error and "理由：现场判断" in r.structured_content["note"]
 
 

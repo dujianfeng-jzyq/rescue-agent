@@ -387,7 +387,7 @@ class WarningNotice(_Model):
     basis: list[Citation] = Field(default_factory=list)
     # 预警等级的结果记录（fire-assessment/warning，run_fire_assessment 返回的 record_ids.warning），发布时按它核对等级
     record_id: str = Field(min_length=1)
-    override_reason: str | None = None  # 等级与计算结果不同时必须写明理由（人工改等级）
+    override_reason: str | None = None  # 等级高于计算结果时必须写明理由（人工往高调）；不能低于计算结果（guard 拒绝）
 
 
 class DispatchLine(_Model):

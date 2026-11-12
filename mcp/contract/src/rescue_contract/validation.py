@@ -140,6 +140,15 @@ def check_warning_record(
     if notice.level.value == computed:
         checks.append(ApprovalCheck(name="预警等级", ok=True, detail=f"与计算结果一致（{NAMES[computed]}）"))
         return [], [], checks
+    order = list(NAMES)  # none → red
+    if order.index(notice.level.value) < order.index(computed):
+        # 只能往高调（2026-11-12 用户决定）：等级偏高多半是测点故障，应先核实测点、修正数据再重新研判，不能直接把结论改低
+        msg = (
+            f"预警等级不能低于记录 {rec.record_id} 的计算结果（计算 {NAMES[computed]}，提交 {NAMES[notice.level.value]}）："
+            "人工调整只能往高调。认为等级偏高时，先现场核实测点（疑似故障、卡值）再重新研判；系统暂不支持人工降级"
+        )
+        checks.append(ApprovalCheck(name="预警等级", ok=False, detail=msg))
+        return [msg], [], checks
     if not (notice.override_reason or "").strip():
         msg = f"预警等级 {NAMES[notice.level.value]} 与记录 {rec.record_id} 的计算结果 {NAMES[computed]} 不一致；人工改等级须在 override_reason 写明理由"
         checks.append(ApprovalCheck(name="预警等级", ok=False, detail=msg))
@@ -279,7 +288,24 @@ def plan_from_record(
     checks.append(ApprovalCheck(name="方案类型与时效红线", ok=not problems, detail="；".join(problems) or "通过（与下发时的强制校验同一套规则）"))
     if problems:
         return None, problems, [], checks
-    return plan, [], [str(x) for x in r.get("human_items") or []], checks
+    return plan, [], [str(x) for x in r.get("human_items") or []] + missing_items(_result(prec), r.get("human_items") or []), checks
+
+
+def missing_items(plan_result: dict[str, Any], already: list[Any]) -> list[str]:
+    """方案缺的输入逐条列为“请确认人把关”（2026-11-12 用户决定：缺现场条件时方案仍能下发，但缺什么要逐条摆在确认人面前）。
+    合规审核已经列过的（按名称开头）不重复。"""
+    out = []
+    for m in plan_result.get("missing_inputs") or []:
+        if not isinstance(m, dict):
+            continue
+        label = str(m.get("label") or m.get("field") or "")
+        if not label or any(str(x).startswith(label) for x in already):
+            continue
+        if m.get("kind") == "human":
+            out.append(f"{label}：未经现场条件卡片提供，请确认已掌握现场情况")
+        else:
+            out.append(f"{label}：{m.get('note') or '缺失'}")
+    return out
 
 
 def evacuation_from_record(notice: dict[str, Any], records: RecordStore | None) -> dict[str, Any]:
@@ -393,9 +419,7 @@ def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) ->
             given = [f"{h.get('label') or h.get('field')} {_show(h.get('value'))}（确认人 {h.get('confirmed_by')}）" for h in pr.get("human_inputs") or [] if isinstance(h, dict)]
             if given:
                 out.append(f"人工确认的现场条件：{'；'.join(given)}")
-            missing = [str(m.get("label") or m.get("field")) for m in pr.get("missing_inputs") or []]
-            if missing:
-                out.append(f"待补充（下发时由确认人把关）：{'、'.join(missing)}")
+            # 缺的输入不在要点里写：逐条列在“请确认人把关”（missing_items）
             return out
         if tool == "notify_evacuation":
             persons = [str(p) for p in body.get("persons") or []]
