@@ -15,6 +15,7 @@ now 为 None 时不检查时效（只用于自查）；发布和审批预检必�
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -129,7 +130,7 @@ def check_warning_record(
     if rec is None:
         return [c.detail or c.name for c in checks if not c.ok], [], checks
     r = _result(rec)
-    if rec.panel and rec.panel not in notice.location:
+    if rec.panel and not mentions_panel(notice.location, rec.panel):
         checks.append(ApprovalCheck(name="工作面", ok=False, detail=f"预警位置“{notice.location}”与记录的工作面 {rec.panel} 不符"))
         return [checks[-1].detail or ""], [], checks
     computed = r.get("level")
@@ -146,6 +147,39 @@ def check_warning_record(
     note = f"与计算结果不一致：计算 {NAMES[computed]}，提交 {NAMES[notice.level.value]}，理由：{notice.override_reason}"
     checks.append(ApprovalCheck(name="预警等级", ok=True, detail=note))
     return [], [note], checks
+
+
+def mentions_panel(text: str, panel: str) -> bool:
+    """text 里写了这个工作面编号（前后不紧挨字母或数字）：只按子串判断时，"1201" 会被当成写了 "120"、"201"。"""
+    return re.search(rf"(?<![0-9A-Za-z]){re.escape(panel)}(?![0-9A-Za-z])", text) is not None
+
+
+def warning_message(notice: WarningNotice, result: dict[str, Any], record_id: str) -> str:
+    """发到矿井的预警正文：由代码按预警等级记录生成，不用智能体写的 summary。确认弹窗显示的就是这段文字。
+    人工改等级时写明计算结果和理由（理由是人工给的，原样写入）。"""
+    computed = str(result.get("level") or "")
+    submitted = notice.level.value
+    if submitted == computed:
+        name = str(result.get("level_name") or NAMES.get(submitted, submitted))
+        head = f"{notice.location}：{name}预警"
+        triggered = [str(t).removeprefix(f"{name}：") for t in result.get("triggered") or []]  # 触发条件自带“等级：”前缀，正文里不重复
+        body = [f"触发条件：{'；'.join(triggered)}"] if triggered else []
+    else:
+        head = f"{notice.location}：{NAMES.get(submitted, submitted)}预警"
+        body = [f"人工调整等级，计算结果为{result.get('level_name') or NAMES.get(computed, computed)}，理由：{(notice.override_reason or '').strip()}"]
+    return "。".join([head, *body, f"依据研判记录 {record_id}"]) + "。"
+
+
+def escalation_message(result: dict[str, Any], record_id: str) -> str:
+    """发到矿井的升级建议正文：由代码按升级建议记录生成（理由、规程依据），不用智能体写的 reason、recommended_level。"""
+    panel = str(result.get("panel") or "").strip()
+    parts = [f"{panel + ' 工作面' if panel else '本工作面'}建议升级为应急响应，由指挥人员决定"]
+    if reasons := [str(x) for x in result.get("reasons") or []]:
+        parts.append(f"理由：{'；'.join(reasons)}")
+    if arts := [str(a.get("article")) for a in result.get("articles") or [] if isinstance(a, dict) and a.get("article")]:
+        parts.append(f"规程依据：{'、'.join(arts)}")
+    parts.append(f"依据升级建议记录 {record_id}")
+    return "。".join(parts) + "。"
 
 
 def check_monitoring_record(record_id: str, records: RecordStore | None, now: datetime | None) -> tuple[list[str], list[ApprovalCheck]]:
@@ -322,10 +356,11 @@ def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) ->
             if records is None or not isinstance(rid, str):
                 return []
             r = _result(records.get(rid))
+            # 预警、升级：弹窗显示的就是发到矿井的正文（与 guard 发出时同一个函数生成）
             if tool == "escalate_emergency":
-                out = [f"升级理由：{'；'.join(r.get('reasons') or [])}"] if r.get("reasons") else []
-                arts = "、".join(str(a.get("article")) for a in r.get("articles") or [] if isinstance(a, dict))
-                return out + ([f"规程依据：{arts}"] if arts else [])
+                return [f"发出正文：{escalation_message(r, rid)}"]
+            if tool == "publish_warning":
+                return [f"发出正文：{warning_message(WarningNotice.model_validate(body), r, rid)}"]
             out = [f"预警等级：{r['level_name']}"] if r.get("level_name") else []
             return out + [f"触发条件：{t}" for t in r.get("triggered") or []]
         if tool in PLAN_TOOLS:
@@ -444,8 +479,11 @@ def precheck(tool: str, arguments: dict[str, Any], now: datetime | None, records
                 if plan is not None:
                     verb = "批准启封" if tool == "approve_unsealing" else "下发"  # 启封是不可逆的现场动作，标题不能写成“下发”
                     action = f"{verb} {plan.title}（{plan.plan_id}）"
+        elif tool in ("notify_evacuation", "issue_dispatch_order"):
+            problems = []  # 撤人名单、调度单：内容核对在 guard 里，按矿井数据（人员定位、网络、物资台账）
         else:
-            problems = []  # 撤人名单、调度单：不引用记录（调度单的内容核对在 guard 里，按矿井数据）
+            # 没有核对规则的指令按不通过处理（fail closed）：新增 C 级工具时要在这里加它的核对，否则弹窗会写“预检已通过”却什么都没核对
+            problems = [f"预检没有 {tool} 的核对规则，按不通过处理；新增对外动作要在 rescue_contract.validation.precheck 里加核对"]
     except Exception as exc:
         problems = [f"指令格式不符合数据契约：{exc}"]
         return {"ok": False, "problems": problems, "notes": [], "summary": _summary(tool, {}, problems, [], [])}
@@ -463,8 +501,11 @@ __all__ = [
     "check_warning_record",
     "dispatch_from_record",
     "evacuation_from_record",
+    "escalation_message",
     "evacuation_reason",
+    "mentions_panel",
     "plan_from_record",
     "precheck",
     "validate_plan",
+    "warning_message",
 ]

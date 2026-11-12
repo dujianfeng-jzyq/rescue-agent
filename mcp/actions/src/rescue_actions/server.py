@@ -59,7 +59,16 @@ from rescue_contract.models import (
 )
 from rescue_contract.records import RecordNotFound, RecordStore
 from rescue_contract.redlines import RULES
-from rescue_contract.validation import PLAN_TOOLS, dispatch_from_record, evacuation_from_record, plan_from_record, precheck, validate_plan
+from rescue_contract.validation import (
+    PLAN_TOOLS,
+    dispatch_from_record,
+    escalation_message,
+    evacuation_from_record,
+    plan_from_record,
+    precheck,
+    validate_plan,
+    warning_message,
+)
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -197,11 +206,15 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
             journal(log_entry(tool, "rejected", payload, record_ids, at=await mine_now(), problems=problems))
             raise ToolError("指令未发布。\n" + "\n".join(problems))
 
-    async def deliver(tool: str, payload: BaseModel, record_ids: list[str], calls: list[Any], note: str | None = None, ordered: bool = False) -> ActionReceipt:
+    async def deliver(
+        tool: str, payload: BaseModel, record_ids: list[str], calls: list[Any], note: str | None = None, ordered: bool = False, checked_at: datetime | None = None,
+    ) -> ActionReceipt:  # fmt: skip
         """校验通过后交给矿井执行：calls 是按顺序执行的无参协程工厂，每个返回 MineReceipt。
+        checked_at 是校验时取到的矿井时间：执行完取不到矿井时间时，下发时间用它（台账里的时间都是矿井时间，不混用系统时间）。
         任一步失败（矿井接口不通、参数被矿井拒绝）就停止，台账记 failed 和已执行的回执，并如实告诉智能体已执行到哪一步。
         ordered=True（步骤有先后依赖，如启封必须先断电、撤人）时，矿井返回 rejected/failed 回执的步骤也算失败：不再执行后面的步骤。"""
         action_id = f"A-{uuid.uuid4().hex[:10]}"
+        checked_at = checked_at or await mine_now()
         done: list[MineReceipt] = []
         try:
             for call in calls:
@@ -223,7 +236,10 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
                 "已执行的部分以台账为准，请检查矿井接口（rescue-mine）后由指挥人员决定是否重新提交；不要自行重复提交相同内容之外的指令。"
             ) from exc
         not_done = [f"{r.kind.value}：{r.detail or r.status.value}" for r in done if r.status in (ActionStatus.REJECTED, ActionStatus.FAILED)]
-        now = await mine_now() or datetime.now()
+        now = await mine_now() or checked_at
+        if now is None:  # 执行前后都取不到矿井时间（极少见）：只能用系统时间，台账和回执里写明
+            now = datetime.now()
+            note = "；".join(x for x in (note, "取不到矿井时间，下发时间为系统时间") if x)
         receipt = ActionReceipt(
             action_id=action_id, tool=tool, issued_at=now, status="issued", note=note, mine_receipts=done, mine_not_executed=not_done
         )
@@ -231,12 +247,17 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
         log.info("action %s %s", tool, receipt.action_id)
         return receipt
 
-    async def checked(tool: str, key: str, payload: BaseModel, record_id: str) -> dict[str, Any]:
-        """预警、升级：与审批预检同一套核对（按记录），不通过就拒绝并记台账。"""
+    async def checked(tool: str, key: str, payload: BaseModel, record_id: str) -> tuple[dict[str, Any], datetime]:
+        """预警、升级：与审批预检同一套核对（按记录），不通过就拒绝并记台账。返回（核对结果, 核对时的矿井时间）。"""
         now = await require_now(tool, payload, [record_id])
         result = precheck(tool, {key: payload.model_dump(mode="json")}, now, record_store)
         await reject_if(tool, payload, result["problems"], [record_id])
-        return result
+        return result, now
+
+    def record_result(record_id: str) -> dict[str, Any]:
+        """已核对过的记录的 result（生成发出正文用）。"""
+        content = record_store.get(record_id).content
+        return (content.get("result") or {}) if isinstance(content, dict) else {}
 
     def record_panel(record_id: str) -> str | None:
         try:
@@ -249,16 +270,15 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
     @server.tool()
     async def publish_warning(notice: WarningNotice) -> ActionReceipt:
         """发布自燃预警等级（确认人：通风部门负责人）。record_id 照抄 run_fire_assessment 返回的 record_ids.warning；
-        等级必须与记录里的计算结果一致，人工改等级时在 override_reason 写明理由。"""
-        result = await checked("publish_warning", "notice", notice, notice.record_id)
+        等级必须与记录里的计算结果一致，人工改等级时在 override_reason 写明理由。summary 留空：预警正文由本服务按记录生成。"""
+        result, now = await checked("publish_warning", "notice", notice, notice.record_id)
+        message = warning_message(notice, record_result(notice.record_id), notice.record_id)
+        panel = record_panel(notice.record_id)
         request = NoticeRequest(
-            kind=NoticeKind.WARNING,
-            message=f"{notice.location}：{notice.summary}",
-            panel=record_panel(notice.record_id),
-            level=notice.level.value,
-            idempotency_key=idempotency_key("publish_warning", notice),
-        )
-        return await deliver("publish_warning", notice, [notice.record_id], [lambda: md.send_notice(request)], "；".join(result["notes"]) or None)
+            kind=NoticeKind.WARNING, message=message, panel=panel, level=notice.level.value,
+            idempotency_key=idempotency_key("publish_warning", {"message": message, "panel": panel, "level": notice.level.value}),
+        )  # fmt: skip
+        return await deliver("publish_warning", notice, [notice.record_id], [lambda: md.send_notice(request)], "；".join(result["notes"]) or None, checked_at=now)
 
     @server.tool()
     async def start_monitoring(record_id: str) -> ActionReceipt:
@@ -284,21 +304,22 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
                 note=f"本工作面加密监测已在进行（{r.get('action_id')}，下发于 {r['issued_at']}），未重复下发", mine_receipts=[], mine_not_executed=[],
             )  # fmt: skip
         req = TreatmentRequest(type=StepType.MONITOR, panel=panel, idempotency_key=idempotency_key("start_monitoring", payload))
-        return await deliver("start_monitoring", payload, [record_id], [lambda: md.submit_treatment(req)])
+        return await deliver("start_monitoring", payload, [record_id], [lambda: md.submit_treatment(req)], checked_at=now)
 
     @server.tool()
     async def escalate_emergency(escalation: Escalation) -> ActionReceipt:
         """建议升级为应急响应（确认人：总工程师或矿长）。record_id 照抄 run_fire_assessment 返回的 record_ids.escalation，
-        只有记录的结论为建议升级的才能提交。"""
-        await checked("escalate_emergency", "escalation", escalation, escalation.record_id)
+        只有记录的结论为建议升级的才能提交。reason、recommended_level 留空：升级正文（理由、规程依据）由本服务按记录生成。"""
+        _, now = await checked("escalate_emergency", "escalation", escalation, escalation.record_id)
+        r = record_result(escalation.record_id)
+        message = escalation_message(r, escalation.record_id)
+        panel = record_panel(escalation.record_id)
+        level = str(r["level"]) if r.get("level") else None  # 研判的预警等级（记录里的），矿井侧原样显示
         request = NoticeRequest(
-            kind=NoticeKind.INFO,
-            message=f"建议升级为应急响应（{escalation.recommended_level}）：{escalation.reason}",
-            panel=record_panel(escalation.record_id),
-            level=escalation.recommended_level,
-            idempotency_key=idempotency_key("escalate_emergency", escalation),
-        )
-        return await deliver("escalate_emergency", escalation, [escalation.record_id], [lambda: md.send_notice(request)])
+            kind=NoticeKind.INFO, message=message, panel=panel, level=level,
+            idempotency_key=idempotency_key("escalate_emergency", {"message": message, "panel": panel, "level": level}),
+        )  # fmt: skip
+        return await deliver("escalate_emergency", escalation, [escalation.record_id], [lambda: md.send_notice(request)], checked_at=now)
 
     @server.tool()
     async def notify_evacuation(notice: EvacuationNotice) -> ActionReceipt:
@@ -306,8 +327,14 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
         record_id 照抄 run_fire_assessment 返回的 record_ids.personnel，persons 和 reason 留空：名单、可达的避灾路线和通知正文由本服务按记录填写。
         persons 只在指挥人员另外点名时填（人员编号，如 C001），这时 reason 写撤人原因。"""
         notice = EvacuationNotice.model_validate(evacuation_from_record(notice.model_dump(mode="json"), record_store))
-        await reject_if("notify_evacuation", notice, await evacuation_problems(notice), [notice.record_id] if notice.record_id else [])
-        where = {p.person_id: p.roadway_id for p in await md.personnel()}
+        refs = [notice.record_id] if notice.record_id else []
+        try:
+            people = await md.personnel()
+        except Exception as exc:  # noqa: BLE001  取不到人员定位就不能核对名单（fail closed）
+            await reject_if("notify_evacuation", notice, [f"取不到井下人员定位，无法核对撤人名单：{exc}"], refs)
+            raise  # reject_if 一定会抛；这里只为类型
+        await reject_if("notify_evacuation", notice, evacuation_problems(notice, people), refs)
+        where = {p.person_id: p.roadway_id for p in people}  # 核对和撤人用同一次取到的人员定位
         roadways = sorted({where[p] for p in notice.persons})
         notice_req = NoticeRequest(
             kind=NoticeKind.EVACUATION, message=notice.reason, targets=notice.persons, idempotency_key=idempotency_key("notify_evacuation", notice, "-notice")
@@ -316,14 +343,19 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
         if roadways:
             treat = TreatmentRequest(type=StepType.EVACUATE, roadways=roadways, idempotency_key=idempotency_key("notify_evacuation", notice, "-evacuate"))
             calls.append(lambda: md.submit_treatment(treat))
-        return await deliver("notify_evacuation", notice, [notice.record_id] if notice.record_id else [], calls)
+        return await deliver("notify_evacuation", notice, refs, calls)
 
-    async def evacuation_problems(notice: EvacuationNotice) -> list[str]:
-        """撤人名单按人员定位核对：名单里的人都在井下。取不到人员数据时不通过（fail closed）。"""
+    async def fetch_evacuation_problems(notice: EvacuationNotice) -> list[str]:
+        """预检用：取人员定位再核对；取不到时不通过（fail closed）。"""
         try:
-            where = {p.person_id for p in await md.personnel()}
+            people = await md.personnel()
         except Exception as exc:  # noqa: BLE001
             return [f"取不到井下人员定位，无法核对撤人名单：{exc}"]
+        return evacuation_problems(notice, people)
+
+    def evacuation_problems(notice: EvacuationNotice, people: list[Any]) -> list[str]:
+        """撤人名单按人员定位核对：名单里的人都在井下。"""
+        where = {p.person_id for p in people}
         if not notice.persons:
             return ["撤人名单为空：给出人员记录（record_ids.personnel，且研判算出了受威胁人员）或人员编号"]
         if not notice.reason.strip():
@@ -384,7 +416,7 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
             )  # fmt: skip
             calls.append(lambda req=req: md.submit_treatment(req))
         # 启封方案的步骤顺序是安全要求（先检查、断电、撤人再启封）：前置步骤矿井没执行就不能继续
-        return await deliver(tool, plan, [record_id], calls, "；".join(notes) or None, ordered=(tool == "approve_unsealing"))
+        return await deliver(tool, plan, [record_id], calls, "；".join(notes) or None, ordered=(tool == "approve_unsealing"), checked_at=now)
 
     @server.tool()
     async def issue_sealing_plan(record_id: str) -> ActionReceipt:
@@ -461,7 +493,7 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
                 if tool == "issue_dispatch_order":
                     problems = await dispatch_problems(DispatchOrder.model_validate(args.get("order", args)))
                 else:
-                    problems = await evacuation_problems(EvacuationNotice.model_validate(args.get("notice", args)))
+                    problems = await fetch_evacuation_problems(EvacuationNotice.model_validate(args.get("notice", args)))
             except Exception as exc:  # noqa: BLE001
                 problems = [f"指令格式不符合数据契约：{exc}"]
             if problems:

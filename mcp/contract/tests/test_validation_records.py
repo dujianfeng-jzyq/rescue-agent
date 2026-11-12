@@ -131,10 +131,10 @@ def test_summary_facts_come_from_records_and_arguments(records):
     """弹窗要点由代码从记录（或撤人名单的参数）取：确认人看得到要批的是什么。"""
     rid = put(records, "fire-assessment", "warning", {"level": "red", "level_name": "红色（危险）", "triggered": ["红色（危险）：乙烯(ppm) 2.09 ≥ 2.0"]})
     r = check("publish_warning", warn(records, record_id=rid), records)
-    assert r["summary"]["facts"] == ["预警等级：红色（危险）", "触发条件：红色（危险）：乙烯(ppm) 2.09 ≥ 2.0"]
+    assert r["summary"]["facts"] == [f"发出正文：1201 工作面采空区：红色（危险）预警。触发条件：乙烯(ppm) 2.09 ≥ 2.0。依据研判记录 {rid}。"]
     esc = put(records, "emergency-escalation", "escalation", {"recommend": True, "reasons": ["预警等级 红色（危险），达到升级条件（不低于 红色（危险））"], "articles": [{"document": "矿山救援规程", "article": "第39条"}]})
     r = check("escalate_emergency", {"escalation": {"reason": "x", "recommended_level": "应急响应", "record_id": esc}}, records)
-    assert r["summary"]["facts"] == ["升级理由：预警等级 红色（危险），达到升级条件（不低于 红色（危险））", "规程依据：第39条"]
+    assert r["summary"]["facts"] == [f"发出正文：本工作面建议升级为应急响应，由指挥人员决定。理由：预警等级 红色（危险），达到升级条件（不低于 红色（危险））。规程依据：第39条。依据升级建议记录 {esc}。"]
     evac = {"notice": {"reason": "x", "persons": ["P1", "P2", "P3"], "routes": {"P1": ["N1", "N8"], "P2": ["N2", "N8"]}}}
     assert check("notify_evacuation", evac, records)["summary"]["facts"] == ["补充撤人名单 3 人", "撤往：N8", "没有可达避灾路线 1 人：P3（需人工研判）"]
     # 引用了人员记录：去向写中文名（从记录的避灾路线取）

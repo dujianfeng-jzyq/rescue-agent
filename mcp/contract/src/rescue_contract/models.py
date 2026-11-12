@@ -381,7 +381,9 @@ class WarningLevel(StrEnum):
 class WarningNotice(_Model):
     location: str
     level: WarningLevel
-    summary: str
+    # 不再使用（保留字段以兼容旧调用）：发到矿井的预警正文由 guard 按记录生成（validation.warning_message），
+    # 不用智能体写的文字，确认弹窗显示的就是发出去的正文（2026-11-11 代码复查）
+    summary: str = ""
     basis: list[Citation] = Field(default_factory=list)
     # 预警等级的结果记录（fire-assessment/warning，run_fire_assessment 返回的 record_ids.warning），发布时按它核对等级
     record_id: str = Field(min_length=1)
@@ -421,8 +423,10 @@ class EvacuationNotice(_Model):
 
 
 class Escalation(_Model):
-    reason: str
-    recommended_level: str
+    # 不再使用（保留字段以兼容旧调用）：升级正文由 guard 按升级建议记录生成（validation.escalation_message），
+    # 升级理由和级别不由模型填写（CLAUDE.md 约定 2；2026-11-11 代码复查）
+    reason: str = ""
+    recommended_level: str = ""
     basis: list[Citation] = Field(default_factory=list)
     # 升级建议的结果记录（emergency-escalation/escalation，run_fire_assessment 返回的 record_ids.escalation），
     # 发布时按它核对结论

@@ -72,6 +72,7 @@
       "$ref": "#/$defs/WarningLevel"
     },
     "summary": {
+      "default": "",
       "title": "Summary",
       "type": "string"
     },
@@ -103,7 +104,6 @@
   "required": [
     "location",
     "level",
-    "summary",
     "record_id"
   ],
   "title": "WarningNotice",

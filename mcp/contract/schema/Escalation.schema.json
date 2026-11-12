@@ -54,10 +54,12 @@
   "additionalProperties": false,
   "properties": {
     "reason": {
+      "default": "",
       "title": "Reason",
       "type": "string"
     },
     "recommended_level": {
+      "default": "",
       "title": "Recommended Level",
       "type": "string"
     },
@@ -75,8 +77,6 @@
     }
   },
   "required": [
-    "reason",
-    "recommended_level",
     "record_id"
   ],
   "title": "Escalation",

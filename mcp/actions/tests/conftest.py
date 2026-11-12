@@ -43,6 +43,13 @@ class World:
 
         return asyncio.run(go())
 
+    def precheck(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+        """审批插件请求的预检接口（/redlines/check）。"""
+        from starlette.testclient import TestClient
+
+        with TestClient(self.server.streamable_http_app()) as http:
+            return http.post("/redlines/check", json={"tool": tool, "arguments": args}).json()
+
     def rows(self) -> list[dict[str, Any]]:
         return [json.loads(x) for x in self.ledger.read_text(encoding="utf-8").splitlines()] if self.ledger.exists() else []
 

@@ -693,7 +693,7 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
 
     @server.custom_route("/sim/interventions", methods=["POST"])
     async def sim_intervene(req: Request) -> JSONResponse:
-        """模拟处置被执行。actions 服务在指令获批后调用（或由演示控制台手工调用）。"""
+        """直接让模拟矿井执行一项处置（演示控制台、评测手工调用）。guard 不走这里：它经 rescue-mine 的 submit_treatment 下发。"""
         body = await req.json()
         iv = sim.engine.apply(body["type"], body.get("params", {}), body.get("roadways", []), body.get("source", "control"))
         return JSONResponse({"ok": True, "applied_at": sim.engine.at(iv.at_h).isoformat()})

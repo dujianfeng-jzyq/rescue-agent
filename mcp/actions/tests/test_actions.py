@@ -151,6 +151,35 @@ def test_publish_warning_is_sent_to_the_mine_as_a_notice(world):
     assert notice["kind"] == "warning" and notice["level"] == "red" and notice["panel"] == "1201" and "1201 工作面采空区" in notice["message"]
 
 
+def test_warning_text_comes_from_the_record_not_the_agent(world):
+    """发到矿井的预警正文由代码按记录生成，智能体写的 summary 不发出去；确认弹窗显示的正文与发出的一字不差（2026-11-11 代码复查）。"""
+    result = {"level": "red", "level_name": "红色（危险）", "triggered": ["束管CO最大值 1629 ≥ 1000"]}
+    rid = world.result_record("fire-assessment", "warning", result)
+    args = warning_args(rid, summary="模型自己写的一段话")
+    pre = world.precheck("publish_warning", args)
+    world.call("publish_warning", args)
+    (notice,) = world.holder.notices
+    assert "模型自己写的一段话" not in notice["message"]
+    assert notice["message"] == f"1201 工作面采空区：红色（危险）预警。触发条件：束管CO最大值 1629 ≥ 1000。依据研判记录 {rid}。"
+    assert pre["summary"]["facts"] == [f"发出正文：{notice['message']}"]
+    # 不写 summary 也能发布
+    assert not world.call("publish_warning", {"notice": {"location": "1201 工作面", "level": "red", "record_id": rid}}).is_error
+
+
+def test_overridden_warning_text_states_the_computed_level_and_reason(world):
+    rid = world.result_record("fire-assessment", "warning", {"level": "red", "level_name": "红色（危险）"})
+    world.call("publish_warning", warning_args(rid, level="orange", override_reason="现场复核测点故障"))
+    (notice,) = world.holder.notices
+    assert notice["level"] == "orange" and "橙色预警。人工调整等级，计算结果为红色（危险），理由：现场复核测点故障" in notice["message"]
+
+
+def test_warning_location_must_name_the_panel_exactly(world):
+    """工作面按编号整体匹配：记录是 120 工作面时，“1201 工作面”不算写对了（以前按子串判断会放过）。"""
+    rid = world.result_record("fire-assessment", "warning", {"level": "red"}, panel="120")
+    r = world.call("publish_warning", warning_args(rid))
+    assert r.is_error and "工作面 120 不符" in r.content[0].text and world.holder.notices == []
+
+
 def test_start_monitoring_is_sent_to_the_mine_as_a_monitor_step(world):
     rid = world.result_record("fire-assessment", "warning", {"level": "yellow"})
     r = world.call("start_monitoring", {"record_id": rid})
@@ -196,7 +225,24 @@ def test_escalation_follows_the_record_conclusion(world):
     r = world.call("escalate_emergency", esc(no))
     assert r.is_error and "不建议升级" in r.content[0].text and world.holder.notices == []
     r = world.call("escalate_emergency", esc(yes))
-    assert not r.is_error and world.holder.notices[0]["kind"] == "info" and world.holder.notices[0]["level"] == "应急响应"
+    assert not r.is_error and world.holder.notices[0]["kind"] == "info"
+
+
+def test_escalation_text_comes_from_the_record_not_the_agent(world):
+    """升级正文（理由、规程依据）和级别都按升级建议记录，智能体写的 reason、recommended_level 不发出去（CLAUDE.md 约定 2）。"""
+    result = {"recommend": True, "panel": "1201", "level": "red", "reasons": ["预警等级 红色（危险）", "自燃发展阶段 剧烈氧化"],
+              "articles": [{"document": "矿山救援规程", "article": "第39条"}, {"document": "矿山救援规程", "article": "第40条"}]}  # fmt: skip
+    rid = world.result_record("emergency-escalation", "escalation", result)
+    args = {"escalation": {"reason": "模型写的理由", "recommended_level": "一级响应", "record_id": rid}}
+    pre = world.precheck("escalate_emergency", args)
+    world.call("escalate_emergency", args)
+    (notice,) = world.holder.notices
+    assert notice["level"] == "red" and "模型写的理由" not in notice["message"] and "一级响应" not in notice["message"]
+    assert notice["message"] == (
+        f"1201 工作面建议升级为应急响应，由指挥人员决定。理由：预警等级 红色（危险）；自燃发展阶段 剧烈氧化。规程依据：第39条、第40条。依据升级建议记录 {rid}。"
+    )
+    assert pre["summary"]["facts"] == [f"发出正文：{notice['message']}"]
+    assert not world.call("escalate_emergency", {"escalation": {"record_id": rid}}).is_error  # 不写理由和级别也能提交
 
 
 # ── 撤人名单、调度单：按矿井数据核对 ──

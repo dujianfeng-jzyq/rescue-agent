@@ -51,6 +51,17 @@ def test_evacuation_and_dispatch_do_not_need_a_record():
         assert (r["ok"], r["problems"], r["notes"]) == (True, [], []), tool
 
 
-def test_unknown_tool_is_not_blocked_by_validation():
-    """校验只管它认识的指令；未知工具由动作分级表和审批插件处理（未登记按需确认，见 action_policy）。"""
-    assert precheck("some_other_tool", {}, NOW, None)["ok"]
+def test_unknown_tool_fails_closed():
+    """预检没有核对规则的指令按不通过处理：新增 C 级工具忘了加核对时，弹窗不能写“预检已通过”（2026-11-11 代码复查）。"""
+    r = precheck("some_other_tool", {}, NOW, None)
+    assert not r["ok"] and "没有 some_other_tool 的核对规则" in r["problems"][0]
+
+
+def test_every_policy_tool_has_a_precheck_branch():
+    """动作分级表里的每个工具，预检都认识（不会落到“没有核对规则”）。"""
+    from rescue_contract.action_policy import POLICIES
+
+    for p in POLICIES:
+        if p.tool in ("precheck_plan", "query_last_issued"):  # A 级只读，不经预检
+            continue
+        assert not any("核对规则" in x for x in precheck(p.tool, {}, NOW, None)["problems"]), p.tool
