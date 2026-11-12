@@ -175,11 +175,13 @@ class Sentinel:
             sensors = {x["id"]: x for x in _unwrap(await self.call("list_sensors", {}))} if alarms else {}
         except Exception:  # noqa: BLE001  矿井不提供报警平台时不影响主检测
             return []
-        seen, out = set(self.state["seen_alarms"]), []
+        order: list[str] = list(self.state["seen_alarms"])  # 按第一次见到的先后（最早的在前）
+        seen, out = set(order), []
         for a in alarms:
             if a["alarm_id"] in seen:
                 continue
             seen.add(a["alarm_id"])
+            order.append(a["alarm_id"])
             if a.get("acknowledged"):
                 continue
             panel = (sensors.get(a.get("sensor_id")) or {}).get("panel")
@@ -187,7 +189,8 @@ class Sentinel:
                 continue  # 同一轮已为该工作面告警：风险检测的实时报警已覆盖
             iid = self._incident_for("fire", panel, now, f"{panel or '全矿'} 矿井报警")
             out.append(self._alert(iid, now, "mine_alarm", f"矿井报警平台：{a['message']}（{a['alarm_id']}）", alarm_id=a["alarm_id"], sensor_id=a.get("sensor_id"), value=a.get("value"), threshold=a.get("threshold")))
-        self.state["seen_alarms"] = sorted(seen)[-500:]
+        # 只保留最近见到的 500 条（原来按编号排序截断，编号不按时间递增时会丢掉新报警，同一条报警再告警一次；2026-11-11 代码复查第 3 轮）
+        self.state["seen_alarms"] = order[-500:]
         return out
 
     def _followups(self, now: str) -> list[dict[str, Any]]:

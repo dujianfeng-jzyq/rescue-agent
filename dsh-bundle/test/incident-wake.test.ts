@@ -154,32 +154,50 @@ describe('告警是否已处理（代码判断）与重复投递的唤醒消息'
     assert.ok(a2)
   })
 
-  it('已处理的告警：消息标注“重复投递”，不再带“立即研判”，只让简短说明', async () => {
-    const { store, id, alert } = await setup()
-    await store.append(id, '2026-11-05T08:11:00', 'delivered', 'plugin', { alert_id: alert.event_id, session_id: 'S1' })
-    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T08:12:00' })
-    const entries = await store.entries(id)
-    const text = composeMessage(await store.get(id), [entries.find((e) => e.kind === 'alert')!], alertStatuses(entries))
-    assert.match(text, /【重复投递：之后已有研判记录，已处理】/)
-    assert.match(text, /这是重复投递/)
-    assert.doesNotMatch(text, /请立即对该工作面做完整研判/)
-    // 新告警的消息不变
-    const fresh = composeMessage(await store.get(id), [entries.find((e) => e.kind === 'alert')!], [])
-    assert.match(fresh, /请立即对该工作面做完整研判/)
-    assert.doesNotMatch(fresh, /重复投递：/)
+  it('按告警原因判断：跟踪到点只认复评或计划完成，确认超时只认确认结果，降级只认确认（代码复查第 3 轮）', async () => {
+    const { store, id } = await setup()
+    const fu = await store.append(id, '2026-11-05T12:00:00', 'alert', 'sentinel', { cause: 'followup_due', summary: '跟踪到点', followup_id: 'FU-1' })
+    const ap = await store.append(id, '2026-11-05T12:00:00', 'alert', 'sentinel', { cause: 'approval_timeout', summary: '确认超时', approval_key: 'k1' })
+    const dg = await store.append(id, '2026-11-05T12:00:00', 'alert', 'sentinel', { cause: 'degraded', summary: '降级' })
+    const state = async () => Object.fromEntries(alertStatuses(await store.entries(id), new Set([fu.event_id, ap.event_id, dg.event_id])).map((x) => [x.alert_id, x.handled_by]))
+    // 用新数据做的研判、对外动作：不覆盖这三类
+    await store.append(id, '2026-11-05T12:05:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T12:05:00' })
+    await store.append(id, '2026-11-05T12:06:00', 'note', 'guard', { type: 'action', tool: 'publish_warning', status: 'issued', as_of: '2026-11-05T12:05:00' })
+    assert.deepEqual(await state(), { [fu.event_id]: null, [ap.event_id]: null, [dg.event_id]: null })
+    // 别的确认有结果、旧数据的复评：仍不算
+    await store.append(id, '2026-11-05T12:07:00', 'note', 'approval', { type: 'approval_decided', approval_key: 'other', outcome: 'allowed-once' })
+    await store.append(id, '2026-11-05T12:08:00', 'note', 'flow', { type: 'effect_review', text: '旧复评', as_of: '2026-11-05T11:00:00' })
+    assert.deepEqual(await state(), { [fu.event_id]: null, [ap.event_id]: null, [dg.event_id]: null })
+    // 这条确认有了结果；用新数据复评
+    await store.append(id, '2026-11-05T12:09:00', 'note', 'approval', { type: 'approval_decided', approval_key: 'k1', outcome: 'rejected' })
+    await store.append(id, '2026-11-05T12:10:00', 'note', 'flow', { type: 'effect_review', text: '复评', as_of: '2026-11-05T12:10:00' })
+    assert.deepEqual(await state(), { [fu.event_id]: '效果复评', [ap.event_id]: '确认已有结果', [dg.event_id]: null })
+    await store.append(id, '2026-11-05T12:11:00', 'acked', 'agent', { alert_id: dg.event_id })
+    assert.equal((await state())[dg.event_id], '确认')
   })
 
-  it('同一条消息里新旧告警并存：新的照常要求，旧的标注重复', async () => {
+  it('跟踪计划被新计划取代也算处理过；到点时正好做了研判，复评告警照常投递', async () => {
     const { store, id, alert } = await setup()
-    await store.append(id, '2026-11-05T08:12:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T08:12:00' })
+    await store.append(id, '2026-11-05T08:11:00', 'delivered', 'plugin', { alert_id: alert.event_id, session_id: 'S1' })
+    const fu = await store.append(id, '2026-11-05T12:00:00', 'alert', 'sentinel', { cause: 'followup_due', summary: '跟踪到点', followup_id: 'FU-1' })
+    await store.append(id, '2026-11-05T12:05:00', 'note', 'flow', { type: 'assessment', text: '研判', as_of: '2026-11-05T12:05:00' })
+    const sent: string[] = []
+    const w = new Waker(store, { backoffS: [1], deliver: async (text) => (sent.push(text), { sessionId: 'S1' }) })
+    assert.deepEqual(await w.drain(), [fu.event_id])
+    assert.match(sent[0]!, /review_effect/)
+    await store.append(id, '2026-11-05T12:20:00', 'followup_done', 'agent', { followup_id: 'FU-1', result: '被新的跟踪计划取代' })
+    const st = alertStatuses(await store.entries(id), new Set([fu.event_id]))[0]!
+    assert.equal(st.handled_by, '跟踪计划已完成或被取代')
+  })
+
+  it('同一条消息里有多类告警：各自的要求都在', async () => {
+    const { store, id, alert } = await setup()
     const b = await store.append(id, '2026-11-05T09:00:00', 'alert', 'sentinel', { cause: 'mine_alarm', summary: '矿井报警' })
     const entries = await store.entries(id)
-    const alerts = entries.filter((e) => e.kind === 'alert')
-    const text = composeMessage(await store.get(id), alerts, alertStatuses(entries))
-    assert.match(text, new RegExp(`${alert.event_id}.*重复投递`))
-    assert.doesNotMatch(text, new RegExp(`${b.event_id}.*重复投递`))
-    assert.match(text, /矿井自己的报警平台发来的越限报警/) // 新告警（矿井报警）的要求还在
-    assert.doesNotMatch(text, /不要先问操作员“要不要研判”/) // 旧告警（异常）的要求没了
+    const text = composeMessage(await store.get(id), [alert, b])
+    assert.ok(entries.length > 0)
+    assert.match(text, /矿井自己的报警平台发来的越限报警/)
+    assert.match(text, /不要先问操作员“要不要研判”/)
   })
 
   it('依据的数据比告警旧的处理记录不算已处理（上一轮用旧数据写的研判排在新告警之后）', async () => {

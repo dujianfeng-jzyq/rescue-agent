@@ -285,28 +285,29 @@ function noteAsOf(e: Entry): string | null {
 
 /**
  * 每条告警是不是已经处理过——由代码按时间线判断，不靠智能体自己读（第五版：重复投递的告警应忽略，评测里智能体约三分之二照消息里的
- * “立即研判”重做）。规则：告警条目之后（文件顺序）出现 acked，或出现研判、复评、方案、对外动作的记录，**且该记录依据的数据不早于告警**
- * （as_of ≥ 告警的矿井时间），就算已处理。只看文件顺序不够：智能体忙着处理上一条告警时新告警进来，上一轮用旧数据写的研判排在新告警之后，
- * 会把一次真正的升级误判成“已处理”（2026-11-10 演示：19:32 的蓝色研判盖住了 20:02 的黄色告警）。没有 as_of 的记录不算（fail closed）。
+ * “立即研判”重做）。告警条目之后（文件顺序）出现针对它的 acked 一律算已处理；此外**按告警原因**看之后的记录（coveredBy）：
+ * - 异常（anomaly）、矿井报警（mine_alarm）：研判、复评、方案、对外动作的记录，**且该记录依据的数据不早于告警**（as_of ≥ 告警的矿井时间）。
+ *   只看文件顺序不够：智能体忙着处理上一条告警时新告警进来，上一轮用旧数据写的研判排在新告警之后，会把一次真正的升级误判成“已处理”
+ *   （2026-11-10 演示：19:32 的蓝色研判盖住了 20:02 的黄色告警）。没有 as_of 的记录不算（fail closed）。
+ * - 跟踪到点（followup_due）：只有之后的效果复评（数据不早于告警），或这条跟踪计划已完成、被新计划取代（followup_done）。
+ *   研判不算：原来不分原因，到点时智能体正好用新数据做了研判，复评告警就被记为已处理、复评被跳过，跟踪计划停在“到点”再没人提醒
+ *   （2026-11-11 代码复查第 3 轮）。
+ * - 确认超时（approval_timeout）：只有这条确认有了结果（同一 approval_key 的 approval_decided）。
+ * - 监听降级（degraded）和不认识的原因：只有 acked。
  * 只用事件库已有的条目，不改折叠规则（Python 侧共用折叠样例不受影响）。
  */
 export function alertStatuses(entries: Entry[], only?: Set<string>): AlertStatus[] {
   const out: AlertStatus[] = []
   entries.forEach((e, i) => {
     if (e.kind !== 'alert' || (only && !only.has(e.event_id))) return
-    const alertAt = e.at.slice(0, 19)
     let by: string | null = null
     for (const later of entries.slice(i + 1)) {
       if (later.kind === 'acked' && later.data.alert_id === e.event_id) {
         by = typeof later.data.handled_by === 'string' && later.data.handled_by ? later.data.handled_by : '确认'
         break
       }
-      const t = later.kind === 'note' ? String(later.data.type ?? '') : ''
-      const asOf = HANDLING_NOTES[t] ? noteAsOf(later) : null
-      if (asOf && asOf >= alertAt) {
-        by = HANDLING_NOTES[t]!
-        break
-      }
+      by = coveredBy(e, later)
+      if (by) break
     }
     out.push({
       alert_id: e.event_id,
@@ -319,4 +320,25 @@ export function alertStatuses(entries: Entry[], only?: Set<string>): AlertStatus
     })
   })
   return out
+}
+
+/** 告警之后的一条记录是否按告警原因处理了它（acked 之外）；是就返回依据的名称 */
+function coveredBy(alert: Entry, later: Entry): string | null {
+  const alertAt = alert.at.slice(0, 19)
+  const t = later.kind === 'note' ? String(later.data.type ?? '') : ''
+  const asOf = t ? noteAsOf(later) : null
+  const fresh = (type: string) => t === type && asOf !== null && asOf >= alertAt
+  switch (String(alert.data.cause ?? '')) {
+    case 'anomaly':
+    case 'mine_alarm':
+      return HANDLING_NOTES[t] && fresh(t) ? HANDLING_NOTES[t]! : null
+    case 'followup_due':
+      if (fresh('effect_review')) return HANDLING_NOTES.effect_review!
+      if (later.kind === 'followup_done' && alert.data.followup_id && later.data.followup_id === alert.data.followup_id) return '跟踪计划已完成或被取代'
+      return null
+    case 'approval_timeout':
+      return t === 'approval_decided' && alert.data.approval_key && later.data.approval_key === alert.data.approval_key ? '确认已有结果' : null
+    default:
+      return null
+  }
 }

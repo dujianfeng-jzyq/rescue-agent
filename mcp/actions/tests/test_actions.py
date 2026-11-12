@@ -517,6 +517,31 @@ def test_monitoring_is_not_reissued_within_the_same_incident(tmp_path, monkeypat
     assert third["action_id"] != first["action_id"]
 
 
+def test_last_issued_only_counts_the_current_incident(tmp_path, monkeypatch, request):
+    """复评的处置开始时间只取本工作面当前未关闭事件里的下发：上一个事件的方案不算（2026-11-11 代码复查第 3 轮）。"""
+    from rescue_contract.incidents import IncidentStore
+
+    monkeypatch.setenv("RESCUE_INCIDENT_DIR", str(tmp_path / "inc"))
+    store = IncidentStore()
+    old = store.open("2026-11-01T08:00:00", category="fire", panel="1201", summary="上一个事件")
+    world = request.getfixturevalue("world")
+    with world.ledger.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"tool": "issue_sealing_plan", "status": "issued", "action_id": "A-old", "issued_at": "2026-11-01T10:00:00", "incident_id": old, "payload": {"panel": "1201", "plan_id": "SP-old"}}) + "\n")
+    out = world.call("query_last_issued", {"panel": "1201"}).structured_content
+    assert out["found"] and out["action_id"] == "A-old" and out["incident_id"] == old
+    store.append(old, "2026-11-02T08:00:00", "status", "agent", {"status": "closed"})
+    new = store.open("2026-11-05T08:00:00", category="fire", panel="1201", summary="新事件")
+    assert world.call("query_last_issued", {"panel": "1201"}).structured_content == {"found": False, "panel": "1201", "incident_id": new}
+    rid = world.result_record("fire-assessment", "warning", {"level": "yellow"})
+    assert not world.call("start_monitoring", {"record_id": rid}).is_error
+    out = world.call("query_last_issued", {"panel": "1201"}).structured_content
+    assert out["tool"] == "start_monitoring" and out["incident_id"] == new  # 不是上一个事件的封闭方案
+    # 没有未关闭事件（一次性提问）：不限定事件，照原规则方案优先
+    store.append(new, "2026-11-05T09:00:00", "status", "agent", {"status": "closed"})
+    out = world.call("query_last_issued", {"panel": "1201"}).structured_content
+    assert out["action_id"] == "A-old" and "incident_id" not in out
+
+
 def test_evacuation_with_personnel_record_is_noted_on_the_incident(tmp_path, monkeypatch, request):
     """撤人名单本身不引用记录；带上人员记录（record_ids.personnel）时挂到该工作面的事件和确认弹窗上。读不到记录也不拦撤人。"""
     from rescue_contract.incidents import IncidentStore

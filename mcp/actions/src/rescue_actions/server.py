@@ -461,16 +461,27 @@ def build_server(mine_data_target: Any | None = None, ledger_path: Path | None =
     def query_last_issued(panel: str = "1201") -> dict[str, Any]:
         """本工作面处置开始时间的台账依据（只读）：最近一次已下发（status=issued）的封闭方案或防灭火方案；
         没有方案时取最近一次已开始的加密监测（黄色阶段只有观察跟进）。固定流程 review_effect 缺处置开始时间时用它，
-        found 为 false 时没有可用的下发记录。返回 tool、action_id、issued_at（矿井时间）、plan_id、title。"""
+        found 为 false 时没有可用的下发记录。返回 tool、action_id、issued_at（矿井时间）、plan_id、title、incident_id。
+        本工作面有未关闭的火情事件时只看这个事件里的下发：上一个事件的方案不是这次的处置开始（2026-11-11 代码复查第 3 轮）。"""
         rows = [r for r in ledger_records(ledger.path) if r.get("status") == "issued"]
+        try:
+            current = incidents.find_open("fire", panel)
+        except Exception:  # noqa: BLE001  事件库读不到时按没有事件处理（不限定事件）
+            current = None
+        if current:
+            rows = [r for r in rows if r.get("incident_id") == current["incident_id"]]
         plans = [r for r in rows if r.get("tool") in ("issue_sealing_plan", "issue_firefighting_plan") and for_panel(r.get("payload") or {}, panel)]
         monitors = [r for r in rows if r.get("tool") == "start_monitoring" and record_panel(str((r.get("payload") or {}).get("record_id", ""))) == panel]
         hits = plans or monitors  # 方案优先：方案之后再开的加密监测不是新的处置，不能把起算时间往后挪
+        scope = {"incident_id": current["incident_id"]} if current else {}
         if not hits:
-            return {"found": False, "panel": panel}
+            return {"found": False, "panel": panel, **scope}
         r = hits[-1]
         p = r.get("payload") or {}
-        return {"found": True, "panel": panel, "tool": r["tool"], "action_id": r.get("action_id"), "issued_at": str(r.get("issued_at")), "plan_id": p.get("plan_id"), "title": p.get("title")}
+        return {
+            "found": True, "panel": panel, "tool": r["tool"], "action_id": r.get("action_id"), "issued_at": str(r.get("issued_at")),
+            "plan_id": p.get("plan_id"), "title": p.get("title"), **scope,
+        }  # fmt: skip
 
     # ── DSH 审批插件的预检接口（HTTP，不是 MCP 工具）──
 

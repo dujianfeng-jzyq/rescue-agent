@@ -260,6 +260,17 @@ async def test_mine_alarm_ingested_once(tmp_path, monkeypatch):
 
 
 @arun
+async def test_seen_alarms_keep_the_most_recent(tmp_path, monkeypatch):
+    """已见报警只保留最近见到的 500 条（按第一次见到的先后），不按编号排序截断：编号不按时间递增时新报警不能被挤掉（代码复查第 3 轮）。"""
+    f = Fake(tmp_path, monkeypatch)
+    f.s.state["seen_alarms"] = [f"Z-{i:03d}" for i in range(500)]  # 编号排序靠后的旧报警
+    f.alarms = [{"alarm_id": "A-new", "sensor_id": "SM-1201-UC", "message": "新报警", "acknowledged": False}]
+    assert [a["data"]["cause"] for a in await f.step(result())] == ["mine_alarm"]
+    assert f.s.state["seen_alarms"][-1] == "A-new" and len(f.s.state["seen_alarms"]) == 500
+    assert await f.step(result()) == []  # 同一条报警不再告警
+
+
+@arun
 async def test_approval_timeout_escalates_once(tmp_path, monkeypatch):
     from datetime import datetime
 
