@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { describeOptions, interpretChoice, isNonePhrase, loadResponseOptions, normalizeLevel, planKeysFor, priorChoice } from '../src/fire-loop/response-options.ts'
+import { applyPriorChoice, describeOptions, interpretChoice, isNonePhrase, loadResponseOptions, normalizeLevel, planKeysFor, priorChoice } from '../src/fire-loop/response-options.ts'
 
 const levels = loadResponseOptions()
 
@@ -118,6 +118,23 @@ describe('橙色是否再问（priorChoice，按事件时间线）', () => {
     const p = priorChoice([choice('2026-11-03T20:00:00', 'conflict')], 'orange')
     assert.equal(p.ask, true)
     assert.equal(p.conflict, true)
+  })
+
+  it('卡片随之前的决定调整：不处置后复评恶化，卡片说明为什么再问；不用问就去掉卡片', () => {
+    const card = () => ({ ...describeOptions(levels, 'orange') }) as any
+    const declined = priorChoice([choice('2026-11-03T21:08:42', 'none'), review('2026-11-04T11:08:42', 'worsening')], 'orange')
+    const asked = applyPriorChoice(card(), declined)
+    assert.match(asked.card.question, /。上次（2026-11-03T21:08:42）选择不采取处置；此后 2026-11-04T11:08:42 的复评结论为恶化，所以再问一次$/)
+    assert.deepEqual(asked.card.options, card().card.options, '选项不变')
+    const quiet = applyPriorChoice(card(), priorChoice([choice('2026-11-03T21:08:42', 'none')], 'orange'))
+    assert.equal(quiet.card, null)
+    assert.match(quiet.note!, /不再问操作员/)
+    const conflict = applyPriorChoice(card(), priorChoice([choice('2026-11-03T20:00:00', 'conflict')], 'orange'))
+    assert.match(conflict.card.question, /请只选一种$/)
+    const again = applyPriorChoice(card(), priorChoice([plan('2026-11-03T20:00:00'), review('2026-11-03T22:00:00', 'worsening')], 'orange'))
+    assert.match(again.card.question, /已下发的处置不用再选$/)
+    // 第一次问：卡片不变
+    assert.equal(applyPriorChoice(card(), priorChoice([], 'orange')).card.question, card().card.question)
   })
 
   it('其他等级不按卡片判断', () => {

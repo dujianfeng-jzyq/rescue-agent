@@ -28,6 +28,11 @@
   "observed_h_at_next_review": 36.0,
   "overall": "worsening",
   "overall_name": "恶化",
+  "treated": true,
+  "since_label": "处置开始",
+  "before_label": "处置前",
+  "after_label": "处置后",
+  "at_label": "处置时",
   "basis": [
    "恶化的测点：BT-1201-G1/CO、BT-1201-G2/CO、BT-1201-G3/CO、TP-1201-G3/TEMP"
   ],
@@ -78,7 +83,10 @@
     "basis": [
      "处置后速率 72.046/h 未明显低于处置前 45.840/h"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "BT-1201-G2",
@@ -95,7 +103,10 @@
     "basis": [
      "处置后速率 71.863/h 未明显低于处置前 44.493/h"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "BT-1201-G3",
@@ -112,7 +123,10 @@
     "basis": [
      "处置后速率 22.283/h 未明显低于处置前 14.163/h"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "TP-1201-G1",
@@ -129,7 +143,10 @@
     "basis": [
      "处置后速率 0.472/h ≤ 处置前 1.065/h × 0.5，明显减缓但仍在上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "TP-1201-G2",
@@ -146,7 +163,10 @@
     "basis": [
      "处置后速率 0.506/h ≤ 处置前 1.123/h × 0.5，明显减缓但仍在上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "TP-1201-G3",
@@ -163,7 +183,10 @@
     "basis": [
      "处置后速率 0.070/h 未明显低于处置前 0.119/h"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    }
   ],
   "sealed_off": [

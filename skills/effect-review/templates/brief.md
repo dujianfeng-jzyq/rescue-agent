@@ -2,7 +2,7 @@
 【效果评估要点】{{panel}} 工作面 {{as_of_text}}
 
 - 结论：{{effect.result.overall_name}}（计算结果）
-- 处置开始：{{effect.result.since}}（{{effect.result.since_source}}）；已观测 {{effect.result.observed_h}} 小时
+- {{effect.result.since_label}}：{{effect.result.since}}（{{effect.result.since_source}}）；已观测 {{effect.result.observed_h}} 小时
 - 各结论测点数：{{effect.result.counts_text}}
 {{#effect.result.sealed_off_text}}
 - 火区已封闭、测点断电，不参与复评：{{.}}

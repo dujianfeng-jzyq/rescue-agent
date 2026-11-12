@@ -5,7 +5,10 @@
 火区台账里本工作面已封闭时，封闭后一直读不到数的安全监控测点（密闭内断电）不参与复评，列在 sealed_off（2026-11-10 演示复看：
 封闭后这两个测点一直算“观测时间不足”）。TODO(专家): 封闭范围内哪些测点停用，按本矿封闭方案定。
 
-输入：{"evidence": <effect 证据，含 since>, "options": {"since_source": <处置开始时间的来源说明>}}。
+输入：{"evidence": <effect 证据，含 since>, "options": {"since_source": <处置开始时间的来源说明>, "treated": <是否采取过处置，缺省 true>}}。
+treated 为 false（指令台账里只有加密监测、没有防灭火或封闭方案）时，since 是观察起点而不是处置开始：判据不变，
+结论和测点数改用“未采取处置：……”的写法（2026-11-11 演示复看：只开了加密监测，复评却写“处置开始：加密监测”“处置效果：恶化”，
+读的人会以为措施没起作用，其实没有处置）。结构化的 overall、counts 不变（下游按它们判断是否再问、是否建议升级）。
 总体结论、各结论测点数、按类型分组的测点数、下次复评时刻都在这里算好，照抄，不要自己数或推算。
 """
 
@@ -19,6 +22,13 @@ from _skill import evidence, load_reference, main
 VERSION = "effect/1.0.0"
 # 文字汇总用的短名（不带标点，便于照抄）；结构化的 counts 仍用完整结论名
 SHORT = {"已受控": "已受控", "需继续处置": "需继续处置", "恶化": "恶化", "观测时间不足，暂不下结论": "观测时间不足"}
+# 未采取处置时的写法：同一判据，说的是“趋势”而不是“处置效果”
+UNTREATED_SHORT = {"已受控": "停止上升", "需继续处置": "上升减缓", "恶化": "恶化", "观测时间不足": "观测时间不足"}
+UNTREATED_OVERALL = {"controlled": "未采取处置：停止上升", "continuing": "未采取处置：上升减缓", "worsening": "未采取处置：趋势恶化", "insufficient": "未采取处置：观测时间不足，暂不下结论"}
+LABELS = {
+    True: {"since_label": "处置开始", "before_label": "处置前", "after_label": "处置后", "at_label": "处置时"},
+    False: {"since_label": "观察起点（未采取处置）", "before_label": "起点前", "after_label": "起点后", "at_label": "起点时"},
+}
 SOURCE_NAMES = {"bundle_tube": "采空区束管", "temperature": "采空区测温", "safety_monitor": "安全监控"}
 METHOD = "逐测点处置前后速率比较后汇总（任一恶化→恶化；全部已受控→已受控；否则需继续处置；观测不足的测点不参与）。判据为演示占位值，需按本矿制度审定"
 
@@ -102,19 +112,40 @@ def run(data, _args):
         out = evaluate(since, now, before, after, markers, cfg, cfg["flat_rate"][m])
         points.append({"sensor_id": sid, "measurand": m, "source": s["source"], **out})
     res = overall(points, since, now, cfg["review_interval_h"])
+    options = data.get("options") or {}
+    treated = options.get("treated", True) is not False
+    short = (lambda k: SHORT.get(k, k)) if treated else (lambda k: UNTREATED_SHORT.get(SHORT.get(k, k), SHORT.get(k, k)))
+    if not treated:
+        # 依据里的“处置前/处置后”改成“起点前/起点后”，结论名换成趋势的说法（判据不变）
+        def words(t):
+            for a, b in (("处置后", "起点后"), ("处置前", "起点前"), ("需继续处置", "上升减缓"), ("已受控", "停止上升")):
+                t = t.replace(a, b)
+            return t
+
+        res = {**res, "basis": [words(b) for b in res.get("basis") or []]}
+        points = [{**p, "basis": [words(b) for b in p["basis"]], "effect_name": UNTREATED_SHORT.get(SHORT.get(p["effect_name"], p["effect_name"]), p["effect_name"])} for p in points]
     groups = {}
     for p in points:
         key = (SOURCE_NAMES.get(p["source"], "其他"), p["measurand"])
         c = groups.setdefault(key, {})
         c[p["effect_name"]] = c.get(p["effect_name"], 0) + 1
-    by_type = [{"type": t, "measurand": mm, "total": sum(c.values()), "counts": c, "counts_text": "、".join(f"{SHORT.get(k, k)} {v} 个" for k, v in c.items())} for (t, mm), c in groups.items()]
+    by_type = [{"type": t, "measurand": mm, "total": sum(c.values()), "counts": c, "counts_text": "、".join(f"{short(k)} {v} 个" for k, v in c.items())} for (t, mm), c in groups.items()]
     result = {
         "panel": ev["panel"],
         **res,
-        "since_source": (data.get("options") or {}).get("since_source") or "调用方给出",
-        "counts_text": "、".join(f"{SHORT.get(k, k)} {v} 个" for k, v in res["counts"].items()),
+        **({} if treated else {"overall_name": UNTREATED_OVERALL[res["overall"]]}),
+        "treated": treated,
+        **LABELS[treated],
+        "since_source": options.get("since_source") or "调用方给出",
+        "counts_text": "、".join(f"{short(k)} {v} 个" for k, v in res["counts"].items()),
         "counts_by_type": by_type,
-        "points": [{k: p[k] for k in ("sensor_id", "measurand", "effect", "effect_name", "value_at_since", "latest", "change_since", "rate_before_per_hour", "rate_after_per_hour", "rate_reduction_pct", "new_marker_gases", "basis")} | {"new_marker_gases_text": "、".join(p["new_marker_gases"])} for p in points],
+        # 逐点文字的“处置前/处置后”或“起点前/起点后”放在每个点上：模板里点自己的 effect 字段会遮住外层的 effect
+        "points": [
+            {k: p[k] for k in ("sensor_id", "measurand", "effect", "effect_name", "value_at_since", "latest", "change_since", "rate_before_per_hour", "rate_after_per_hour", "rate_reduction_pct", "new_marker_gases", "basis")}
+            | {"new_marker_gases_text": "、".join(p["new_marker_gases"])}
+            | {k: LABELS[treated][k] for k in ("before_label", "after_label", "at_label")}
+            for p in points
+        ],
         "sealed_off": sorted(dark),  # 火区封闭后断电、不参与复评的安全监控测点
         "sealed_off_text": "、".join(sorted(dark)),
         "escalation_suggested": res["overall"] == "worsening",

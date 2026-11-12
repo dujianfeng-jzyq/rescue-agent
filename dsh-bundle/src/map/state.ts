@@ -383,7 +383,7 @@ export async function recordView(dir: string, id: string): Promise<RecordView | 
     for (const k of ['fire_areas', 'inventory', 'events', 'mine_alarms'] as const) if (Array.isArray(c?.[k])) rows.push({ key: { fire_areas: '火区台账', inventory: '物资台账', events: '安全监控事件', mine_alarms: '矿井报警平台' }[k], value: `${c[k].length} 条` })
     if (c?.personnel) rows.push({ key: '人员定位', value: '有' })
     if (c?.network) rows.push({ key: '通风网络', value: `${(c.network.roadways ?? []).length} 条巷道` })
-    if (c?.since) rows.push({ key: '处置开始', value: String(c.since) })
+    if (c?.since) rows.push({ key: '复评起算', value: String(c.since) })
     return { ...head, body: { type: 'fields', rows, warnings: [] } }
   }
   // 结果记录：有按它生成的报告（同一时刻、上级是它）就显示报告原文（中文、照模板），要点优先；没有才列字段

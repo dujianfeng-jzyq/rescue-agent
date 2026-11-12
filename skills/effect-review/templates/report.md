@@ -3,7 +3,7 @@
 
 结论：{{effect.result.overall_name}}（计算结果）
 
-处置开始：{{effect.result.since}}（{{effect.result.since_source}}）；已观测 {{effect.result.observed_h}} 小时
+{{effect.result.since_label}}：{{effect.result.since}}（{{effect.result.since_source}}）；已观测 {{effect.result.observed_h}} 小时
 
 {{#effect.result.basis}}
 - 依据：{{.}}
@@ -22,7 +22,7 @@
 逐点结果（计算结果）：
 
 {{#effect.result.points}}
-- {{sensor_id}} {{measurand}}：{{effect_name}}。处置时 {{value_at_since}}，现在 {{latest}}，变化 {{change_since}}；速率 处置前 {{rate_before_per_hour}}/h、处置后 {{rate_after_per_hour}}/h，降幅 {{rate_reduction_pct}}%{{#new_marker_gases_text}}；新出现 {{.}}{{/new_marker_gases_text}}
+- {{sensor_id}} {{measurand}}：{{effect_name}}。{{at_label}} {{value_at_since}}，现在 {{latest}}，变化 {{change_since}}；速率 {{before_label}} {{rate_before_per_hour}}/h、{{after_label}} {{rate_after_per_hour}}/h，降幅 {{rate_reduction_pct}}%{{#new_marker_gases_text}}；新出现 {{.}}{{/new_marker_gases_text}}
 {{/effect.result.points}}
 
 下次复评：{{effect.result.next_review_at}}（届时已观测 {{effect.result.observed_h_at_next_review}} 小时）

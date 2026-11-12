@@ -188,3 +188,32 @@ export function priorChoice(entries: TimelineEntry[], levelRaw: string): { ask: 
   if (review?.data?.overall === 'worsening') return { ask: true, ...mark, review: review.at, reason: `${what}，${review.at} 的复评结论为恶化，问操作员要采取哪些处置` }
   return { ask: false, ...mark, ...(review ? { review: review.at } : {}), reason: review ? `${what}，之后的复评（${review.at}）没有恶化` : `${what}，之后还没有复评` }
 }
+
+export type PriorChoice = ReturnType<typeof priorChoice>
+
+/**
+ * 按“这一级之前的决定”调整 get_response_options 的结果（代码定，智能体原样问）：
+ * - 不用再问 → 去掉卡片，note 说明为什么；
+ * - 上次选择冲突 → 卡片上提醒只选一种；
+ * - 已下发过方案、复评恶化 → 提醒已下发的不用再选（代码不过滤：再选会随新方案再下发一次）；
+ * - 上次选了不处置、复评恶化 → 卡片上说明是因为情况变了才再问（2026-11-11：不是重复打扰）。
+ */
+export function applyPriorChoice<T extends { card: any; note?: string; prior?: PriorChoice }>(out: T, prior: PriorChoice): T {
+  out.prior = prior
+  if (!prior.ask) {
+    out.card = null
+    out.note = prior.declined_at
+      ? `${prior.reason}：不再问操作员，也不下发处置；继续跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出卡片。`
+      : `${prior.reason}：不再问操作员，也不重新下发同样的方案；继续按已下发的方案跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出追加处置的卡片。`
+    return out
+  }
+  if (!out.card) return out
+  const add = (text: string) => {
+    out.card = { ...out.card, question: `${out.card.question}。${text}` }
+    out.note = `${prior.reason}。${out.note ?? ''}`
+  }
+  if (prior.conflict) add(`上次既勾选了处置又输入了“${NONE_PHRASE}”，请只选一种`)
+  else if (prior.issued_at) add(`本级已下发过方案（${prior.issued_at}），已下发的处置不用再选`)
+  else if (prior.declined_at && prior.review) add(`上次（${prior.declined_at}）选择不采取处置；此后 ${prior.review} 的复评结论为恶化，所以再问一次`)
+  return out
+}

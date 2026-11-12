@@ -28,6 +28,11 @@
   "observed_h_at_next_review": 18.0,
   "overall": "insufficient",
   "overall_name": "观测时间不足，暂不下结论",
+  "treated": true,
+  "since_label": "处置开始",
+  "before_label": "处置前",
+  "after_label": "处置后",
+  "at_label": "处置时",
   "basis": [
    "全部测点观测时间或数据不足"
   ],
@@ -86,7 +91,10 @@
     "basis": [
      "处置后已观测 6.0 小时，少于 12 小时"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "BT-1201-G2",
@@ -103,7 +111,10 @@
     "basis": [
      "处置后已观测 6.0 小时，少于 12 小时"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "BT-1201-G3",
@@ -120,7 +131,10 @@
     "basis": [
      "处置后已观测 6.0 小时，少于 12 小时"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "SM-1201-RET",
@@ -137,7 +151,10 @@
     "basis": [
      "处置后已观测 6.0 小时，少于 12 小时"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "SM-1201-UC",
@@ -154,7 +171,10 @@
     "basis": [
      "处置后已观测 6.0 小时，少于 12 小时"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "TP-1201-G1",
@@ -171,7 +191,10 @@
     "basis": [
      "处置后已观测 6.0 小时，少于 12 小时"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "TP-1201-G2",
@@ -188,7 +211,10 @@
     "basis": [
      "处置后已观测 6.0 小时，少于 12 小时"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "TP-1201-G3",
@@ -205,7 +231,10 @@
     "basis": [
      "处置后已观测 6.0 小时，少于 12 小时"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    }
   ],
   "sealed_off": [],

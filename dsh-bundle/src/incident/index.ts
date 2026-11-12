@@ -61,33 +61,62 @@ export function apply(ctx: Context, config: Config): void {
 export interface FollowupParams {
   default_after_h: number
   max_after_h: number
+  /** 按预警等级的复评间隔上限（矿井小时）；封闭方案下发后不再按等级限制。没有就不限（旧配置、测试） */
+  level_cap_h?: Record<string, number>
 }
 
 export async function followupParams(skillsDir: string): Promise<FollowupParams> {
   const y = parseYaml(await readFile(join(skillsDir, 'fire-incident-management', 'references', 'followup.yaml'), 'utf8'))
   for (const k of ['default_after_h', 'max_after_h'] as const) if (typeof y?.[k] !== 'number' || y[k] <= 0) throw new Error(`fire-incident-management/references/followup.yaml 缺少 ${k}`)
-  return { default_after_h: y.default_after_h, max_after_h: y.max_after_h }
+  const caps = y?.level_cap_h ?? {}
+  for (const [k, v] of Object.entries(caps)) if (typeof v !== 'number' || v <= 0) throw new Error(`fire-incident-management/references/followup.yaml 的 level_cap_h.${k} 应为正数`)
+  return { default_after_h: y.default_after_h, max_after_h: y.max_after_h, level_cap_h: caps as Record<string, number> }
 }
 
 const ISSUED = new Set(['issued', 'completed'])
+/**
+ * 算“处置”的对外动作：影响矿井现场的方案、撤人、物资调度、启封。发布预警、升级应急响应是通报，加密监测只是多看，都不算
+ * （2026-11-11 演示复看：橙色选了“不采取处置”，同一轮提交的预警被当成“下发了新的处置”，复评按 2 小时排，理由也写错了）。
+ */
+export const TREATMENT_TOOLS = new Set(['issue_firefighting_plan', 'issue_sealing_plan', 'notify_evacuation', 'issue_dispatch_order', 'approve_unsealing'])
+const LEVEL_NAMES: Record<string, string> = { blue: '蓝色（关注）', yellow: '黄色（预警）', orange: '橙色（严重）', red: '红色（危险）' }
 const hoursBetween = (a: string, b: string) => (Date.parse(`${b.slice(0, 19)}Z`) - Date.parse(`${a.slice(0, 19)}Z`)) / 3_600_000
+const issued = (e: Entry, tools: Set<string>) => e.kind === 'note' && e.by === 'guard' && e.data?.type === 'action' && tools.has(String(e.data?.tool)) && ISSUED.has(String(e.data?.status))
 
 /**
  * add_followup 不给 after_h 时的到点时间（代码定，不靠模型）：
- * 最近一次复评之后没有新的对外动作下发 → 用复评给出的下次复评时刻（复评自己的节奏）；
+ * 最近一次复评之后没有新的处置下发 → 用复评给出的下次复评时刻（复评自己的节奏）；
  * 否则（刚下发了新处置，或还没复评过）→ 技能规定的默认间隔。复评时刻已过或超出上限时也退回默认 / 上限。
+ * 再按当前预警等级（最近一次研判）限一个上限，取较早的：橙色未处置、复评恶化时不能隔 12 小时才看（2026-11-11）。
+ * 封闭方案下发后不再按等级限：封闭后的观测按复评的节奏。
  */
 export function defaultFollowup(entries: Entry[], now: string, p: FollowupParams): { due_at: string; after_h: number; basis: string } {
+  const base = paceFollowup(entries, now, p)
+  const cap = levelCap(entries, p)
+  if (!cap || base.after_h <= cap.h) return base
+  return { due_at: mineMsPlusHours(now, cap.h), after_h: cap.h, basis: `${base.basis}；${cap.why}，按 ${cap.h} 小时` }
+}
+
+function paceFollowup(entries: Entry[], now: string, p: FollowupParams): { due_at: string; after_h: number; basis: string } {
   const byDefault = (why: string) => ({ due_at: mineMsPlusHours(now, p.default_after_h), after_h: p.default_after_h, basis: `${why}，按默认间隔 ${p.default_after_h} 小时` })
   const i = entries.findLastIndex((e) => e.kind === 'note' && e.data?.type === 'effect_review' && typeof e.data?.next_review_at === 'string')
   if (i < 0) return byDefault('还没有复评')
-  const newAction = entries.slice(i + 1).some((e) => e.kind === 'note' && e.by === 'guard' && e.data?.type === 'action' && ISSUED.has(String(e.data?.status)))
-  if (newAction) return byDefault('最近一次复评之后下发了新的处置')
+  if (entries.slice(i + 1).some((e) => issued(e, TREATMENT_TOOLS))) return byDefault('最近一次复评之后下发了新的处置')
   const next = String(entries[i]!.data.next_review_at).slice(0, 19)
   const h = hoursBetween(now, next)
   if (!(h > 0)) return byDefault(`复评给出的下次复评时刻 ${next} 已过`)
   if (h > p.max_after_h) return { due_at: mineMsPlusHours(now, p.max_after_h), after_h: p.max_after_h, basis: `复评给出的下次复评时刻 ${next} 超出上限，按上限 ${p.max_after_h} 小时` }
   return { due_at: next, after_h: Math.round(h * 100) / 100, basis: `最近一次复评之后没有新处置，按复评给出的下次复评时刻 ${next}` }
+}
+
+/** 当前预警等级（最近一次记了等级的研判）对应的间隔上限；封闭方案已下发、没有研判等级或该级没有上限时为 null */
+function levelCap(entries: Entry[], p: FollowupParams): { h: number; why: string } | null {
+  if (!p.level_cap_h || entries.some((e) => issued(e, new Set(['issue_sealing_plan'])))) return null
+  const a = entries.findLast((e) => e.kind === 'note' && e.data?.type === 'assessment' && typeof e.data?.level === 'string')
+  const level = a ? String(a.data!.level) : ''
+  const h = p.level_cap_h[level]
+  if (!(typeof h === 'number' && h > 0)) return null
+  return { h, why: `当前预警等级 ${LEVEL_NAMES[level] ?? level}，复评间隔不超过 ${h} 小时` }
 }
 
 /** 注册工具（clock 返回矿井时间；单独成函数方便不起 DSH 测试） */
@@ -165,7 +194,7 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
       name: 'add_followup',
       description:
         '登记跟踪计划：处置下发后，过一段矿井时间到点，监听器会唤醒你复评（review_effect）。到点时间由系统按矿井时钟算，你不要自己算。' +
-        'after_h 不给时由系统定：最近一次复评之后没有新处置，就用复评给出的下次复评时刻；刚下发了新处置或还没复评过，用技能规定的默认间隔（返回的 due_at、basis 照抄）。指挥人员明确要求某个间隔时才填 after_h。expect 写一句话预期（如“注惰后上隅角 CO 应回落”）。' +
+        'after_h 不给时由系统定：最近一次复评之后没有新处置，就用复评给出的下次复评时刻；刚下发了新处置或还没复评过，用技能规定的默认间隔；再按当前预警等级限一个上限（封闭后不限）。返回的 due_at、basis 照抄。指挥人员明确要求某个间隔时才填 after_h。expect 写一句话预期（如“注惰后上隅角 CO 应回落”）。' +
         '一个事件只保留一条跟踪：没完成的旧跟踪会被新跟踪取代（返回的 superseded），不用再对它们 complete_followup。',
       parameters: {
         incident_id: { type: 'string', required: true, description: '事件编号' },

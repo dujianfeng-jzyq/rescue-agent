@@ -1,0 +1,245 @@
+{
+ "algorithm_version": "effect/1.0.0",
+ "params": {
+  "baseline_h": 12,
+  "min_observe_h": 12,
+  "review_interval_h": 12,
+  "controlled_rate": 0.0,
+  "slowdown_ratio": 0.5,
+  "flat_rate": {
+   "CO": 0.01,
+   "TEMP": 0.01,
+   "C2H4": 0.001,
+   "C2H2": 0.001,
+   "CO2": 0.001
+  },
+  "markers": {
+   "C2H4": 0.05,
+   "C2H2": 0.05
+  }
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "since": "2026-11-04T00:00:00",
+  "as_of": "2026-11-05T00:00:00",
+  "observed_h": 24.0,
+  "next_review_at": "2026-11-05T12:00:00",
+  "observed_h_at_next_review": 36.0,
+  "overall": "worsening",
+  "overall_name": "未采取处置：趋势恶化",
+  "basis": [
+   "恶化的测点：BT-1201-G1/CO、BT-1201-G2/CO、BT-1201-G3/CO、SM-1201-RET/CO、SM-1201-UC/CO"
+  ],
+  "evaluated": 8,
+  "judged": 8,
+  "counts": {
+   "已受控": 0,
+   "需继续处置": 3,
+   "恶化": 5,
+   "观测时间不足，暂不下结论": 0
+  },
+  "treated": false,
+  "since_label": "观察起点（未采取处置）",
+  "before_label": "起点前",
+  "after_label": "起点后",
+  "at_label": "起点时",
+  "since_source": "未采取处置，从指令台账 A-0000000001 加密监测的开始时间起观察",
+  "counts_text": "停止上升 0 个、上升减缓 3 个、恶化 5 个、观测时间不足 0 个",
+  "counts_by_type": [
+   {
+    "type": "采空区束管",
+    "measurand": "CO",
+    "total": 3,
+    "counts": {
+     "恶化": 3
+    },
+    "counts_text": "恶化 3 个"
+   },
+   {
+    "type": "安全监控",
+    "measurand": "CO",
+    "total": 2,
+    "counts": {
+     "恶化": 2
+    },
+    "counts_text": "恶化 2 个"
+   },
+   {
+    "type": "采空区测温",
+    "measurand": "TEMP",
+    "total": 3,
+    "counts": {
+     "上升减缓": 3
+    },
+    "counts_text": "上升减缓 3 个"
+   }
+  ],
+  "points": [
+   {
+    "sensor_id": "BT-1201-G1",
+    "measurand": "CO",
+    "effect": "worsening",
+    "effect_name": "恶化",
+    "value_at_since": 148.965,
+    "latest": 621.873,
+    "change_since": 472.908,
+    "rate_before_per_hour": 10.394,
+    "rate_after_per_hour": 19.386,
+    "rate_reduction_pct": -86.5,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后速率 19.386/h 未明显低于起点前 10.394/h"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "BT-1201-G2",
+    "measurand": "CO",
+    "effect": "worsening",
+    "effect_name": "恶化",
+    "value_at_since": 151.343,
+    "latest": 593.201,
+    "change_since": 441.858,
+    "rate_before_per_hour": 10.61,
+    "rate_after_per_hour": 19.271,
+    "rate_reduction_pct": -81.6,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后速率 19.271/h 未明显低于起点前 10.610/h"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "BT-1201-G3",
+    "measurand": "CO",
+    "effect": "worsening",
+    "effect_name": "恶化",
+    "value_at_since": 49.273,
+    "latest": 193.299,
+    "change_since": 144.026,
+    "rate_before_per_hour": 3.124,
+    "rate_after_per_hour": 5.809,
+    "rate_reduction_pct": -86.0,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后速率 5.809/h 未明显低于起点前 3.124/h"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "SM-1201-RET",
+    "measurand": "CO",
+    "effect": "worsening",
+    "effect_name": "恶化",
+    "value_at_since": 30.031,
+    "latest": 111.948,
+    "change_since": 81.917,
+    "rate_before_per_hour": 2.06,
+    "rate_after_per_hour": 3.595,
+    "rate_reduction_pct": -74.5,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后速率 3.595/h 未明显低于起点前 2.060/h"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "SM-1201-UC",
+    "measurand": "CO",
+    "effect": "worsening",
+    "effect_name": "恶化",
+    "value_at_since": 35.205,
+    "latest": 131.834,
+    "change_since": 96.629,
+    "rate_before_per_hour": 2.436,
+    "rate_after_per_hour": 4.225,
+    "rate_reduction_pct": -73.4,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后速率 4.225/h 未明显低于起点前 2.436/h"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "TP-1201-G1",
+    "measurand": "TEMP",
+    "effect": "continuing",
+    "effect_name": "上升减缓",
+    "value_at_since": 63.738,
+    "latest": 80.17,
+    "change_since": 16.432,
+    "rate_before_per_hour": 1.91,
+    "rate_after_per_hour": 0.678,
+    "rate_reduction_pct": 64.5,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后速率 0.678/h ≤ 起点前 1.910/h × 0.5，明显减缓但仍在上升"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "TP-1201-G2",
+    "measurand": "TEMP",
+    "effect": "continuing",
+    "effect_name": "上升减缓",
+    "value_at_since": 66.136,
+    "latest": 79.226,
+    "change_since": 13.09,
+    "rate_before_per_hour": 1.83,
+    "rate_after_per_hour": 0.622,
+    "rate_reduction_pct": 66.0,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后速率 0.622/h ≤ 起点前 1.830/h × 0.5，明显减缓但仍在上升"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   },
+   {
+    "sensor_id": "TP-1201-G3",
+    "measurand": "TEMP",
+    "effect": "continuing",
+    "effect_name": "上升减缓",
+    "value_at_since": 30.364,
+    "latest": 32.257,
+    "change_since": 1.893,
+    "rate_before_per_hour": 0.258,
+    "rate_after_per_hour": 0.076,
+    "rate_reduction_pct": 70.6,
+    "new_marker_gases": [],
+    "basis": [
+     "起点后速率 0.076/h ≤ 起点前 0.258/h × 0.5，明显减缓但仍在上升"
+    ],
+    "new_marker_gases_text": "",
+    "before_label": "起点前",
+    "after_label": "起点后",
+    "at_label": "起点时"
+   }
+  ],
+  "sealed_off": [],
+  "sealed_off_text": "",
+  "escalation_suggested": true,
+  "method": "逐测点处置前后速率比较后汇总（任一恶化→恶化；全部已受控→已受控；否则需继续处置；观测不足的测点不参与）。判据为演示占位值，需按本矿制度审定"
+ }
+}

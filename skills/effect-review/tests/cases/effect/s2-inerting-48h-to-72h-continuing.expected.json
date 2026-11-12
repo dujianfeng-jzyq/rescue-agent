@@ -28,6 +28,11 @@
   "observed_h_at_next_review": 36.0,
   "overall": "continuing",
   "overall_name": "需继续处置",
+  "treated": true,
+  "since_label": "处置开始",
+  "before_label": "处置前",
+  "after_label": "处置后",
+  "at_label": "处置时",
   "basis": [
    "参与判定的 8 个测点中 2 个已受控、6 个需继续处置，无恶化"
   ],
@@ -86,7 +91,10 @@
     "basis": [
      "处置后速率 0.057/h ≤ 处置前 0.220/h × 0.5，明显减缓但仍在上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "BT-1201-G2",
@@ -103,7 +111,10 @@
     "basis": [
      "处置后速率 0.056/h ≤ 处置前 0.156/h × 0.5，明显减缓但仍在上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "BT-1201-G3",
@@ -120,7 +131,10 @@
     "basis": [
      "处置后速率 0.031/h ≤ 处置前 0.095/h × 0.5，明显减缓但仍在上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "SM-1201-RET",
@@ -137,7 +151,10 @@
     "basis": [
      "处置后速率 0.007/h ≤ 0.0（|速率| < 0.01 按不变处理），已停止上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "SM-1201-UC",
@@ -154,7 +171,10 @@
     "basis": [
      "处置后速率 0.007/h ≤ 0.0（|速率| < 0.01 按不变处理），已停止上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "TP-1201-G1",
@@ -171,7 +191,10 @@
     "basis": [
      "处置后速率 0.075/h ≤ 处置前 0.389/h × 0.5，明显减缓但仍在上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "TP-1201-G2",
@@ -188,7 +211,10 @@
     "basis": [
      "处置后速率 0.091/h ≤ 处置前 0.421/h × 0.5，明显减缓但仍在上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    },
    {
     "sensor_id": "TP-1201-G3",
@@ -205,7 +231,10 @@
     "basis": [
      "处置后速率 0.015/h ≤ 处置前 0.034/h × 0.5，明显减缓但仍在上升"
     ],
-    "new_marker_gases_text": ""
+    "new_marker_gases_text": "",
+    "before_label": "处置前",
+    "after_label": "处置后",
+    "at_label": "处置时"
    }
   ],
   "sealed_off": [],

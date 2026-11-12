@@ -27,7 +27,7 @@ import type RescueKnowledge from '../knowledge/index.ts'
 import { FLOW, runFireAssessment } from './assessment.ts'
 import { STAGE, type StageRunner } from './explanation.ts'
 import { describeFieldCard, loadFieldConditions, resolveFieldChoices } from './field-conditions.ts'
-import { describeOptions, interpretChoice, loadResponseOptions, planKeysFor, priorChoice } from './response-options.ts'
+import { applyPriorChoice, describeOptions, interpretChoice, loadResponseOptions, planKeysFor, priorChoice } from './response-options.ts'
 import { draftFirefightingPlan, draftSealingPlan, FIREFIGHTING, type HumanInput, type PlanFlow, type Redline, SEALING } from './sealing.ts'
 import { IncidentStore } from '../incident/store.ts'
 import { evidenceAsOf, noteOnIncident } from '../incident/timeline.ts'
@@ -87,7 +87,13 @@ export function apply(ctx: Context, config: Config) {
       // 依据的数据时间（记录的 as_of）一并记下：告警是否已被这次处理覆盖按它判断，不按写入时间线的先后
       const asOf = await evidenceAsOf(recordIds, (rid) => ev.evidence.getRecord(rid))
       // 复评的结论和下次复评时刻也记下：add_followup 的缺省到点、get_response_options 要不要再问都按它判断
-      const review = type === 'effect_review' ? { overall: out.result?.overall, next_review_at: out.result?.next_review_at?.slice?.(0, 19) } : {}
+      // 研判的预警等级也记下：add_followup 按当前等级限复评间隔
+      const review =
+        type === 'effect_review'
+          ? { overall: out.result?.overall, next_review_at: out.result?.next_review_at?.slice?.(0, 19) }
+          : type === 'assessment'
+            ? { level: out.result?.warning?.level }
+            : {}
       const note = { type, text: String(out.card?.summary ?? ''), record_ids: recordIds, ...(asOf ? { as_of: asOf } : {}), ...Object.fromEntries(Object.entries(review).filter(([, v]) => typeof v === 'string')) }
       const id = await noteOnIncident(incidents, panel, note, async () => String((await ev.mineData.call('get_clock', {})).now).slice(0, 19))
       if (id) out.incident_id = id
@@ -261,23 +267,7 @@ export function apply(ctx: Context, config: Config) {
         if (!out.card || !args.panel || !incidents) return toJson(out)
         const inc = await incidents.findOpen('fire', String(args.panel))
         if (!inc) return toJson(out)
-        const prior = priorChoice(await incidents.entries(inc.incident_id), String(args.level))
-        out.prior = prior
-        if (!prior.ask) {
-          out.card = null
-          out.note = prior.declined_at
-            ? `${prior.reason}：不再问操作员，也不下发处置；继续跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出卡片。`
-            : `${prior.reason}：不再问操作员，也不重新下发同样的方案；继续按已下发的方案跟踪（登记复评）。复评结论为恶化时再调本工具，它会给出追加处置的卡片。`
-        }
-        if (prior.ask && prior.conflict) {
-          out.card = { ...out.card, question: `${out.card.question}。上次既勾选了处置又输入了“不采取处置”，请只选一种` }
-          out.note = `${prior.reason}。${out.note}`
-        } else if (prior.ask && prior.issued_at) {
-          // 追加：卡片上提醒已下发的不用再选（代码不过滤：再选会随新方案再下发一次）
-          out.card = { ...out.card, question: `${out.card.question}。本级已下发过方案（${prior.issued_at}），已下发的处置不用再选` }
-          out.note = `${prior.reason}。${out.note}`
-        }
-        return toJson(out)
+        return toJson(applyPriorChoice(out, priorChoice(await incidents.entries(inc.incident_id), String(args.level))))
       },
     }),
   )

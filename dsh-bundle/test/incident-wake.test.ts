@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
 
-import { registerTools } from '../src/incident/index.ts'
+import { defaultFollowup, followupParams, registerTools } from '../src/incident/index.ts'
 import { alertStatuses, IncidentStore } from '../src/incident/store.ts'
 import { evidenceAsOf } from '../src/incident/timeline.ts'
 import { composeMessage, Waker } from '../src/incident/wake.ts'
@@ -276,6 +276,45 @@ describe('事件工具', () => {
     assert.equal(((await call('add_followup', { incident_id: id, after_h: 1, expect: 'x' })) as any).due_at, '2026-11-05T11:00:00')
   })
 
+  it('发布预警、升级、加密监测不算新的处置；撤人、调度、方案算（2026-11-11）', async () => {
+    const { store, call } = await tools()
+    const id = await store.open('2026-11-05T08:00:00', { category: 'fire', panel: '1201', summary: 'x' })
+    await store.append(id, '2026-11-05T09:00:00', 'note', 'flow', { type: 'effect_review', text: 'x', next_review_at: '2026-11-05T21:00:00' })
+    for (const tool of ['publish_warning', 'escalate_emergency', 'start_monitoring']) {
+      await store.append(id, '2026-11-05T09:10:00', 'note', 'guard', { type: 'action', tool, status: 'issued' })
+    }
+    const paced: any = await call('add_followup', { incident_id: id, expect: 'x' })
+    assert.equal(paced.due_at, '2026-11-05T21:00:00')
+    assert.match(paced.basis, /没有新处置/)
+    for (const tool of ['notify_evacuation', 'issue_dispatch_order']) {
+      const id2 = await store.open('2026-11-05T08:00:00', { category: 'fire', panel: `P-${tool}`, summary: 'x' })
+      await store.append(id2, '2026-11-05T09:00:00', 'note', 'flow', { type: 'effect_review', text: 'x', next_review_at: '2026-11-05T21:00:00' })
+      await store.append(id2, '2026-11-05T09:10:00', 'note', 'guard', { type: 'action', tool, status: 'issued' })
+      assert.match(((await call('add_followup', { incident_id: id2, expect: 'x' })) as any).basis, /新的处置/, tool)
+    }
+  })
+
+  it('按当前预警等级限复评间隔，取较早的；封闭方案下发后不限；给了 after_h 不限', () => {
+    const p = { default_after_h: 2, max_after_h: 48, level_cap_h: { blue: 4, yellow: 4, orange: 2, red: 1 } }
+    const now = '2026-11-05T10:00:00'
+    const e = (kind: string, by: string, data: Record<string, unknown>, at = '2026-11-05T09:00:00') => ({ event_id: 'x', at, kind, by, data }) as any
+    const review = e('note', 'flow', { type: 'effect_review', next_review_at: '2026-11-05T22:00:00', overall: 'worsening' })
+    // 橙色、复评说 12 小时后：限到 2 小时
+    const orange = defaultFollowup([e('note', 'flow', { type: 'assessment', level: 'orange' }), review], now, p)
+    assert.equal(orange.due_at, '2026-11-05T12:00:00')
+    assert.match(orange.basis, /按复评给出的下次复评时刻 2026-11-05T22:00:00；当前预警等级 橙色（严重），复评间隔不超过 2 小时，按 2 小时$/)
+    // 等级取最近一次研判；黄色上限 4 小时
+    assert.equal(defaultFollowup([e('note', 'flow', { type: 'assessment', level: 'orange' }), e('note', 'flow', { type: 'assessment', level: 'yellow' }), review], now, p).due_at, '2026-11-05T14:00:00')
+    // 红色封闭前：默认 2 小时也限到 1 小时
+    assert.equal(defaultFollowup([e('note', 'flow', { type: 'assessment', level: 'red' })], now, p).due_at, '2026-11-05T11:00:00')
+    // 封闭方案下发后：不按等级限
+    const sealed = defaultFollowup([e('note', 'flow', { type: 'assessment', level: 'red' }), e('note', 'guard', { type: 'action', tool: 'issue_sealing_plan', status: 'issued' }, '2026-11-05T09:30:00'), e('note', 'flow', { type: 'effect_review', next_review_at: '2026-11-05T22:00:00' }, '2026-11-05T09:40:00')], now, p)
+    assert.equal(sealed.due_at, '2026-11-05T22:00:00')
+    // 没有等级（旧时间线）或没有配置：不限
+    assert.equal(defaultFollowup([review], now, p).due_at, '2026-11-05T22:00:00')
+    assert.equal(defaultFollowup([e('note', 'flow', { type: 'assessment', level: 'orange' }), review], now, { default_after_h: 2, max_after_h: 48 }).due_at, '2026-11-05T22:00:00')
+  })
+
   it('有未确认告警不能关闭；get_incident 给出时间线', async () => {
     const { store, call } = await tools()
     const id = await store.open('2026-11-05T08:00:00', { category: 'fire', panel: '1201', summary: 'x' })
@@ -285,5 +324,13 @@ describe('事件工具', () => {
     assert.deepEqual(v.pending_alerts, [a.event_id])
     assert.equal(v.pending_alert_details[0].summary, 's')
     assert.equal(v.timeline.length, 2)
+  })
+})
+
+describe('跟踪参数文件', () => {
+  it('followup.yaml 的等级上限能读出来（占位值）', async () => {
+    const p = await followupParams(join(import.meta.dirname, '..', '..', 'skills'))
+    assert.deepEqual(Object.keys(p.level_cap_h ?? {}).sort(), ['blue', 'orange', 'red', 'yellow'])
+    assert.ok(Object.values(p.level_cap_h!).every((h) => h > 0 && h <= p.max_after_h))
   })
 })
