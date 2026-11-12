@@ -37,6 +37,15 @@ def level_of(summary: str) -> str | None:
     return m.group(1) if m else None
 
 
+def alert_level(data: dict[str, Any]) -> str | None:
+    """告警升到的等级（中文名）：优先读监听器写的结构化字段 level_to，没有（旧告警）再解析摘要文字。
+    原来只解析文字，监听器的措辞一改，导演就认不出升级（2026-11-12 代码复查第 5 轮）。"""
+    lv = data.get("level_to")
+    if isinstance(lv, str):
+        return LEVEL_NAMES.get(lv)  # 蓝色等不在演示流程里的等级为 None
+    return level_of(str(data.get("summary", "")))
+
+
 def load_flow(path: Path) -> dict[str, Any]:
     flow = yaml.safe_load(path.read_text(encoding="utf-8"))
     validate_flow(flow)
@@ -327,7 +336,7 @@ class Director:
                         continue
                 except ValueError:
                     continue
-                lv = level_of((e.get("data") or {}).get("summary", ""))
+                lv = alert_level(e.get("data") or {})
                 if lv:
                     out.append(lv)
         return out

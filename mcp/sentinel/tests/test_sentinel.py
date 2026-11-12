@@ -260,6 +260,16 @@ async def test_mine_alarm_ingested_once(tmp_path, monkeypatch):
 
 
 @arun
+async def test_level_up_alert_states_the_new_level(tmp_path, monkeypatch):
+    """等级升高的异常告警带结构化的 level_to（演示导演按它推进）；等级没升的异常不带。"""
+    f = Fake(tmp_path, monkeypatch)
+    (a,) = await f.step(result("yellow", "latent", reasons=["预警等级由 无 升为 黄色（预警）"], escalated=True))
+    assert a["data"]["level_to"] == "yellow"
+    (b,) = await f.step(result("yellow", "latent", alarms=["R@S"], reasons=["新的实时报警：R@S"], escalated=True))
+    assert "level_to" not in b["data"]
+
+
+@arun
 async def test_seen_alarms_keep_the_most_recent(tmp_path, monkeypatch):
     """已见报警只保留最近见到的 500 条（按第一次见到的先后），不按编号排序截断：编号不按时间递增时新报警不能被挤掉（代码复查第 3 轮）。"""
     f = Fake(tmp_path, monkeypatch)

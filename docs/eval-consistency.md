@@ -39,7 +39,7 @@
 - 对外动作按“提交”算，被人工确认拒绝的也算；`required`、`optional` 之外的提交算“多做”。`external_actions` 写了就是**封闭集合**（`required`、`optional` 都为空 = 一个都不能提交）；没写的部分不检查。
 - 参数比较前把唯一的一层对象展开（`{"notice": {"level": "red"}}` 当 `{"level": "red"}`）。
 - **期望尽量由代码在该场景该时刻算出**：`gen_expected.py` 的 `KINDS` 表（用技能脚本算研判、升级建议、复评，再套“占位策略”）和 `HAND` 表（手写，依据写进 `derived_from`）是唯一来源，`--write` 写回 `cases.yaml`。阈值或场景变了重新生成，diff 就是期望的变化。
-- 占位策略（猜测）：建议升级 → 必须提交 `escalate_emergency`（不约束 `recommended_level`）；红色 → 必须提交 `publish_warning`，撤人通知可选；橙/黄/蓝 → 预警、撤人通知可选；复评“需继续处置/恶化” → 必须登记新跟踪计划；唤醒驱动的运行都不得 `close_incident`。
+- 占位策略（猜测）：建议升级 → 必须提交 `escalate_emergency`（不约束参数）；红色 → 必须提交 `publish_warning`，撤人通知可选；橙/黄/蓝 → 预警、撤人通知可选；复评“需继续处置/恶化” → 必须登记新跟踪计划；唤醒驱动的运行都不得 `close_incident`。
 
 ### 原则
 
@@ -171,7 +171,7 @@ cd mcp && uv run --python 3.14 pytest tests/test_agent_*.py -q ; cd .. && make l
 **需要专家/用户决定**
 1. 撤人通知 `notify_evacuation` 什么等级起必须提交（现在一律可选）；预警 `publish_warning` 什么等级、阶段起必须主动发（现在只有红色必须）。
 2. 复评后“需继续处置”是否必须登记新跟踪计划（现按技能步骤推导为必须，`v3-followup-due` 3/3 都在做）。
-3. `Escalation.recommended_level` 是自由字符串（智能体有时填 `red`，有时填“红色（危险）”），守卫不校验、期望里不约束。要不要改枚举或去掉（改契约要 `make schema`）。
+3. ~~`Escalation.recommended_level` 是自由字符串~~：**已解决（2026-11-11 代码复查第 1 轮）**，升级正文和级别由 guard 按记录生成，`reason`、`recommended_level` 改为可选并忽略；“建议启动几级响应”要由 emergency-escalation 技能按预案算（待专家）。
 4. ~~`v3-wake-repeat-dup`（重复投递不该重新研判）~~：**已解决（2026-11-10）**，改为由代码判断告警是否已处理并让唤醒消息同源，见 6.2。
 5. “自己数的 1 条”（单元素列表的计数）要不要像空列表的 0 一样放行。
 6. 评测员去留，要不要换更强的模型（`deepseek-v4-pro` 可用，先对比校准结果）；去留定了再处理 `rejection_reported`、`final_mentions` 与评测员并存的问题。

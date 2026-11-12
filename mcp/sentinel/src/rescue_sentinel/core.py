@@ -31,6 +31,8 @@ from rescue_contract.collect import collect, parse_collect_spec
 from rescue_contract.incidents import IncidentStore
 from rescue_contract.skills import default_root, load_skill, run_script
 
+_LEVEL_ORDER = ("none", "blue", "yellow", "orange", "red")  # 与 fire-assessment 的 LEVELS 相同
+
 CallTool = Callable[[str, dict[str, Any]], Awaitable[Any]]
 BY = "sentinel"
 
@@ -149,7 +151,9 @@ class Sentinel:
             if res["escalated"] or ps["anomaly_streak"] >= self.cfg["confirm_checks"]:
                 summary = f"{panel} 工作面：" + "；".join(res["reasons"])
                 iid = self._incident_for("fire", panel, now, f"{panel} 工作面异常")
-                out.append(self._alert(iid, now, "anomaly", summary, reasons=res["reasons"], check=brief))
+                # 预警等级比基线升高时写明升到哪一级（结构化，演示导演按它推进，不解析摘要文字）
+                rose = _LEVEL_ORDER.index(res["level"]) > _LEVEL_ORDER.index((base or {}).get("level", "none"))
+                out.append(self._alert(iid, now, "anomaly", summary, reasons=res["reasons"], check=brief, **({"level_to": res["level"]} if rose else {})))
                 ps["baseline"], ps["anomaly_streak"] = new_base, 0
             return out
         ps["anomaly_streak"] = 0

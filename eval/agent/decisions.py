@@ -9,8 +9,8 @@
       derived_from: {...}                      # 生成脚本（gen_expected.py）写入的依据，只给人看
       external_actions:                        # 对外动作（actions 服务的工具）；封闭集合：required 和 optional 之外的算多做
         required:
-          escalate_emergency: {recommended_level: red}   # 至少提交一次；每次提交的参数都要包含这些键值
-          publish_warning: {level: red}
+          escalate_emergency: {}                 # 至少提交一次（升级的理由和级别由 guard 按记录生成，参数不约束）
+          publish_warning: {level: red}          # 每次提交的参数都要包含这些键值
         optional: {}                           # 可以提交也可以不提交（参数同样要匹配）
       flows_called: [run_fire_assessment]      # 这些工具（短名）至少调用过一次
       flows_forbidden: [run_fire_assessment]   # 这些工具一次都不该调用（如重复投递不该重新研判）
@@ -118,5 +118,5 @@ def compare(expect: dict, calls: list[tuple[str, str]]) -> dict:
         if tool in b1["tools"]:
             problems.append(f"不该做：调用了 {tool}")
 
-    actual = {tool: [{k: v for k, v in a.items() if k in ("level", "recommended_level")} for a in runs] for tool, runs in b1["actions"].items()}
+    actual = {tool: [{k: v for k, v in a.items() if k == "level"} for a in runs] for tool, runs in b1["actions"].items()}
     return {"ok": not problems, "problems": problems, "actual": actual}

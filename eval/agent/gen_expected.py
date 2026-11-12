@@ -6,7 +6,7 @@
     uv run --project mcp python eval/agent/gen_expected.py --write         # 写进 cases.yaml（替换已有的 expect_decisions 块）
 
 占位策略（我们的猜测，不是专家规则，待审定）：
-- 建议升级 → 必须提交 escalate_emergency（不约束 recommended_level：契约里它是自由字符串）；不建议升级 → 不提交；
+- 建议升级 → 必须提交 escalate_emergency（不约束参数：升级正文和级别由 guard 按记录生成，智能体填的 reason、recommended_level 不用）；不建议升级 → 不提交；
 - 预警等级红 → 必须提交 publish_warning（level=red），撤人通知 notify_evacuation 可选；橙、黄、蓝 → 预警可提交可不提交（门槛没有定义）；无 → 不提交；
 - 复评结论“需继续处置/恶化” → 必须登记新的跟踪计划、记录复评结论，且不得关闭事件；“已受控” → 记录复评结论，不得关闭事件。
   唤醒驱动的运行都不得关闭事件（技能：操作员确认可以结束时才 close_incident）。
@@ -239,7 +239,7 @@ def expected(msc, case: dict) -> dict:
         return {"status": "placeholder", "derived_from": derived, "external_actions": {"required": {}, "optional": {}}, "flows_called": flows}
     required, optional = {}, {}
     if a["recommend"]:
-        # recommended_level 是自由字符串（契约没有定义取值），智能体有时填 red、有时填“红色（危险）”，不约束
+        # 不约束参数：2026-11-11 代码复查第 1 轮起，升级正文和级别由 guard 按记录生成，智能体填的 reason、recommended_level 不发出
         required["escalate_emergency"] = {}
     if a["level"] == "red":
         required["publish_warning"] = {"level": "red"}

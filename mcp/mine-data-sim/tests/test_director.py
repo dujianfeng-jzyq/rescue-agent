@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from rescue_mine_data_sim.director import Director, level_of, load_flow, validate_flow
+from rescue_mine_data_sim.director import Director, alert_level, level_of, load_flow, validate_flow
 from rescue_mine_data_sim.scenarios import scenario_dir
 from rescue_mine_data_sim.server import SimHolder
 
@@ -53,6 +53,14 @@ def test_level_of():
     assert level_of("211016 工作面：预警等级由 无 升为 黄色（预警）") == "黄色"
     assert level_of("预警等级由 橙色（严重） 升为 红色（危险）") == "红色"
     assert level_of("监听降级") is None
+
+
+def test_alert_level_prefers_the_structured_field():
+    """监听器写了 level_to 就按它，不看摘要文字（措辞改了也认得出）；没有时退回解析文字。"""
+    assert alert_level({"level_to": "orange", "summary": "措辞改了：等级上升"}) == "橙色"
+    assert alert_level({"level_to": "blue", "summary": "预警等级由 无 升为 蓝色（关注）"}) is None  # 蓝色不在演示流程里
+    assert alert_level({"summary": "预警等级由 黄色（预警） 升为 橙色（严重）"}) == "橙色"
+    assert alert_level({"summary": "新的实时报警"}) is None
 
 
 def test_flow_valid_and_rejects_bad():
