@@ -135,14 +135,17 @@ def setup_incident(case: dict, mine_now: str, fmt: dict[str, str]) -> None:
     fmt.update(incident_id=iid, alert_id=alert["event_id"], mine_now=mine_now[:19])
 
 
+MODEL_MENU = re.compile(r"Model|模型")
+
+
 def new_session(page: Page) -> None:
-    page.get_by_role("button", name="New Session").first.click()
+    page.get_by_role("button", name=re.compile(r"New Session|新会话")).first.click()  # 网页端缺省中文（bundle 的 locale 设置），英文也认
     page.locator("[data-composer-input]").wait_for()
 
 
 def current_model(page: Page) -> str | None:
     page.locator(MODEL_BUTTON).click()
-    page.get_by_role("menuitem", name="Model").click()
+    page.get_by_role("menuitem", name=MODEL_MENU).click()
     sel = page.locator('[role=menuitemradio][aria-checked=true] [data-provider-id]').first
     out = f"{sel.get_attribute('data-provider-id')}/{sel.get_attribute('data-model-id')}" if sel.count() else None
     page.keyboard.press("Escape")
@@ -152,7 +155,7 @@ def current_model(page: Page) -> str | None:
 def select_model(page: Page, model: str) -> None:
     provider, _, model_id = model.partition("/")
     page.locator(MODEL_BUTTON).click()
-    page.get_by_role("menuitem", name="Model").click()
+    page.get_by_role("menuitem", name=MODEL_MENU).click()
     item = page.locator(f'[role=menuitemradio]:has([data-provider-id="{provider}"][data-model-id="{model_id}"])')
     if not item.count():
         page.keyboard.press("Escape")

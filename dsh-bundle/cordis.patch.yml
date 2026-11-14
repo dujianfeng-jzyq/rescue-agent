@@ -4,6 +4,13 @@
 # 顶层 `- id: xxx` 是按 id 覆盖已有行（会整体替换该行的 config）；`- insert:` 是新增行。
 # 依赖的环境变量见仓库根目录 .env.example。
 
+# ── 0. 网页端界面语言缺省中文 ─────────────────────────────────────────────
+# 不设时 DSH 按浏览器语言（navigator.languages）选，英文浏览器看到的确认弹窗、按钮等是英文。
+# 这里是 bundle 层的缺省值：配置档自己的 cordis.patch.yml 在它之上，设置 → 通用里改语言仍然有效、重置后回到中文。
+- id: locale
+  config:
+    preference: zh
+
 # ── 1. 审批策略固定为 ask ─────────────────────────────────────────────────
 # dsh-base 会在 DSH_PERMISSION_MODE=danger-full-access 时把策略改成 never（自动拒绝一切需确认的操作）。
 # 救援场景下人工确认不能被环境变量关掉，这里写死。
