@@ -260,6 +260,98 @@ def test_ts_flow_matches_python(sim_s4_60, tmp_path, monkeypatch):
     assert n_reports == 4  # 研判报告、升级建议、研判要点、检测结果
 
 
+def _fake_provider():
+    """假的提供方路径规划服务：/healthz 和 /api/v1/routes（一律返回空 routes）。返回（地址, 收到的请求, 关闭函数）。"""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    seen: list[dict] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def _send(self, body: bytes, ctype: str):
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            self._send(b"ok", "text/plain")
+
+        def do_POST(self):
+            seen.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            self._send(b'{"routes":[]}', "application/json")
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{srv.server_address[1]}", seen, srv.shutdown
+
+
+def _route_planner(provider_url: str):
+    """起 route_planner 适配服务（指向 provider_url），返回 MCP 地址（生成器：用完关闭）。"""
+    import time
+
+    port = _free_port()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RESCUE_MCP_TOKEN")}
+    env.update(RESCUE_ROUTE_PLANNER_PORT=str(port), RESCUE_ROUTE_SERVICE_URL=provider_url)
+    proc = subprocess.Popen([sys.executable, "-m", "rescue_route_planner"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(150):
+            try:
+                _get(f"http://127.0.0.1:{port}/healthz")
+                break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise RuntimeError("route_planner 15 秒内没有就绪")
+        yield f"http://127.0.0.1:{port}/mcp"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+
+
+@NEED_NODE
+@pytest.mark.parametrize("mode", ["fake_provider", "planner_down"])
+def test_ts_flow_route_second_opinion(sim_s4_60, tmp_path, mode):
+    """第六版：配置了 route_planner 时研判多出 route_request → route_service → route_compare；route_planner 不可用时
+    研判照常完成（各组记“不可用”）。全部记录仍与 Python 侧一致。"""
+    provider, seen, stop = _fake_provider()
+    planner = _route_planner(provider)
+    try:
+        url = next(planner) if mode == "fake_provider" else f"http://127.0.0.1:{_free_port()}/mcp"
+        env = {k: v for k, v in os.environ.items() if not k.startswith("RESCUE_MCP_")}
+        env["RESCUE_MCP_ROUTE_PLANNER_URL"] = url
+        args = ["node", "tools/fire-assessment.ts", str(SKILLS), str(tmp_path / "records"), str(tmp_path / "ws"), sys.executable, "1201", sim_s4_60]
+        out = subprocess.run(args, cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=180)
+    finally:
+        planner.close()
+        stop()
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    a, records = got["assessment"], got["records"]
+    assert [e["status"] for e in a["events"]].count("failed") == 0
+    assert {e["stage"]: e["status"] for e in a["events"]}["route_compare"] == "completed"
+    cmp_ = records[a["record_ids"]["route_compare"]]["content"]["result"]
+    routes = records[a["record_ids"]["route_service"]]
+    assert routes["kind"] == "evidence" and routes["parent_ids"] == [a["record_ids"]["route_request"]]
+    assert "避灾路线第二意见" in a["report_markdown"]
+    assert a["result"]["route_opinion"]["record_id"] == a["record_ids"]["route_compare"]
+    if mode == "fake_provider":
+        # 两组受威胁人员 × 3 个终点（主井口、回风井口、避难硐室），服务都说没有路线
+        assert len(seen) == 6 and len({b["target"] for b in seen}) == 3 and all(b["maxSmokeTime"] == 900 and b["nodes"][0][2] == 0 for b in seen)
+        assert cmp_["status"] == "ok" and cmp_["counts"] == {"both_none": 1, "ours_route_service_none": 1}
+    else:
+        assert seen == [] and cmp_["status"] == "unavailable" and cmp_["counts"] == {"service_unavailable": 2}
+        assert "第二意见不可用：[route_planner]" in a["report_markdown"]
+    assert _rerun_and_render(records) == (11, 4)  # 研判 8 个脚本 + route_request、route_compare + 检测 1 个；报告数不变
+    store = RecordStore(tmp_path / "records")
+    for rid in records:
+        store.get(rid)
+
+
 @NEED_NODE
 def test_ts_effect_flow_matches_python(sim_s4_60, tmp_path):
     """review_effect：在 s4 第 60 小时注氮并临时密闭，推进 24 小时后复评（模块级的模拟矿井放在最后改状态）。"""

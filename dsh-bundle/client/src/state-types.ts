@@ -67,7 +67,10 @@ export interface StateData {
       count: number
       arrivalMin: number
       route: { reachable: boolean; targetName: string | null; lengthM: number | null; walkMin: number | null; selfRescuerMin: number | null; note: string | null; drawn: boolean; missing: string[] }
+      /** 外部服务的参考路线（第二意见，试验性，第六版）；没有为 null */
+      reference: null | { status: 'route' | 'no_route' | 'unavailable'; caseText: string; text: string; drawn: boolean; missing: string[] }
     }[]
+    referenceRecordId: string | null
   }
   readings: { panel: string | null; rows: ReadingRow[]; error?: string }
   alarms: { items: { id: string; sensorId: string | null; sensor: string; measurand: string | null; level: string; value: number | null; threshold: number | null; unit: string; message: string; raisedAt: string; anchor: string | null }[]; error?: string }

@@ -191,6 +191,14 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                       ? h('div', { class: 'rm-evac-route' }, `撤往 ${r.targetName ?? '—'}${r.lengthM === null ? '' : `，${r.lengthM} 米`}${r.walkMin === null ? '' : `，步行约 ${r.walkMin} 分钟`}${r.selfRescuerMin === null ? '' : `（佩戴自救器约 ${r.selfRescuerMin} 分钟）`}`)
                       : h('div', { class: 'rm-evac-route', 'data-tone': 'bad' }, r.note ?? '无可达路线，需人工研判'),
                     r.reachable && !r.drawn && h('div', { class: 'rm-note' }, `图上未画出：${r.missing.length ? `有 ${r.missing.length} 处没有映射` : '映射不完整'}`),
+                    g.reference &&
+                      h(
+                        'div',
+                        { class: 'rm-evac-ref', 'data-status': g.reference.status, title: g.reference.text },
+                        h('small', null, '参考（外部服务，试验性）：'),
+                        g.reference.caseText,
+                        g.reference.status === 'route' && !g.reference.drawn && h('small', null, '（图上未画出：映射不完整）'),
+                      ),
                   )
                   if (g.anchor) {
                     li.addEventListener('click', () => onFocus(g.anchor!))
@@ -201,6 +209,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                   return li
                 }),
                 ev.method && h('p', { class: 'rm-note' }, ev.method),
+                ev.referenceRecordId && h('p', { class: 'rm-note' }, `参考路线依据记录 ${ev.referenceRecordId}：外部路径规划服务，输入含占位值，只作对照；两者不一致时由人判断，撤人按预案执行。`),
                 h('p', { class: 'rm-note' }, `${ev.schematic ? '示意映射：' : ''}图上折线只表示走哪几段巷道，距离和时间以文字为准。`),
               ),
         )

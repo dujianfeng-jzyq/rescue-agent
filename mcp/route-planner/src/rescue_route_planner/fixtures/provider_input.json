@@ -1,0 +1,124 @@
+{
+  "nodes": [
+    [
+      3550.5,
+      2500.0,
+      200
+    ],
+    [
+      3600.0,
+      2510.5,
+      210
+    ],
+    [
+      3630.5,
+      2550.0,
+      200
+    ],
+    [
+      3440.5,
+      2520.0,
+      220
+    ],
+    [
+      3110.0,
+      2530.0,
+      230
+    ],
+    [
+      3170.0,
+      2540.5,
+      240
+    ],
+    [
+      3390.5,
+      2560.5,
+      150
+    ],
+    [
+      2850.5,
+      2570.5,
+      200
+    ],
+    [
+      3020.5,
+      2580.5,
+      210
+    ],
+    [
+      2770.5,
+      2500.0,
+      190
+    ]
+  ],
+  "edges": [
+    {
+      "source": 0,
+      "target": 1,
+      "height": 3,
+      "width": 5,
+      "windSpeed": 8,
+      "smokeConcentration": 10
+    },
+    {
+      "source": 1,
+      "target": 2,
+      "height": 3,
+      "width": 5,
+      "windSpeed": 8,
+      "smokeConcentration": 0
+    },
+    {
+      "source": 4,
+      "target": 5,
+      "height": 3,
+      "width": 5,
+      "windSpeed": -8,
+      "smokeConcentration": 50
+    },
+    {
+      "source": 5,
+      "target": 6,
+      "height": 3,
+      "width": 5,
+      "windSpeed": -8,
+      "smokeConcentration": 0
+    },
+    {
+      "source": 6,
+      "target": 3,
+      "height": 3,
+      "width": 5,
+      "windSpeed": -8,
+      "smokeConcentration": 100
+    },
+    {
+      "source": 7,
+      "target": 8,
+      "height": 3,
+      "width": 5,
+      "windSpeed": -8,
+      "smokeConcentration": 0
+    },
+    {
+      "source": 8,
+      "target": 4,
+      "height": 3,
+      "width": 5,
+      "windSpeed": -8,
+      "smokeConcentration": 10
+    },
+    {
+      "source": 9,
+      "target": 7,
+      "height": 3,
+      "width": 5,
+      "windSpeed": -8,
+      "smokeConcentration": 0
+    }
+  ],
+  "start": 3,
+  "target": 9,
+  "walkSpeed": 2,
+  "maxSmokeTime": 900
+}

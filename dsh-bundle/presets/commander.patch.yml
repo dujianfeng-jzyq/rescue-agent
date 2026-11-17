@@ -98,6 +98,10 @@
                   runDir: !!js "process.env.RESCUE_RUN_DIR || undefined"
                   # 运行技能脚本的解释器：要装有 skills/requirements.txt 的包。Docker 里是镜像自带的 python3
                   python: !!js "process.env.RESCUE_SKILL_PYTHON || `${process.env.RESCUE_HOME}/mcp/.venv/bin/python`"
+                  # 外部路径规划服务的适配 route_planner（第六版，避灾路线第二意见）：只由本插件按请求记录调用，不作为 MCP 服务挂给智能体。
+                  # 不设地址时研判跳过第二意见
+                  routePlannerUrl: !!js "process.env.RESCUE_MCP_ROUTE_PLANNER_URL || undefined"
+                  routePlannerToken: !!js "process.env.RESCUE_MCP_ROUTE_PLANNER_TOKEN || process.env.RESCUE_MCP_TOKEN || undefined"
               # 知识库：条文索引（离线由 scripts/kb/ 建立，随 bundle 发布）+ RAGFlow 检索。
               # TODO(P5)：RAGFlow 凭据改放 DSH 凭据服务、设置页里配置和测试连接（design-v2 4.7）
               - id: rescue-knowledge

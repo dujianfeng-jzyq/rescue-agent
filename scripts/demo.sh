@@ -7,7 +7,8 @@
 #   scripts/demo.sh logs     跟踪日志
 #
 # 令牌第一次启动时随机生成，存在 var/demo/tokens.env（只有本用户可读）；控制台登录用其中的 RESCUE_SIM_CONTROL_TOKEN。
-# DEEPSEEK_API_KEY、RAGFlow 的配置从 .env 读，只传给需要它的容器。演示数据都在 var/demo/，不混进开发的 var/（CLAUDE.md 约定 9）。
+# DEEPSEEK_API_KEY、RAGFlow 的配置从 .env 读，只传给需要它的容器。
+# .env 里设了 RESCUE_ROUTE_SERVICE_URL（外部路径规划服务，第六版）时另起 route-planner 容器，研判附避灾路线第二意见。演示数据都在 var/demo/，不混进开发的 var/（CLAUDE.md 约定 9）。
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -28,18 +29,32 @@ tokens() {
       echo "RESCUE_SIM_CONTROL_TOKEN=$(openssl rand -hex 16)"
     } >"$DEMO/tokens.env"
     echo "  已生成令牌 var/demo/tokens.env"
-  elif ! grep -q '^RESCUE_MCP_MINE_ACT_TOKEN=' "$DEMO/tokens.env"; then
-    # 第三版新增的写入令牌：旧的 tokens.env 补一行，其他令牌不变
-    echo "RESCUE_MCP_MINE_ACT_TOKEN=$(openssl rand -hex 16)" >>"$DEMO/tokens.env"
-    echo "  已向 var/demo/tokens.env 补充 RESCUE_MCP_MINE_ACT_TOKEN"
   fi
+  # 后来新增的令牌：旧的 tokens.env 补一行，其他令牌不变（第三版的写入令牌、第六版的 route_planner 令牌）
+  for name in RESCUE_MCP_MINE_ACT_TOKEN RESCUE_MCP_ROUTE_PLANNER_TOKEN; do
+    if ! grep -q "^$name=" "$DEMO/tokens.env"; then
+      echo "$name=$(openssl rand -hex 16)" >>"$DEMO/tokens.env"
+      echo "  已向 var/demo/tokens.env 补充 $name"
+    fi
+  done
   mkdir -p "$ROOT/var/map"   # 地图包（真实矿井图，git 忽略）：不放进 var/demo，demo-reset 不清它
   mkdir -p "$DEMO/records" "$DEMO/incidents" "$DEMO/duty" "$DEMO/runs" "$DEMO/ledger" "$DEMO/audit" "$DEMO/dsh-home" "$DEMO/documents"
 }
 
+# 外部路径规划服务：设了地址才启用 route 组（route-planner 容器）并把适配服务的地址给 DSH
+route_profile() {
+  if [ -n "${RESCUE_ROUTE_SERVICE_URL:-}" ]; then
+    export COMPOSE_PROFILES=route DEMO_ROUTE_PLANNER_URL=http://route-planner:8107/mcp RESCUE_ROUTE_SERVICE_URL RESCUE_ROUTE_SERVICE_TOKEN="${RESCUE_ROUTE_SERVICE_TOKEN:-}"
+  else
+    export DEMO_ROUTE_PLANNER_URL=
+  fi
+}
+
 wait_healthy() {
   local deadline=$((SECONDS + 600))
-  for svc in mine-sim actions sentinel dsh; do
+  local svcs=(mine-sim actions sentinel dsh)
+  [ -n "${DEMO_ROUTE_PLANNER_URL:-}" ] && svcs+=(route-planner)
+  for svc in "${svcs[@]}"; do
     while :; do
       id="$("${COMPOSE[@]}" ps -q "$svc")"
       st="$(docker inspect -f '{{.State.Health.Status}}' "$id" 2>/dev/null || echo starting)"
@@ -55,7 +70,8 @@ up() {
   export DEEPSEEK_API_KEY RAGFLOW_BASE_URL="${RAGFLOW_BASE_URL:-}" RAGFLOW_API_KEY="${RAGFLOW_API_KEY:-}" \
     KB_DATASETS_REGULATIONS="${KB_DATASETS_REGULATIONS:-}" KB_DATASETS_PLANS="${KB_DATASETS_PLANS:-}" KB_DATASETS_CASES="${KB_DATASETS_CASES:-}"
   tokens
-  "${COMPOSE[@]}" up -d --build
+  route_profile
+  "${COMPOSE[@]}" up -d --build --remove-orphans
   echo "== 等待健康检查"
   wait_healthy
   local url
@@ -63,14 +79,16 @@ up() {
   echo
   echo "网页端：${url:-http://127.0.0.1:${DEMO_WEB_PORT:-13080}/（带 token 的地址见 scripts/demo.sh logs）}"
   echo "控制台：http://127.0.0.1:${DEMO_CONSOLE_PORT:-13090}/console（控制令牌见 var/demo/tokens.env 的 RESCUE_SIM_CONTROL_TOKEN）"
+  [ -n "${DEMO_ROUTE_PLANNER_URL:-}" ] && echo "避灾路线第二意见：外部路径规划服务 $RESCUE_ROUTE_SERVICE_URL（route-planner 容器）"
+  return 0
 }
 
 case "${1:-}" in
   up) up ;;
-  down) [ -f "$DEMO/tokens.env" ] && "${COMPOSE[@]}" down || true ;;
+  down) [ -f "$DEMO/tokens.env" ] && COMPOSE_PROFILES=route "${COMPOSE[@]}" down || true ;;
   logs) "${COMPOSE[@]}" logs -f --tail 100 ;;
   reset)
-    [ -f "$DEMO/tokens.env" ] && "${COMPOSE[@]}" down || true
+    [ -f "$DEMO/tokens.env" ] && COMPOSE_PROFILES=route "${COMPOSE[@]}" down || true
     # 只清演示数据目录下这几项（不动令牌）；路径都在 $ROOT/var/demo 下
     for d in records incidents duty runs ledger audit dsh-home documents; do
       case "$DEMO/$d" in "$ROOT"/var/demo/*) rm -rf -- "${DEMO:?}/$d" ;; esac

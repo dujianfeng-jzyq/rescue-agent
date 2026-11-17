@@ -75,6 +75,20 @@ services:
     depends_on:
       mine-sim: {condition: service_healthy}
 
+  route-planner:                                  # 外部路径规划服务的适配（第六版，避灾路线第二意见）：.env 里设了 RESCUE_ROUTE_SERVICE_URL 时 demo.sh 才启用
+    <<: *python
+    profiles: [route]
+    command: ["python", "-m", "rescue_route_planner"]
+    environment:
+      RESCUE_MCP_ROUTE_PLANNER_TOKEN: ${RESCUE_MCP_ROUTE_PLANNER_TOKEN:-}
+      RESCUE_MCP_ALLOWED_HOSTS: "route-planner:*"
+      RESCUE_ROUTE_SERVICE_URL: ${RESCUE_ROUTE_SERVICE_URL:-}       # 提供方服务（内网，如 http://192.168.0.200:8080），容器要能访问
+      RESCUE_ROUTE_SERVICE_TOKEN: ${RESCUE_ROUTE_SERVICE_TOKEN:-}   # 提供方支持鉴权后用
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8107/healthz', timeout=3)"]
+      interval: 5s
+      retries: 20
+
   dsh:
     build: {context: .., dockerfile: docker/dsh.Dockerfile}
     image: rescue-demo-dsh
@@ -87,6 +101,8 @@ services:
       RESCUE_MCP_MINE_DATA_URL: http://mine-sim:8101/mcp
       RESCUE_DEMO_STATUS_URL: http://mine-sim:8101/demo/status   # 演示进度（只有导演状态和结局，用只读令牌）：结束时大屏显示“演示已结束”
       RESCUE_MCP_ACTIONS_URL: http://actions:8106/mcp
+      RESCUE_MCP_ROUTE_PLANNER_URL: ${DEMO_ROUTE_PLANNER_URL:-}     # 空：研判不请求避灾路线第二意见
+      RESCUE_MCP_ROUTE_PLANNER_TOKEN: ${RESCUE_MCP_ROUTE_PLANNER_TOKEN:-}
       RESCUE_REDLINE_CHECK_URL: http://actions:8106/redlines/check
       RESCUE_RECORD_DIR: /data/records
       RESCUE_INCIDENT_DIR: /data/incidents        # 事件库：事件插件读写，唤醒插件扫描

@@ -3,6 +3,7 @@
 #
 #   scripts/mcp-up.sh            启动：mine_data（模拟矿井）、actions（guard 守卫）、sentinel（常驻监听器，不是 MCP 服务，没有端口）
 #                                RESCUE_SENTINEL=0 不启动监听器（智能体评测用：评测不要被监听器的告警唤醒）
+#                                设置了 RESCUE_ROUTE_SERVICE_URL 时另外启动 route_planner（外部路径规划服务的适配，第六版）
 #
 # 默认用 `uv run python` 启动；可设置 RESCUE_PYTHON 覆盖（例如已激活的虚拟环境里的 python）。
 set -euo pipefail
@@ -21,8 +22,10 @@ declare -A MODULES=(
   [mine_data]=rescue_mine_data_sim
   [actions]=rescue_actions
   [sentinel]=rescue_sentinel
+  [route_planner]=rescue_route_planner
 )
 ORDER=(mine_data actions)
+[ -z "${RESCUE_ROUTE_SERVICE_URL:-}" ] || ORDER+=(route_planner)
 [ "${RESCUE_SENTINEL:-1}" = 0 ] || ORDER+=(sentinel)
 TARGETS=("${@:-${ORDER[@]}}")
 
@@ -50,7 +53,7 @@ for key in "${TARGETS[@]}"; do
   fi
   var="RESCUE_$(echo "$key" | tr '[:lower:]' '[:upper:]')_PORT"
   case $key in
-    mine_data) port=${!var:-8101} ;; actions) port=${!var:-8106} ;;
+    mine_data) port=${!var:-8101} ;; actions) port=${!var:-8106} ;; route_planner) port=${!var:-8107} ;;
   esac
   for _ in $(seq 1 50); do
     curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1 && break

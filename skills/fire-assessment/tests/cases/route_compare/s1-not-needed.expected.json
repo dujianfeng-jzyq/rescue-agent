@@ -1,0 +1,17 @@
+{
+ "algorithm_version": "route_compare/1.0.0",
+ "params": {},
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-03T08:00:00",
+  "experimental": true,
+  "method": "外部服务结果换回我方巷道编号后与我方路线比较；重合比例 = 共同巷道数 ÷ 两条路线巷道的并集数（试验性）",
+  "computed": false,
+  "status": "not_needed",
+  "note": "未计算受威胁人员，不需要第二意见",
+  "groups": [],
+  "counts": {},
+  "lines": []
+ }
+}

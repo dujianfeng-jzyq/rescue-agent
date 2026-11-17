@@ -1,0 +1,743 @@
+{
+ "algorithm_version": "route_request/1.0.0",
+ "params": {
+  "status": "placeholder",
+  "section_height_m": 3.0,
+  "section_width_m": 4.0,
+  "smoke_concentration_contaminated": 50,
+  "max_smoke_time_s": 900,
+  "wind_speed_limit_m_s": 15,
+  "walk_speed_m_s": 1.0,
+  "default_air_velocity_m_s": 0.5,
+  "min_air_velocity_m_s": 0.2
+ },
+ "warnings": [
+  "外部服务的输入使用占位坐标、断面和烟雾浓度，结果是试验性的第二意见，不替代我方路线"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "experimental": true,
+  "method": "占位坐标（单位圆布局，按巷道长度加中间节点，z = 0）+ 占位断面 + 设计风量估算风速 + 受污染巷道取固定烟雾浓度（试验性）",
+  "needed": true,
+  "note": null,
+  "requests": [
+   {
+    "roadway_id": "R-1201-FACE",
+    "count": 9,
+    "request": {
+     "nodes": [
+      {
+       "id": "N0",
+       "xyz": [
+        26.287,
+        0.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N1",
+       "xyz": [
+        21.266,
+        15.451,
+        0.0
+       ]
+      },
+      {
+       "id": "N2",
+       "xyz": [
+        8.123,
+        25.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N3",
+       "xyz": [
+        -8.123,
+        25.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N4",
+       "xyz": [
+        -21.266,
+        15.451,
+        0.0
+       ]
+      },
+      {
+       "id": "N5",
+       "xyz": [
+        -26.287,
+        0.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N6",
+       "xyz": [
+        -21.266,
+        -15.451,
+        0.0
+       ]
+      },
+      {
+       "id": "N7",
+       "xyz": [
+        -8.123,
+        -25.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N8",
+       "xyz": [
+        8.123,
+        -25.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N9",
+       "xyz": [
+        21.266,
+        -15.451,
+        0.0
+       ]
+      },
+      {
+       "id": "R-MAIN-SHAFT#mid",
+       "xyz": [
+        -261.436,
+        -84.946,
+        0.0
+       ]
+      },
+      {
+       "id": "R-MAIN-IN#mid",
+       "xyz": [
+        -426.118,
+        -586.502,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1201-IN#mid",
+       "xyz": [
+        0.0,
+        -874.963,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1201-FACE#mid",
+       "xyz": [
+        49.785,
+        -68.523,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1201-RET#mid",
+       "xyz": [
+        832.14,
+        -270.379,
+        0.0
+       ]
+      },
+      {
+       "id": "R-RET-MAIN#mid",
+       "xyz": [
+        689.474,
+        224.024,
+        0.0
+       ]
+      },
+      {
+       "id": "R-RET-SHAFT#mid",
+       "xyz": [
+        161.576,
+        222.391,
+        0.0
+       ]
+      },
+      {
+       "id": "R-REFUGE#mid",
+       "xyz": [
+        8.123,
+        0.0,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1202-IN#mid",
+       "xyz": [
+        471.001,
+        0.0,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1202-RET#mid",
+       "xyz": [
+        0.0,
+        -514.998,
+        0.0
+       ]
+      }
+     ],
+     "edges": [
+      {
+       "id": "R-MAIN-SHAFT#a",
+       "source": "N0",
+       "target": "R-MAIN-SHAFT#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 12.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-MAIN-SHAFT#b",
+       "source": "R-MAIN-SHAFT#mid",
+       "target": "N1",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 12.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-MAIN-IN#a",
+       "source": "N1",
+       "target": "R-MAIN-IN#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 9.028,
+       "smoke": 0
+      },
+      {
+       "id": "R-MAIN-IN#b",
+       "source": "R-MAIN-IN#mid",
+       "target": "N2",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 9.028,
+       "smoke": 0
+      },
+      {
+       "id": "R-1201-IN#a",
+       "source": "N2",
+       "target": "R-1201-IN#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-1201-IN#b",
+       "source": "R-1201-IN#mid",
+       "target": "N3",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-1201-FACE#a",
+       "source": "N3",
+       "target": "R-1201-FACE#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.361,
+       "smoke": 50
+      },
+      {
+       "id": "R-1201-FACE#b",
+       "source": "R-1201-FACE#mid",
+       "target": "N4",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.361,
+       "smoke": 50
+      },
+      {
+       "id": "R-1201-RET#a",
+       "source": "N4",
+       "target": "R-1201-RET#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.5,
+       "smoke": 50
+      },
+      {
+       "id": "R-1201-RET#b",
+       "source": "R-1201-RET#mid",
+       "target": "N5",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.5,
+       "smoke": 50
+      },
+      {
+       "id": "R-RET-MAIN#a",
+       "source": "N5",
+       "target": "R-RET-MAIN#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 9.028,
+       "smoke": 50
+      },
+      {
+       "id": "R-RET-MAIN#b",
+       "source": "R-RET-MAIN#mid",
+       "target": "N6",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 9.028,
+       "smoke": 50
+      },
+      {
+       "id": "R-RET-SHAFT#a",
+       "source": "N6",
+       "target": "R-RET-SHAFT#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 12.5,
+       "smoke": 50
+      },
+      {
+       "id": "R-RET-SHAFT#b",
+       "source": "R-RET-SHAFT#mid",
+       "target": "N7",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 12.5,
+       "smoke": 50
+      },
+      {
+       "id": "R-REFUGE#a",
+       "source": "N2",
+       "target": "R-REFUGE#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 0.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-REFUGE#b",
+       "source": "R-REFUGE#mid",
+       "target": "N8",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 0.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-1202-IN#a",
+       "source": "N1",
+       "target": "R-1202-IN#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 3.472,
+       "smoke": 0
+      },
+      {
+       "id": "R-1202-IN#b",
+       "source": "R-1202-IN#mid",
+       "target": "N9",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 3.472,
+       "smoke": 0
+      },
+      {
+       "id": "R-1202-RET#a",
+       "source": "N9",
+       "target": "R-1202-RET#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 3.472,
+       "smoke": 0
+      },
+      {
+       "id": "R-1202-RET#b",
+       "source": "R-1202-RET#mid",
+       "target": "N6",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 3.472,
+       "smoke": 0
+      }
+     ],
+     "start": "R-1201-FACE#mid",
+     "targets": [
+      "N0",
+      "N7",
+      "N8"
+     ],
+     "walk_speed": 1.0,
+     "max_smoke_time": 900
+    }
+   },
+   {
+    "roadway_id": "R-1201-RET",
+    "count": 2,
+    "request": {
+     "nodes": [
+      {
+       "id": "N0",
+       "xyz": [
+        26.287,
+        0.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N1",
+       "xyz": [
+        21.266,
+        15.451,
+        0.0
+       ]
+      },
+      {
+       "id": "N2",
+       "xyz": [
+        8.123,
+        25.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N3",
+       "xyz": [
+        -8.123,
+        25.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N4",
+       "xyz": [
+        -21.266,
+        15.451,
+        0.0
+       ]
+      },
+      {
+       "id": "N5",
+       "xyz": [
+        -26.287,
+        0.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N6",
+       "xyz": [
+        -21.266,
+        -15.451,
+        0.0
+       ]
+      },
+      {
+       "id": "N7",
+       "xyz": [
+        -8.123,
+        -25.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N8",
+       "xyz": [
+        8.123,
+        -25.0,
+        0.0
+       ]
+      },
+      {
+       "id": "N9",
+       "xyz": [
+        21.266,
+        -15.451,
+        0.0
+       ]
+      },
+      {
+       "id": "R-MAIN-SHAFT#mid",
+       "xyz": [
+        -261.436,
+        -84.946,
+        0.0
+       ]
+      },
+      {
+       "id": "R-MAIN-IN#mid",
+       "xyz": [
+        -426.118,
+        -586.502,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1201-IN#mid",
+       "xyz": [
+        0.0,
+        -874.963,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1201-FACE#mid",
+       "xyz": [
+        49.785,
+        -68.523,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1201-RET#mid",
+       "xyz": [
+        832.14,
+        -270.379,
+        0.0
+       ]
+      },
+      {
+       "id": "R-RET-MAIN#mid",
+       "xyz": [
+        689.474,
+        224.024,
+        0.0
+       ]
+      },
+      {
+       "id": "R-RET-SHAFT#mid",
+       "xyz": [
+        161.576,
+        222.391,
+        0.0
+       ]
+      },
+      {
+       "id": "R-REFUGE#mid",
+       "xyz": [
+        8.123,
+        0.0,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1202-IN#mid",
+       "xyz": [
+        471.001,
+        0.0,
+        0.0
+       ]
+      },
+      {
+       "id": "R-1202-RET#mid",
+       "xyz": [
+        0.0,
+        -514.998,
+        0.0
+       ]
+      }
+     ],
+     "edges": [
+      {
+       "id": "R-MAIN-SHAFT#a",
+       "source": "N0",
+       "target": "R-MAIN-SHAFT#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 12.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-MAIN-SHAFT#b",
+       "source": "R-MAIN-SHAFT#mid",
+       "target": "N1",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 12.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-MAIN-IN#a",
+       "source": "N1",
+       "target": "R-MAIN-IN#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 9.028,
+       "smoke": 0
+      },
+      {
+       "id": "R-MAIN-IN#b",
+       "source": "R-MAIN-IN#mid",
+       "target": "N2",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 9.028,
+       "smoke": 0
+      },
+      {
+       "id": "R-1201-IN#a",
+       "source": "N2",
+       "target": "R-1201-IN#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-1201-IN#b",
+       "source": "R-1201-IN#mid",
+       "target": "N3",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-1201-FACE#a",
+       "source": "N3",
+       "target": "R-1201-FACE#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.361,
+       "smoke": 50
+      },
+      {
+       "id": "R-1201-FACE#b",
+       "source": "R-1201-FACE#mid",
+       "target": "N4",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.361,
+       "smoke": 50
+      },
+      {
+       "id": "R-1201-RET#a",
+       "source": "N4",
+       "target": "R-1201-RET#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.5,
+       "smoke": 50
+      },
+      {
+       "id": "R-1201-RET#b",
+       "source": "R-1201-RET#mid",
+       "target": "N5",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 2.5,
+       "smoke": 50
+      },
+      {
+       "id": "R-RET-MAIN#a",
+       "source": "N5",
+       "target": "R-RET-MAIN#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 9.028,
+       "smoke": 50
+      },
+      {
+       "id": "R-RET-MAIN#b",
+       "source": "R-RET-MAIN#mid",
+       "target": "N6",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 9.028,
+       "smoke": 50
+      },
+      {
+       "id": "R-RET-SHAFT#a",
+       "source": "N6",
+       "target": "R-RET-SHAFT#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 12.5,
+       "smoke": 50
+      },
+      {
+       "id": "R-RET-SHAFT#b",
+       "source": "R-RET-SHAFT#mid",
+       "target": "N7",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 12.5,
+       "smoke": 50
+      },
+      {
+       "id": "R-REFUGE#a",
+       "source": "N2",
+       "target": "R-REFUGE#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 0.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-REFUGE#b",
+       "source": "R-REFUGE#mid",
+       "target": "N8",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 0.5,
+       "smoke": 0
+      },
+      {
+       "id": "R-1202-IN#a",
+       "source": "N1",
+       "target": "R-1202-IN#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 3.472,
+       "smoke": 0
+      },
+      {
+       "id": "R-1202-IN#b",
+       "source": "R-1202-IN#mid",
+       "target": "N9",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 3.472,
+       "smoke": 0
+      },
+      {
+       "id": "R-1202-RET#a",
+       "source": "N9",
+       "target": "R-1202-RET#mid",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 3.472,
+       "smoke": 0
+      },
+      {
+       "id": "R-1202-RET#b",
+       "source": "R-1202-RET#mid",
+       "target": "N6",
+       "height": 3.0,
+       "width": 4.0,
+       "wind_speed": 3.472,
+       "smoke": 0
+      }
+     ],
+     "start": "R-1201-RET#mid",
+     "targets": [
+      "N0",
+      "N7",
+      "N8"
+     ],
+     "walk_speed": 1.0,
+     "max_smoke_time": 900
+    }
+   }
+  ]
+ }
+}

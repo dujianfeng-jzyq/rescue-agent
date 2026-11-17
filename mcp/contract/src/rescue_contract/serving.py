@@ -35,7 +35,7 @@ DEFAULT_PORTS = {
     "dispatch": 8104,
     "kb": 8105,
     "actions": 8106,
-    "workflow": 8107,
+    "route_planner": 8107,   # 外部路径规划服务的适配（第六版）
 }
 
 

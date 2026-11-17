@@ -1,0 +1,139 @@
+{
+ "algorithm_version": "route_compare/1.0.0",
+ "params": {},
+ "warnings": [
+  "外部服务的结果是试验性的第二意见（输入含占位值），不替代我方路线；两者不一致时都显示，由人判断"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "experimental": true,
+  "method": "外部服务结果换回我方巷道编号后与我方路线比较；重合比例 = 共同巷道数 ÷ 两条路线巷道的并集数（试验性）",
+  "computed": true,
+  "status": "ok",
+  "note": null,
+  "groups": [
+   {
+    "roadway_id": "R-1201-FACE",
+    "count": 9,
+    "ours": {
+     "reachable": true,
+     "target": "N8",
+     "target_name": "1201避难硐室",
+     "roadways": [
+      "R-1201-IN",
+      "R-REFUGE"
+     ],
+     "length_m": 1960
+    },
+    "service": {
+     "status": "route",
+     "error": null,
+     "per_target": [
+      {
+       "target": "N0",
+       "status": "ok"
+      },
+      {
+       "target": "N7",
+       "status": "ok"
+      },
+      {
+       "target": "N8",
+       "status": "ok"
+      }
+     ],
+     "target": "N8",
+     "target_name": "1201避难硐室",
+     "nodes": [
+      "N3",
+      "N2",
+      "N8"
+     ],
+     "roadways": [
+      "R-1201-IN",
+      "R-REFUGE"
+     ],
+     "length_m": 1960,
+     "effective_distance_m": 2433,
+     "smoke_time_s": 200,
+     "temporary_escape_time_s": 200,
+     "smoke_roadways": [],
+     "ambiguous": false
+    },
+    "comparison": {
+     "case": "same_route",
+     "same_target": true,
+     "same_route": true,
+     "roadway_overlap": 1.0,
+     "length_diff_m": 0,
+     "case_text": "两种路线相同"
+    },
+    "text": "R-1201-FACE（9 人）：两种路线相同。参考路线经 R-1201-IN → R-REFUGE 到1201避难硐室，约 1960 米，烟中通行约 200 秒（只在人员所在巷道内）（外部服务，试验性）"
+   },
+   {
+    "roadway_id": "R-1201-RET",
+    "count": 2,
+    "ours": {
+     "reachable": false
+    },
+    "service": {
+     "status": "route",
+     "error": null,
+     "per_target": [
+      {
+       "target": "N0",
+       "status": "ok"
+      },
+      {
+       "target": "N7",
+       "status": "ok"
+      },
+      {
+       "target": "N8",
+       "status": "ok"
+      }
+     ],
+     "target": "N8",
+     "target_name": "1201避难硐室",
+     "nodes": [
+      "N4",
+      "N3",
+      "N2",
+      "N8"
+     ],
+     "roadways": [
+      "R-1201-FACE",
+      "R-1201-IN",
+      "R-REFUGE"
+     ],
+     "length_m": 2970,
+     "effective_distance_m": 4266,
+     "smoke_time_s": 2033,
+     "temporary_escape_time_s": 2033,
+     "smoke_roadways": [
+      "R-1201-FACE"
+     ],
+     "ambiguous": false
+    },
+    "comparison": {
+     "case": "ours_none_service_through_smoke",
+     "same_target": null,
+     "same_route": null,
+     "roadway_overlap": null,
+     "length_diff_m": null,
+     "case_text": "我方避开受污染巷道后无路可走；外部服务给出穿过有烟巷道的参考路线，能否穿烟由人判断"
+    },
+    "text": "R-1201-RET（2 人）：我方避开受污染巷道后无路可走；外部服务给出穿过有烟巷道的参考路线，能否穿烟由人判断。参考路线经 R-1201-FACE → R-1201-IN → R-REFUGE 到1201避难硐室，约 2970 米，烟中通行约 2033 秒（经过受污染巷道 R-1201-FACE）（外部服务，试验性）"
+   }
+  ],
+  "counts": {
+   "ours_none_service_through_smoke": 1,
+   "same_route": 1
+  },
+  "lines": [
+   "R-1201-FACE（9 人）：两种路线相同。参考路线经 R-1201-IN → R-REFUGE 到1201避难硐室，约 1960 米，烟中通行约 200 秒（只在人员所在巷道内）（外部服务，试验性）",
+   "R-1201-RET（2 人）：我方避开受污染巷道后无路可走；外部服务给出穿过有烟巷道的参考路线，能否穿烟由人判断。参考路线经 R-1201-FACE → R-1201-IN → R-REFUGE 到1201避难硐室，约 2970 米，烟中通行约 2033 秒（经过受污染巷道 R-1201-FACE）（外部服务，试验性）"
+  ]
+ }
+}

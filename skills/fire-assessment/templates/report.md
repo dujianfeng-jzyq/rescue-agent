@@ -1,5 +1,5 @@
 {{! 研判报告的事实部分（由第一版 mcp/workflow/reports.py 的 assessment 迁移）。数值原样填入，不取整、不加“约”；缺失就写缺失。 }}
-{{! 数据：panel、as_of_text、record_ids、warning、stage、alarms、trend、explosion、personnel（各为结果记录的内容）、chart_markdown。 }}
+{{! 数据：panel、as_of_text、record_ids、warning、stage、alarms、trend、explosion、personnel（各为结果记录的内容）、chart_markdown、route_opinion（避灾路线第二意见：lines、basis；没有请求时为 null）。 }}
 【预警研判】{{panel}} 工作面 {{as_of_text}}
 
 结论：预警等级 {{warning.result.level_name}}（计算结果）
@@ -58,6 +58,15 @@
 - {{roadway_id}}：{{count}} 人（{{persons_text}}），有害气体到达 {{arrival_min}} 分钟；{{#escape_route.reachable}}避灾路线至 {{escape_route.target_name}}，{{escape_route.length_m}} 米，佩戴自救器步行 {{escape_route.walk_with_self_rescuer_min}} 分钟{{/escape_route.reachable}}{{^escape_route.reachable}}{{escape_route.note}}{{/escape_route.reachable}}
 {{/personnel.result.threatened}}
 
+{{#route_opinion}}
+避灾路线第二意见（外部路径规划服务；输入含占位值，试验性；与上面的路线不一致时都列出，由人判断）：
+
+{{#lines}}
+- {{.}}
+{{/lines}}
+- 依据：{{basis}}
+
+{{/route_opinion}}
 撤人按预案立即执行，不等待本结果；以上名单是补充核对用的。
 
 {{/personnel.result.computed}}

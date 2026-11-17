@@ -561,14 +561,16 @@ export class MapView {
     const stale = !!d.stale
     if (d.type === 'line' && d.points && d.points.length >= 2) {
       const contaminated = d.kind === 'contaminated'
-      const color = stale ? FIG_GREY : contaminated ? contaminationColor(0) : '#35c46a'
+      // 参考路线（外部服务，第二意见）：蓝色细虚线、不流动，和我方路线（绿色流动虚线）区分开；略高一层，重合时两条都看得见
+      const reference = d.kind === 'reference'
+      const color = stale ? FIG_GREY : contaminated ? contaminationColor(0) : reference ? '#4d8ff0' : '#35c46a'
       const geom = new LineGeometry()
-      geom.setPositions(d.points.flatMap(([x, y]) => [x, y, contaminated ? 1 : 1.5]))
-      const mat = new LineMaterial({ color: new Color(color).getHex(), linewidth: contaminated ? 7 : 4, transparent: true, opacity: stale ? 0.45 : contaminated ? 0.6 : 0.95, dashed: !contaminated, dashSize: 14, gapSize: 9, worldUnits: false, depthWrite: false })
+      geom.setPositions(d.points.flatMap(([x, y]) => [x, y, contaminated ? 1 : reference ? 1.8 : 1.5]))
+      const mat = new LineMaterial({ color: new Color(color).getHex(), linewidth: contaminated ? 7 : reference ? 2.5 : 4, transparent: true, opacity: stale ? 0.45 : contaminated ? 0.6 : 0.95, dashed: !contaminated, dashSize: reference ? 6 : 14, gapSize: reference ? 6 : 9, worldUnits: false, depthWrite: false })
       mat.resolution.set(this.host.clientWidth || window.innerWidth, this.host.clientHeight || window.innerHeight)
       const line = new Line2(geom, mat)
       if (!contaminated) line.computeLineDistances()
-      line.renderOrder = contaminated ? 1 : 2
+      line.renderOrder = contaminated ? 1 : reference ? 3 : 2
       this.scene.add(line)
       // 标签位置：服务端给的 at（污染巷道在入口一端），没有就按长度取中点
       const at = d.at ?? lengthMidpoint(d.points)

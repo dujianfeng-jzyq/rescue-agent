@@ -268,6 +268,10 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-fig-group { background: #b8860b; font-weight: 600; font-size: 12px; }
 .rm-fig-blocked { background: #d83a3d; }
 .rm-fig-route { background: #1f9d55; }
+.rm-fig-reference { background: #2f6fd6; }
+.rm-evac-ref { margin-top: 2px; color: #7fb2e6; }
+.rm-evac-ref small { opacity: .85; }
+.rm-evac-ref[data-status="unavailable"] { opacity: .7; }
 .rm-fig-contaminated { background: rgba(216,58,61,.85); }
 .rm-fig-target { background: #1f6f9d; }
 .rm-fig-stale { opacity: .55; filter: grayscale(1); }

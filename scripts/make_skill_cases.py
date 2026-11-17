@@ -360,7 +360,7 @@ def build_template_inputs(inputs: dict) -> dict[tuple[str, str, str], dict]:
         recs = {k: fake_record(k, v, i) for i, (k, v) in enumerate(res.items())}
         recs["evidence"]["as_of"] = ev["as_of"]
         chart = f"![火区混合气体爆炸三角形](records/case/{recs['explosion']['record_id']}.chart.svg)" if res["explosion"]["result"]["points"] else None
-        out[(FA, "report", label)] = report_data(recs, {"chart_markdown": chart})
+        out[(FA, "report", label)] = report_data(recs, {"chart_markdown": chart, "route_opinion": None})
         if label == "s4-escalation-60h-red":
             x = res["explosion"]["result"]
             worst = next((p for p in x["points"] if p["sensor_id"] == x["worst_sensor_id"]), None)

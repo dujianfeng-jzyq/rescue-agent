@@ -214,3 +214,15 @@
   ② 封闭后不再弹橙色处置卡片（`priorChoice`）：火区封闭方案已下发、之后没有启封时，橙色不问。这次只因封闭后那次复评是“观测时间不足”才没弹；若是“恶化”（提前判恶化之后更容易出现）会问注氮、注浆、堵漏。
   ③ 新建 `docs/expert-review.md`（待专家审定清单，24 项），回差列为第 1 项，并请专家回答：是否按指标分别定回差、是否加时间条件、读不到数时是否保持、封闭注惰期间的稀释是否单独处理。
   **只有单元测试、没在 Docker 演示实跑。**
+
+## 第六版进度（2026-11-17）：外部路径规划服务作避灾路线第二意见
+
+设计：`docs/design-v6-route-service.md`（第一部分是发给提供方的对接方案，附录是我方实现）。提供方服务在内网 192.168.0.200:8080（`POST /api/v1/routes`、`GET /healthz`）。
+
+- **R1 适配服务**：`mcp/route-planner`（包 `rescue_route_planner`，服务名 `route_planner`，端口 8107，取代 `DEFAULT_PORTS` 里第一版遗留的 workflow）。工具 `plan_escape_routes`（我方编号进出；逐终点调用，最多并发 4 个，每次超时 5 秒；校验返回路线首尾、连续性、越界和指标；按服务的排序规则选最优终点；带服务原始返回）和 `route_service_status`。输入错误抛 `ToolError`；服务不可用、超时、报错返回 `available: false`。`python -m rescue_route_planner.check <URL>`：接口一致性检查（健康检查、提供方示例的路线和三项指标、风速越界 400、不可达空结果，另有“提示”项：返回的新字段、未知字段是否报错、`length` 是否生效），2026-11-17 对提供方服务 12/12 通过。`check_patches.py` 检查任何预设都不挂 route_planner；`make up` 在设了 `RESCUE_ROUTE_SERVICE_URL` 时才启动它。
+- **R2 技能脚本**：`fire-assessment` 新增 `route_request`、`route_compare`（参数 `references/route_service.yaml`，全部占位）。占位坐标的方法与设计草案不同：节点排单位圆（不用 numpy），每条巷道都加中间节点（附录 A.2）。对 s4 红色第 60 小时实测：工作面 9 人两种路线相同（经运输巷到避难硐室）；回风巷 2 人两种方法都没有路线（服务的烟中时间超过 900 秒）；把上限放宽到 5000 秒时服务给出穿过工作面回到进风侧的路线（烟中约 2033 秒），比较结果标为“能否穿烟由人判断”。待专家审定清单新增第九节 47–53 项。
+- **R3 接入研判流程**：`run_fire_assessment` 在 `personnel` 之后加 `route_request` → `route_service`（证据记录，`collect_kind: routes`）→ `route_compare`，失败不中断；研判报告“受威胁人员”后加“避灾路线第二意见”一节（模板 `route_opinion`，没有时为 null，报告与之前相同）；流程结果多 `route_opinion`。证据插件配置 `routePlannerUrl`、`routePlannerToken`（`RESCUE_MCP_ROUTE_PLANNER_URL`、`..._TOKEN`）。
+- **R4 地图**：左栏每组附“参考（外部服务，试验性）：比较说明”，图上另画蓝色细虚线“参考路线（外部服务，试验性）”；只认同一次研判的比较记录。
+- **Docker**：`.env` 里设了 `RESCUE_ROUTE_SERVICE_URL` 时 `make demo-up` 启用 compose 的 `route` 组（`route-planner` 容器）。**只验证了 `docker compose config`，没有实际起演示环境跑过；地图上的参考路线也只有单元测试，没在浏览器里看过。**
+- **踩到的坑**：占位坐标里出现 `-0.0`，Python 的 JSON 写 `-0.0`、JS 写 `0`，跨语言的记录哈希会对不上（TS 测试发现），脚本里统一换成 `0.0`。
+- **遗留**：R5（按提供方答复改多终点、长度/高差、空结果原因、鉴权）、R6（矿方数据替换占位值）、R7（按比较结果改进我方算法）；`make_skill_cases.py` 不生成第二意见的样例（输入里有提供方服务的返回），personnel 样例重新生成后要手工同步 `route_request`、`route_compare` 的输入。

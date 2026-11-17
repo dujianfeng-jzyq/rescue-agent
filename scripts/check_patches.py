@@ -5,7 +5,8 @@
 - YAML 能解析（支持 `!!js` 标签）；
 - 每个 `!!js` 表达式在 Node 中语法正确，并能用示例环境变量求值；
 - 预设：id 唯一、带 persona、技能目录存在且包含 skills/shared（第二版：技能根目录 skills/）、MCP serverName 合法且在预设内唯一、
-  只有总指挥协调预设挂载 actions 服务、MCP 地址来自 RESCUE_MCP_* 环境变量；
+  只有总指挥协调预设挂载 actions 服务、任何预设都不挂载 route_planner（外部路径规划服务只由证据插件按记录调用，
+  docs/design-v6-route-service.md 附录 A.1）、MCP 地址来自 RESCUE_MCP_* 环境变量；
   profiles/ 下按 id 覆盖预设的叠加按同样规则检查；
 - 审批策略写死为 ask，权限预设全部是 ask（人工确认不能被关掉）；
 - package.json 的 dsh.bundle.patch 列出了全部 patch 文件；
@@ -183,6 +184,8 @@ def main() -> int:
                         errors.append(f"{pid}: serverName 不合法 {c['serverName']}")
                     if "RESCUE_MCP_" not in str(c.get("url", "")):
                         errors.append(f"{pid}: {c['serverName']} 的地址没有走 RESCUE_MCP_* 环境变量")
+                    if c["serverName"] == "route_planner" or "ROUTE_PLANNER" in str(c.get("url", "")).upper() or ":8107" in str(c.get("url", "")):
+                        errors.append(f"{pid}: 不能挂载 route_planner（外部路径规划服务只由证据插件按记录调用）")
                 if "actions" in servers and pid != "rescue-commander":
                     errors.append(f"{pid}: 只有 rescue-commander 可以挂载 actions 服务（发布指令）")
 

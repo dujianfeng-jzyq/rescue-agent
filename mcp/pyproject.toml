@@ -1,4 +1,4 @@
-# uv 工作区：数据契约 + MCP 服务器（mine-data、actions）。
+# uv 工作区：数据契约 + MCP 服务器（mine-data、actions、route_planner）+ 常驻监听器。
 #   uv sync                       安装全部
 #   uv run pytest                 运行全部测试
 #   uv run python -m rescue_contract.conformance <URL>   对 mine-data 服务做一致性检查
@@ -11,6 +11,7 @@ dependencies = [
     "rescue-mine-data-sim",
     "rescue-actions",
     "rescue-sentinel",
+    "rescue-route-planner",
     "networkx>=3.3",   # 技能脚本的依赖（skills/requirements.txt）
 ]
 
@@ -21,16 +22,17 @@ dev = ["pytest>=8", "ruff>=0.11"]
 package = false
 
 [tool.uv.workspace]
-members = ["contract", "mine-data-sim", "actions", "sentinel"]
+members = ["contract", "mine-data-sim", "actions", "sentinel", "route-planner"]
 
 [tool.uv.sources]
 rescue-contract = { workspace = true }
 rescue-mine-data-sim = { workspace = true }
 rescue-actions = { workspace = true }
 rescue-sentinel = { workspace = true }
+rescue-route-planner = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["contract/tests", "mine-data-sim/tests", "actions/tests", "sentinel/tests", "tests"]
+testpaths = ["contract/tests", "mine-data-sim/tests", "actions/tests", "sentinel/tests", "route-planner/tests", "tests"]
 addopts = "--import-mode=importlib"
 
 [tool.ruff]

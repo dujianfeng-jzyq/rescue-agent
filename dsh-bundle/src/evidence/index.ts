@@ -38,6 +38,11 @@ export interface Config {
   watchMaxRealHours: number
   /** 唤醒失败后补发通知的退避（秒）；空表不补发 */
   redeliverBackoffS: number[]
+  /** route_planner（外部路径规划服务的适配，第六版）的地址；不设时研判不请求避灾路线第二意见 */
+  routePlannerUrl?: string
+  routePlannerToken?: string
+  /** 调用 route_planner 一次（一组人员、全部终点）的超时（毫秒） */
+  routePlannerTimeoutMs: number
 }
 
 const jsonOutput = {
@@ -68,20 +73,29 @@ export default class RescueEvidence extends Service {
     watchPollMs: Schema.number().default(2000),
     watchMaxRealHours: Schema.number().default(24),
     redeliverBackoffS: Schema.array(Schema.number()).default([60, 300, 900]),
+    routePlannerUrl: Schema.string(),
+    routePlannerToken: Schema.string(),
+    routePlannerTimeoutMs: Schema.number().default(30_000),
   })
 
   readonly evidence: Evidence
   readonly mineData: McpClient
+  readonly routePlanner: McpClient | undefined
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'rescueEvidence')
     this.mineData = new McpClient({ server: 'mine_data', url: config.mineDataUrl, token: config.mineDataToken, timeoutMs: config.mineDataTimeoutMs })
+    this.routePlanner = config.routePlannerUrl
+      ? new McpClient({ server: 'route_planner', url: config.routePlannerUrl, token: config.routePlannerToken, timeoutMs: config.routePlannerTimeoutMs })
+      : undefined
+    const planner = this.routePlanner
     this.evidence = new Evidence({
       skillsDir: config.skillsDir,
       recordDir: config.recordDir,
       ...(config.runDir ? { runDir: config.runDir } : {}),
       python: config.python,
       mineData: (tool, args) => this.mineData.call(tool, args),
+      ...(planner ? { routePlanner: (tool: string, args: Record<string, unknown>, signal?: AbortSignal) => planner.call(tool, args, signal) } : {}),
     })
     const c = ctx as any
 

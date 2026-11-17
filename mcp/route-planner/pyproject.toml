@@ -1,0 +1,19 @@
+[project]
+name = "rescue-route-planner"
+version = "0.1.0"
+description = "外部路径规划服务（mine-route-api）的适配服务：避灾路线第二意见（docs/design-v6-route-service.md）"
+requires-python = ">=3.12"
+dependencies = ["rescue-contract"]
+
+[project.scripts]
+rescue-route-planner = "rescue_route_planner.__main__:main"
+
+[tool.uv.sources]
+rescue-contract = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rescue_route_planner"]

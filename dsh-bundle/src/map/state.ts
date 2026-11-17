@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { IncidentStore } from '../incident/store.ts'
 import type { Entry, IncidentView } from '../incident/store.ts'
 import type { ActivitySnapshot } from './activity.ts'
-import { ageHours, evacuationView, HIDE_H, latestPersonnelRecord, personnelRecordById } from './evacuation.ts'
+import { ageHours, evacuationView, HIDE_H, latestPersonnelRecord, personnelRecordById, routeCompareFor } from './evacuation.ts'
 import type { EvacuationView, Network } from './evacuation.ts'
 import { anchorForPanel, anchorForSensor, EMPTY_MAP } from './mapping.ts'
 import type { MineMap } from './mapping.ts'
@@ -326,9 +326,10 @@ const PART_NAME: Record<string, string> = {
   warning: '预警等级', stage: '自燃阶段', alarms: '实时报警', trend: '趋势', personnel: '受威胁人员', check: '风险检测', explanation_options: '研判说明', explanation: '研判说明', timeline: '时间线',
   explosion_triangle: '爆炸三角形', escalation: '升级建议', effect: '复评结果', skeleton: '方案骨架', compose: '方案', scope: '审核范围', review: '审核结论',
   unsealing_plan: '启封评估', brief: '要点', report: '报告', plan: '方案', assessment: '研判',
+  route_request: '避灾路线第二意见请求', route_compare: '避灾路线第二意见',
 }
 
-const COLLECT_NAME: Record<string, string> = { assessment: '研判取数', check: '检测取数', effect: '复评取数', plan: '方案取数', unseal: '启封取数' }
+const COLLECT_NAME: Record<string, string> = { assessment: '研判取数', check: '检测取数', effect: '复评取数', plan: '方案取数', unseal: '启封取数', routes: '外部路径规划服务调用' }
 
 /** 记录的中文名：技能 + 脚本/模板/采集清单（如“效果复评 · 复评结果”“研判 · 要点”） */
 export function recordTitle(r: Record<string, any>): string {
@@ -547,7 +548,8 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
       if (rec) {
         const computed = !!(rec.content?.result as { computed?: boolean } | undefined)?.computed
         const net = computed && deps.network ? await deps.network().catch(() => null) : null
-        evacuation = { ...evacuationView(rec, net, map, mine.now), noticeActionId: fromNotice ? notice!.actionId : null }
+        const cmp = computed ? await routeCompareFor(deps.recordDir, rec.record_id, incident.panel).catch(() => null) : null
+        evacuation = { ...evacuationView(rec, net, map, mine.now, cmp), noticeActionId: fromNotice ? notice!.actionId : null }
       }
     } catch {
       evacuation = null // 记录读不了：不显示，不影响其他部分

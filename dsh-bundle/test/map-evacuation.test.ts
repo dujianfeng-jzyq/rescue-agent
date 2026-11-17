@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
 
-import { ageHours, CONTAMINATION_LABEL_FRAC, evacuationView, freshnessOf, latestPersonnelRecord, pointAlong } from '../src/map/evacuation.ts'
+import { ageHours, CONTAMINATION_LABEL_FRAC, evacuationView, freshnessOf, latestPersonnelRecord, pointAlong, routeCompareFor } from '../src/map/evacuation.ts'
 import type { Network } from '../src/map/evacuation.ts'
 import { EMPTY_MAP } from '../src/map/mapping.ts'
 import type { MineMap } from '../src/map/mapping.ts'
@@ -215,5 +215,66 @@ describe('latestPersonnelRecord', () => {
     await writeFile(join(d, 'RS-20261104T200200-eeeeee.json'), '{坏的')
     assert.equal(await latestPersonnelRecord(d, '1201'), null)
     assert.equal(await latestPersonnelRecord(join(d, 'nope'), '1201'), null)
+  })
+})
+
+// 第六版：外部服务的参考路线（第二意见）。比较结果用 route_compare 的自检样例（烟中时间上限放宽：回风巷那组得到穿烟路线）
+const CMP_CASES = new URL('../../skills/fire-assessment/tests/cases/route_compare/', import.meta.url)
+const CMP = JSON.parse(readFileSync(new URL('s4-through-smoke-raised-limit.expected.json', CMP_CASES), 'utf8'))
+const CMP_NONE = JSON.parse(readFileSync(new URL('s4-escalation-60h-red-service.expected.json', CMP_CASES), 'utf8'))
+const compareRecord = (personnelId: string, content = CMP, id = 'RS-20261104T200000-cmp001') => ({
+  record_id: id,
+  kind: 'result',
+  panel: '1201',
+  as_of: '2026-11-04T20:00:00',
+  source: { skill: 'fire-assessment', script: 'route_compare', inputs: { personnel: personnelId } },
+  content,
+})
+
+describe('参考路线（外部服务，第二意见）', () => {
+  const MAP_ALL: MineMap = { ...MAP, roadways: {} }
+  const P = 'RS-20261104T200000-aaaaaa'
+
+  it('同一次研判的比较记录：每组附比较说明；有路线的另画一条 reference 折线，与我方路线并列', () => {
+    const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, compareRecord(P))
+    assert.equal(v.referenceRecordId, 'RS-20261104T200000-cmp001')
+    const [face, ret] = v.groups
+    assert.equal(face!.reference?.caseText, '两种路线相同')
+    assert.equal(ret!.reference?.status, 'route')
+    assert.match(ret!.reference!.caseText, /能否穿烟由人判断/)
+    assert.equal(ret!.reference!.text, CMP.result.groups[1].text)
+    const ref = v.figures.find((f) => f.id === 'auto:evac:ref:R-1201-RET')!
+    assert.equal(ref.kind, 'reference')
+    assert.equal(ref.text, '参考路线（外部服务，试验性）')
+    // 从回风巷中点出发，经工作面（反向）N4 → N3、运输巷（反向，含途经点）N3 → N2、联络巷 N2 → 避难硐室 N8（与我方路线一样，各段首尾相接处重复一个点）
+    assert.deepEqual(ref.points, [[630, 410], POS.N4, POS.N3, POS.N3, [550, 280], POS.N2, POS.N2, POS.N8])
+    // 我方这一组走不通：没有我方路线，只有参考路线
+    assert.equal(v.figures.find((f) => f.id === 'auto:evac:route:R-1201-RET'), undefined)
+    assert.ok(v.figures.find((f) => f.id === 'auto:evac:route:R-1201-FACE'))
+    assert.ok(v.figures.find((f) => f.id === 'auto:evac:ref:R-1201-FACE'))
+  })
+
+  it('比较记录不是这份 personnel 记录的（别的研判）：不用', () => {
+    const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, compareRecord('RS-20261104T190000-zzzzzz'))
+    assert.equal(v.referenceRecordId, null)
+    assert.ok(v.groups.every((g) => g.reference === null))
+    assert.equal(v.figures.filter((f) => f.kind === 'reference').length, 0)
+  })
+
+  it('服务没有给出路线：只有文字，不画线', () => {
+    const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, compareRecord(P, CMP_NONE))
+    assert.equal(v.groups[1]!.reference?.status, 'no_route')
+    assert.equal(v.groups[1]!.reference?.caseText, '两种方法都没有给出路线，需人工研判')
+    assert.equal(v.figures.find((f) => f.id === 'auto:evac:ref:R-1201-RET'), undefined)
+  })
+
+  it('routeCompareFor 按输入的 personnel 编号找比较记录', async () => {
+    const d = await mkdtemp(join(tmpdir(), 'evac-ref-'))
+    await writeFile(join(d, `${P}.json`), JSON.stringify(record(RESULT, P)))
+    await writeFile(join(d, 'RS-20261104T200000-cmp001.json'), JSON.stringify(compareRecord(P)))
+    await writeFile(join(d, 'RS-20261104T190000-cmp002.json'), JSON.stringify(compareRecord('RS-20261104T190000-other0', CMP, 'RS-20261104T190000-cmp002')))
+    assert.equal((await routeCompareFor(d, P, '1201'))?.record_id, 'RS-20261104T200000-cmp001')
+    assert.equal(await routeCompareFor(d, 'RS-20261104T180000-nonexx', '1201'), null)
+    assert.equal((await latestPersonnelRecord(d, '1201'))?.record_id, P)
   })
 })

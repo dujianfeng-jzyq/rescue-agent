@@ -12,6 +12,7 @@ members = [
     "rescue-contract",
     "rescue-mcp-workspace",
     "rescue-mine-data-sim",
+    "rescue-route-planner",
     "rescue-sentinel",
 ]
 
@@ -680,6 +681,7 @@ dependencies = [
     { name = "rescue-actions" },
     { name = "rescue-contract" },
     { name = "rescue-mine-data-sim" },
+    { name = "rescue-route-planner" },
     { name = "rescue-sentinel" },
 ]
 
@@ -695,6 +697,7 @@ requires-dist = [
     { name = "rescue-actions", editable = "actions" },
     { name = "rescue-contract", editable = "contract" },
     { name = "rescue-mine-data-sim", editable = "mine-data-sim" },
+    { name = "rescue-route-planner", editable = "route-planner" },
     { name = "rescue-sentinel", editable = "sentinel" },
 ]
 
@@ -718,6 +721,17 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "rescue-contract", editable = "contract" },
 ]
+
+[[package]]
+name = "rescue-route-planner"
+version = "0.1.0"
+source = { editable = "route-planner" }
+dependencies = [
+    { name = "rescue-contract" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "rescue-contract", editable = "contract" }]
 
 [[package]]
 name = "rescue-sentinel"

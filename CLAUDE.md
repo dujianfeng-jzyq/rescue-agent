@@ -9,9 +9,9 @@
 | 要查什么 | 看哪里 |
 | --- | --- |
 | 现行架构（怎么连起来、一次指令的路径、运行时文件） | `docs/architecture.md` |
-| 做了什么、什么时候、评测结果、踩过的坑（第一至第五版逐阶段） | `docs/progress-log.md` |
+| 做了什么、什么时候、评测结果、踩过的坑（第一至第六版逐阶段） | `docs/progress-log.md` |
 | 为什么这样做（总体方案和路线） | `docs/implementation-plan.md` |
-| 各版本设计 | 第二版 `docs/design-v2.md`；第三版 `design-v3.md`（rescue-mine、常驻监听与事件、专家型智能体）；第四版 `design-v4-map.md`（地图界面）、`design-v4-evacuation.md`（撤人路线）；第五版 `design-v5-demo-flow.md`（演示导演、选项卡片、批准超时） |
+| 各版本设计 | 第二版 `docs/design-v2.md`；第三版 `design-v3.md`（rescue-mine、常驻监听与事件、专家型智能体）；第四版 `design-v4-map.md`（地图界面）、`design-v4-evacuation.md`（撤人路线）；第五版 `design-v5-demo-flow.md`（演示导演、选项卡片、批准超时）；第六版 `design-v6-route-service.md`（外部路径规划服务作避灾路线第二意见） |
 | 设计决策 | `docs/decisions/`（ADR 0001–0009） |
 | 待专家审定的阈值、判据和参数（集中清单） | `docs/expert-review.md` |
 | 接真实矿井（演示、只读接入、试运行）要准备什么 | `docs/real-mine-integration.md` |
@@ -48,6 +48,7 @@ make demo-up / demo-down / demo-reset   # 演示环境（Docker，4 个容器）
 make dev-story / make story   # 演示故事线（按等级脚本推进，14 项检查）；Docker 里直接跑 eval/agent/story.py，环境变量见其文件头
 python -m rescue_contract.conformance <URL> [--with-actions]   # 接口一致性检查；--with-actions 会真的执行通知/调度/处置，只对模拟矿井加
 python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清单取一次证据（Python 采集小工具）
+python -m rescue_route_planner.check http://192.168.0.200:8080   # 外部路径规划服务的接口一致性检查（第六版；不进 CI）
 ```
 
 演示（第五版）：控制台“演示导演”区块点一次“开始演示”，之后导演自己推进；`eval/agent/demo_run.py` 是同一流程的脚本版（扮演操作员，`STORY_ORANGE_OPTIONS` 控制橙色卡片选什么：`注氮|注浆|堵漏` 回落、只选一项或 `不采取处置`（在输入框输入）升红、空串 = 点跳过（暂不决定））。
@@ -60,6 +61,7 @@ python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清
 - 记录（`Record`）：只有 DSH 进程（证据插件）能写，bash 沙箱和 guard（actions）只读；指令引用 `record_id`。**事件库不是记录库**：监听器的检测摘要不能被指令引用，智能体被唤醒后自己研判、产生记录。
 - `mcp/contract/`：数据契约（pydantic）、红线引擎 `redlines.py`、方案校验 `validation.py`、动作分级表 `action_policy.py`、处置选项表 `response_options.py`、现场条件卡片 `field_conditions.py`、事件库 `incidents.py`、`MineData` 客户端、一致性测试、技能自检、模板与规范化 JSON。**契约是各工作线之间的边界**，改 `models.py` 要谨慎并 `make schema`。
 - `mcp/mine-data-sim`（模拟矿井，rescue-mine 接口的一个实现；含演示控制台 `/console` 和演示导演 `director.py`）、`mcp/actions`（**guard 守卫服务**：对外动作的唯一通道，校验后经 rescue-mine 执行并写台账）：各自 `src/rescue_<名>/server.py` 里 `build_server()`，用 `rescue_contract.serving.serve` 启动（streamable-http，端口 8101、8106；服务名 `mine_data`、`actions` 没变）。
+- `mcp/route-planner`（第六版）：外部路径规划服务（提供方的 `mine-route-api`）的适配服务 `route_planner`（端口 8107），只由证据插件按 `route_request` 记录调用，**任何预设都不挂载**（`check_patches.py` 检查）；结果是避灾路线的“第二意见”（试验性），与我方 `personnel` 路线并列显示、不替代。设了 `RESCUE_ROUTE_SERVICE_URL` 时 `make up` 才启动它，DSH 侧设 `RESCUE_MCP_ROUTE_PLANNER_URL` 才会请求。
 - `mcp/sentinel`：常驻监听器 `python -m rescue_sentinel`，不经模型；判据只用 `skills/fire-assessment`（`check.py`，参数在 `references/watch.yaml` 的 `sentinel` 节）。事件库 `var/incidents/<事件编号>.jsonl`（只追加、折叠出状态；Python 与 TS `incident/store.ts` 共用 `contract/tests/fixtures/incidents`）。
 - `scenarios/*.yaml`：标准场景 = 演示脚本 = 评测集 = 回归集；`scenarios/demo/flow.yaml` 是演示导演的分支剧本（放子目录，免得被当成场景加载）。
 - `eval/baseline.py` + `expectations.yaml`：确定性回归基线。`eval/agent/`：智能体端到端评测（`cases.yaml` 用例，`run.py` 经 DSH 网页端 + Playwright 提问并点确认，`grade.py` 读会话日志判定，`story.py` 故事线，`demo_run.py` 导演驱动的演示脚本，`decisions.py` 期望决策比较）。

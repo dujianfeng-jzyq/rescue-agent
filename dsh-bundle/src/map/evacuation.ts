@@ -9,6 +9,9 @@
  *   - 路线里有一段巷道在图上没有映射（节点没有位置）：整条路线不画，只在列表里写“有 N 段没有映射”；
  *   - 路线走不通：不画线，写记录里的原话“需人工研判”。
  * 图上的折线只表示走哪几段，不表示距离：长度、时间一律用记录里的值。
+ *
+ * 避灾路线第二意见（第六版，docs/design-v6-route-service.md）：同一次研判的 route_compare 记录（输入的 personnel 就是这份记录）
+ * 里外部服务给出的路线，另画一条不同样式的“参考路线（外部服务，试验性）”。与我方路线不一致时两条都画，不选。
  */
 
 import { readdir, readFile, stat } from 'node:fs/promises'
@@ -56,6 +59,18 @@ export interface RouteView {
   missing: string[]
 }
 
+/** 外部服务的参考路线（第二意见，试验性）：文字照抄 route_compare 记录 */
+export interface ReferenceView {
+  /** route：给出路线；no_route：没有路线；unavailable：第二意见不可用 */
+  status: 'route' | 'no_route' | 'unavailable'
+  /** 比较情况的说明（如“两种路线相同”“我方…无路可走；外部服务给出穿过有烟巷道的参考路线，能否穿烟由人判断”） */
+  caseText: string
+  /** 记录里这一组的整句说明 */
+  text: string
+  drawn: boolean
+  missing: string[]
+}
+
 export interface GroupView {
   roadwayId: string
   roadwayName: string
@@ -64,6 +79,8 @@ export interface GroupView {
   count: number
   arrivalMin: number
   route: RouteView
+  /** 外部服务的参考路线；没有第二意见记录为 null */
+  reference: ReferenceView | null
 }
 
 export interface EvacuationView {
@@ -87,6 +104,8 @@ export interface EvacuationView {
   figures: MapFigure[]
   /** 按已下发的撤人通知显示时，通知的指令编号（路线就是通知里的那份记录） */
   noticeActionId?: string | null
+  /** 第二意见的 route_compare 记录编号；没有为 null */
+  referenceRecordId: string | null
 }
 
 type Json = Record<string, any>
@@ -136,7 +155,37 @@ function roadwayPath(r: NetworkRoadway, map: MineMap): { pts: Pt[] } | { missing
   return { pts: [a!, ...(map.via[r.id] ?? []), b!] }
 }
 
-export function evacuationView(record: RecordLike & { as_of?: string }, network: Network | null, map: MineMap, mineNow: string | null): EvacuationView {
+/**
+ * 沿路线把各段巷道的折线接起来：nodes 是从人员所在巷道一端开始的节点序列，roadways 是依次经过的巷道（必要时反向）。
+ * start 是人员所在巷道中点（没有映射时为 null，记为缺失）。
+ */
+function chain(start: Pt | null, startMissing: string[], nodesSeq: string[], roadwayIds: string[], roads: Map<string, NetworkRoadway>, map: MineMap): { pts: Pt[]; missing: string[] } {
+  const pts: Pt[] = start ? [start] : []
+  const missing = new Set<string>(start ? [] : startMissing)
+  roadwayIds.forEach((id, i) => {
+    const r = roads.get(id)
+    if (!r) {
+      missing.add(id)
+      return
+    }
+    const p = roadwayPath(r, map)
+    if ('missing' in p) {
+      p.missing.forEach((m) => missing.add(m))
+      return
+    }
+    const forward = r.from_node === nodesSeq[i]
+    for (const q of forward ? p.pts : [...p.pts].reverse()) pts.push(q)
+  })
+  return { pts, missing: [...missing] }
+}
+
+export function evacuationView(
+  record: RecordLike & { as_of?: string },
+  network: Network | null,
+  map: MineMap,
+  mineNow: string | null,
+  compare: (RecordLike & { as_of?: string }) | null = null,
+): EvacuationView {
   const res: Json = record.content?.result ?? {}
   const asOf = String(record.as_of ?? res.as_of ?? '')
   const age = ageHours(asOf, mineNow)
@@ -150,6 +199,7 @@ export function evacuationView(record: RecordLike & { as_of?: string }, network:
     ageHours: age,
     freshness,
     schematic: isSchematic(map),
+    referenceRecordId: null as string | null,
   }
   if (!res.computed) {
     return { ...base, computed: false, totalThreatened: null, totalUnderground: null, contaminated: [], groups: [], figures: [] }
@@ -161,6 +211,9 @@ export function evacuationView(record: RecordLike & { as_of?: string }, network:
   const stale = freshness !== 'fresh'
   const show = freshness !== 'hidden'
   const figures: MapFigure[] = []
+  // 第二意见只认同一次研判的比较记录（输入的 personnel 就是这份记录）
+  const cmp: Json | null = compare && (compare.source as Json | undefined)?.inputs?.personnel === record.record_id ? (compare.content?.result ?? null) : null
+  const refGroups = new Map(((cmp?.computed ? cmp.groups : []) as Json[]).map((g) => [String(g.roadway_id), g]))
 
   const contaminated = ((res.contaminated_roadways ?? []) as Json[]).map((c) => {
     const r = roads.get(c.roadway_id)
@@ -197,27 +250,11 @@ export function evacuationView(record: RecordLike & { as_of?: string }, network:
         stale,
       })
     }
+    const ownMissing = 'missing' in own ? own.missing : []
     if (route.reachable && Array.isArray(er.nodes) && Array.isArray(er.roadways)) {
-      // 沿路线节点的顺序把各段巷道的折线接起来（必要时反向）
-      const pts: Pt[] = groupAt ? [groupAt] : []
-      const missing = new Set<string>(groupAt ? [] : ('missing' in own ? own.missing : []))
-      const seq = er.nodes as string[]
-      ;(er.roadways as string[]).forEach((id, i) => {
-        const r = roads.get(id)
-        if (!r) {
-          missing.add(id)
-          return
-        }
-        const p = roadwayPath(r, map)
-        if ('missing' in p) {
-          p.missing.forEach((m) => missing.add(m))
-          return
-        }
-        const forward = r.from_node === seq[i]
-        for (const q of forward ? p.pts : [...p.pts].reverse()) pts.push(q)
-      })
-      route.missing = [...missing]
-      if (missing.size === 0 && pts.length >= 2) {
+      const { pts, missing } = chain(groupAt, ownMissing, er.nodes as string[], er.roadways as string[], roads, map)
+      route.missing = missing
+      if (missing.length === 0 && pts.length >= 2) {
         route.drawn = true
         if (show) {
           figures.push({ id: `auto:evac:route:${rid}`, type: 'line', kind: 'route', points: pts, at: midpoint(pts), text: route.walkMin === null ? undefined : `约 ${route.walkMin} 分钟`, stale })
@@ -227,7 +264,22 @@ export function evacuationView(record: RecordLike & { as_of?: string }, network:
         }
       }
     }
-    return { roadwayId: rid, roadwayName: nameOf(rid), anchor: map.roadways[rid] ?? null, count: Number(g.count), arrivalMin: Number(g.arrival_min), route }
+    let reference: ReferenceView | null = null
+    const rg = refGroups.get(rid)
+    if (rg) {
+      const svc: Json = rg.service ?? {}
+      const status: ReferenceView['status'] = svc.status === 'route' ? 'route' : svc.status === 'no_route' ? 'no_route' : 'unavailable'
+      reference = { status, caseText: String(rg.comparison?.case_text ?? ''), text: String(rg.text ?? ''), drawn: false, missing: [] }
+      if (status === 'route' && Array.isArray(svc.nodes) && Array.isArray(svc.roadways)) {
+        const { pts, missing } = chain(groupAt, ownMissing, svc.nodes as string[], svc.roadways as string[], roads, map)
+        reference.missing = missing
+        if (missing.length === 0 && pts.length >= 2) {
+          reference.drawn = true
+          if (show) figures.push({ id: `auto:evac:ref:${rid}`, type: 'line', kind: 'reference', points: pts, at: pointAlong(pts, 0.35), text: '参考路线（外部服务，试验性）', stale })
+        }
+      }
+    }
+    return { roadwayId: rid, roadwayName: nameOf(rid), anchor: map.roadways[rid] ?? null, count: Number(g.count), arrivalMin: Number(g.arrival_min), route, reference }
   })
 
   return {
@@ -238,6 +290,7 @@ export function evacuationView(record: RecordLike & { as_of?: string }, network:
     contaminated,
     groups,
     figures,
+    referenceRecordId: cmp ? compare!.record_id : null,
   }
 }
 
@@ -246,7 +299,7 @@ export function evacuationView(record: RecordLike & { as_of?: string }, network:
  * 不能退回去显示更早的“已计算”）。记录目录按修改时间只读最近的几十份，目录没变就用缓存。
  */
 type PRec = RecordLike & { as_of?: string }
-let cache: { dir: string; mtime: number; panel: string; recs: PRec[] } | null = null
+let cache: { dir: string; mtime: number; panel: string; recs: PRec[]; compares: PRec[] } | null = null
 const SCAN_LIMIT = 40
 
 /**
@@ -264,6 +317,42 @@ export async function personnelRecordById(dir: string, id: string, panel: string
   }
 }
 
+/** 读记录目录里最近的几十份结果记录，留下该工作面的 personnel 和 route_compare 记录；目录没变就用缓存。 */
+async function scan(dir: string, panel: string, mtime: number): Promise<NonNullable<typeof cache>> {
+  if (cache && cache.dir === dir && cache.mtime === mtime && cache.panel === panel) return cache
+  const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => /^RS-\d{8}T\d{6}-[a-z0-9]{6}\.json$/.test(n))
+  const withTime = await Promise.all(names.map(async (n) => ({ n, t: await stat(join(dir, n)).then((s) => s.mtimeMs, () => 0) })))
+  const recs: PRec[] = []
+  const compares: PRec[] = []
+  for (const { n } of withTime.sort((a, b) => b.t - a.t).slice(0, SCAN_LIMIT)) {
+    try {
+      const r = JSON.parse(await readFile(join(dir, n), 'utf8')) as PRec
+      if (r.source?.skill !== 'fire-assessment') continue
+      if ((r.content?.result as Json | undefined)?.panel !== panel && r.panel !== panel) continue
+      if (r.source?.script === 'personnel') recs.push(r)
+      else if (r.source?.script === 'route_compare') compares.push(r)
+    } catch {
+      /* 坏文件跳过 */
+    }
+  }
+  cache = { dir, mtime, panel, recs, compares }
+  return cache
+}
+
+/**
+ * 某份 personnel 记录对应的第二意见（route_compare 记录，输入的 personnel 就是它）；只在最近的几十份记录里找，找不到返回 null（不画参考路线）。
+ */
+export async function routeCompareFor(dir: string, personnelId: string, panel: string): Promise<PRec | null> {
+  let mtime = 0
+  try {
+    mtime = (await stat(dir)).mtimeMs
+  } catch {
+    return null
+  }
+  const c = await scan(dir, panel, mtime)
+  return c.compares.find((r) => (r.source as Json | undefined)?.inputs?.personnel === personnelId) ?? null
+}
+
 /**
  * notAfter（当前矿井时间）：记录的 as_of 晚于它的忽略——模拟矿井重置时钟后，上一轮演示留下的“未来”记录不能当最新的。
  * 真实矿井时钟不倒退，这条不会生效。
@@ -275,24 +364,9 @@ export async function latestPersonnelRecord(dir: string, panel: string, notAfter
   } catch {
     return null
   }
-  if (!(cache && cache.dir === dir && cache.mtime === mtime && cache.panel === panel)) {
-    const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => /^RS-\d{8}T\d{6}-[a-z0-9]{6}\.json$/.test(n))
-    const withTime = await Promise.all(names.map(async (n) => ({ n, t: await stat(join(dir, n)).then((s) => s.mtimeMs, () => 0) })))
-    const recs: PRec[] = []
-    for (const { n } of withTime.sort((a, b) => b.t - a.t).slice(0, SCAN_LIMIT)) {
-      try {
-        const r = JSON.parse(await readFile(join(dir, n), 'utf8')) as PRec
-        if (r.source?.skill !== 'fire-assessment' || r.source?.script !== 'personnel') continue
-        if ((r.content?.result as Json | undefined)?.panel !== panel && r.panel !== panel) continue
-        recs.push(r)
-      } catch {
-        /* 坏文件跳过 */
-      }
-    }
-    cache = { dir, mtime, panel, recs }
-  }
+  const c = await scan(dir, panel, mtime)
   let best: PRec | null = null
-  for (const r of cache.recs) {
+  for (const r of c.recs) {
     const at = String(r.as_of ?? '')
     if (notAfter && at.slice(0, 19) > notAfter.slice(0, 19)) continue
     if (!best || at > String(best.as_of ?? '')) best = r

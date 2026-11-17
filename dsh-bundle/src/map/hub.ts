@@ -33,7 +33,7 @@ export interface MapFigure {
   id: string
   /** line：折线（污染巷道、撤人路线）；group：一组受威胁人员（人数）；target：撤离终点（出口、避难硐室） */
   type: 'line' | 'group' | 'target'
-  /** line：contaminated | route；group：threatened | blocked；target：exit | refuge */
+  /** line：contaminated | route | reference（外部服务的参考路线，第六版）；group：threatened | blocked；target：exit | refuge */
   kind: string
   points?: [number, number][]
   /** group/target：位置；line：标签位置（可选，没有时按长度取中点） */

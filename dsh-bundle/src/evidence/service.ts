@@ -24,6 +24,11 @@ export interface EvidenceConfig {
   python: string
   /** mine_data 的工具调用（证据插件自带的 MCP 客户端） */
   mineData: CallTool
+  /**
+   * route_planner（外部路径规划服务的适配，第六版）的工具调用；没有配置时不给，研判跳过“第二意见”。
+   * 只由本插件按请求记录调用，智能体不挂载该服务（docs/design-v6-route-service.md 附录 A.1）。
+   */
+  routePlanner?: ((tool: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<any>) | undefined
 }
 
 /** 技能脚本没有得到合格的结果：把运行状态原样带出，调用方按 4.5 第 3 条报告 */
@@ -96,6 +101,46 @@ export class Evidence {
         origin: opts.origin,
         source: { skill: skill.name, skill_version: skill.version, collect_kind: opts.kind, from: opts.origin_of },
         content: opts.content,
+      }),
+    )
+  }
+
+  /** 是否配置了外部路径规划服务（第六版：避灾路线第二意见） */
+  get routesConfigured(): boolean {
+    return Boolean(this.cfg.routePlanner)
+  }
+
+  /**
+   * 按 fire-assessment/route_request 的结果记录逐组调用 route_planner，把输入（请求记录编号）和原始输出存成证据记录
+   * （复盘依据）。某组调用失败（服务不可用、超时、输入被拒）不抛错，记在该组的 error 里，由 route_compare 报“第二意见不可用”。
+   * 工作面、时刻取请求记录的。
+   */
+  async collectRoutes(opts: { request: string; origin: Origin; signal?: AbortSignal }): Promise<RescueRecord> {
+    const call = this.cfg.routePlanner
+    if (!call) throw new Error('没有配置外部路径规划服务（route_planner）')
+    const req = await this.store.get(opts.request)
+    const src = req.source as any
+    if (req.kind !== 'result' || src?.skill !== 'fire-assessment' || src?.script !== 'route_request') throw new Error(`记录 ${opts.request} 不是 fire-assessment/route_request 的结果`)
+    const r = (req.content as any).result
+    const results: Record<string, unknown>[] = []
+    for (const g of r.requests as { roadway_id: string; request: Record<string, unknown> }[]) {
+      try {
+        results.push({ roadway_id: g.roadway_id, result: await call('plan_escape_routes', g.request, opts.signal) })
+      } catch (err) {
+        if (opts.signal?.aborted) throw err
+        results.push({ roadway_id: g.roadway_id, error: (err as Error).message })
+      }
+    }
+    const skill = await loadSkill(this.cfg.skillsDir, 'fire-assessment')
+    return this.store.put(
+      buildRecord({
+        kind: 'evidence',
+        panel: req.panel,
+        asOf: req.as_of,
+        origin: opts.origin,
+        source: { skill: skill.name, skill_version: skill.version, collect_kind: 'routes', from: opts.request, service: 'route_planner' },
+        content: { kind: 'routes', panel: req.panel, as_of: req.as_of, request_record_id: opts.request, results, error: null },
+        parentIds: [opts.request],
       }),
     )
   }
