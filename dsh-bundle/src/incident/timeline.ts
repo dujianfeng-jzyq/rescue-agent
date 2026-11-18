@@ -35,6 +35,26 @@ export async function evidenceAsOf(recordIds: string[], read: (id: string) => Pr
   return min
 }
 
+/**
+ * 该工作面未关闭火情事件里最近一次研判（固定流程写进时间线的 assessment 条目）的依据数据时间和记录编号。
+ * 复评找不到已下发的处置时，用它作观察起点（2026-11-18：无预警时跟踪到点，复评不该去问操作员从什么时候算）。
+ * 没有事件、没有研判或研判没记 as_of 时返回 undefined。
+ */
+export async function lastAssessmentNote(store: IncidentStore | undefined, panel: string): Promise<{ as_of: string; record_id: string | null } | undefined> {
+  if (!store) return undefined
+  const found = await store.findOpen('fire', panel)
+  if (!found) return undefined
+  const entries = await store.entries(found.incident_id)
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const d = entries[i]!.data as Record<string, any> | undefined
+    if (entries[i]!.kind === 'note' && d?.type === 'assessment' && typeof d.as_of === 'string' && d.as_of) {
+      const ids = Array.isArray(d.record_ids) ? d.record_ids : []
+      return { as_of: d.as_of.slice(0, 19), record_id: typeof ids[0] === 'string' ? ids[0] : null }
+    }
+  }
+  return undefined
+}
+
 /** clock 返回矿井时间；返回写入的事件编号，没有事件返回 undefined */
 export async function noteOnIncident(store: IncidentStore | undefined, panel: string, note: TimelineNote, clock: () => Promise<string>): Promise<string | undefined> {
   if (!store) return undefined

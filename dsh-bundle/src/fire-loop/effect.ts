@@ -1,8 +1,9 @@
 /**
  * 固定流程 review_effect（design-v2 4.4）：处置效果复评。步骤由代码决定，判据全在 effect-review 技能里，没有模型阶段。
  *
- *   处置开始时间 since：调用方给出；否则取 actions 台账里本工作面最近一次已下发的封闭方案或防灭火方案的下发时间，没有方案时取加密监测
- *   （这时没有处置：since 是观察起点，effect.py 按“未采取处置”写结论，treated=false）
+ *   处置开始时间 since：调用方给出；否则取 actions 台账里本工作面最近一次已下发的封闭方案或防灭火方案的下发时间，没有方案时取加密监测，
+ *   台账里什么都没有（如无预警时跟踪到点）取事件时间线里最近一次研判的依据数据时间
+ *   （后两种没有处置：since 是观察起点，effect.py 按“未采取处置”写结论，treated=false）
  *   → 采集证据（effect-review 的 effect 清单，窗口从 since 之前 baseline 小时取到现在）
  *   → effect.py → 复评报告（effect-review/templates/report.md）
  */
@@ -32,6 +33,8 @@ export interface EffectOptions {
   signal?: AbortSignal
   /** 指令台账里本工作面最近一次已下发的方案（actions 的 query_last_issued） */
   lastIssued: (panel: string) => Promise<LastIssued>
+  /** 本工作面最近一次研判的依据数据时间（事件时间线）；台账里没有任何下发时用作观察起点 */
+  lastAssessment?: (panel: string) => Promise<{ as_of: string; record_id: string | null } | undefined>
 }
 
 /** 调用方能处理的错误（缺处置开始时间等），工具把它作为说明返回 */
@@ -53,15 +56,23 @@ export async function reviewEffect(ev: Evidence, opts: EffectOptions) {
   if (!since) {
     emit('since', 'started')
     const last = await opts.lastIssued(opts.panel)
-    if (!last.found || !last.issued_at) {
-      emit('since', 'failed', [], '台账里没有已下发的方案或加密监测')
-      throw new EffectInputError(`指令台账里没有工作面 ${opts.panel} 已下发的封闭方案、防灭火方案或加密监测，请问指挥人员处置是什么时候开始的（矿井时间），作为 since 重新调用`)
+    if (last.found && last.issued_at) {
+      since = last.issued_at
+      treated = last.tool !== 'start_monitoring'
+      sinceSource = treated
+        ? `指令台账：${last.action_id ?? ''} ${NAMES[last.tool ?? ''] ?? last.tool} ${last.plan_id ?? ''} 的下发时间`.replace(/\s+/g, ' ')
+        : `未采取处置，从指令台账 ${last.action_id ?? ''} 加密监测的开始时间起观察`.replace(/\s+/g, ' ')
+    } else {
+      // 台账里什么都没下发（无预警、或还没到要下发的等级）：从最近一次研判的数据时间起看趋势，不问操作员
+      const a = await opts.lastAssessment?.(opts.panel)
+      if (!a) {
+        emit('since', 'failed', [], '台账里没有已下发的方案或加密监测，事件时间线里也没有研判')
+        throw new EffectInputError(`指令台账里没有工作面 ${opts.panel} 已下发的封闭方案、防灭火方案或加密监测，事件时间线里也没有研判：先做研判（run_fire_assessment），不要问指挥人员起算时间`)
+      }
+      since = a.as_of
+      treated = false
+      sinceSource = `未采取处置，从最近一次研判${a.record_id ? ` ${a.record_id} ` : ''}的数据时间起观察`
     }
-    since = last.issued_at
-    treated = last.tool !== 'start_monitoring'
-    sinceSource = treated
-      ? `指令台账：${last.action_id ?? ''} ${NAMES[last.tool ?? ''] ?? last.tool} ${last.plan_id ?? ''} 的下发时间`.replace(/\s+/g, ' ')
-      : `未采取处置，从指令台账 ${last.action_id ?? ''} 加密监测的开始时间起观察`.replace(/\s+/g, ' ')
     emit('since', 'completed', [], sinceSource)
   }
   const ids: Record<string, string> = {}

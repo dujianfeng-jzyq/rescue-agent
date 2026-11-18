@@ -42,4 +42,23 @@ describe('review_effect：有没有采取处置（2026-11-11 演示复看）', (
     await reviewEffect(fakeEvidence(seen), { panel: '211016', origin, since: '2026-11-04T00:00:00', lastIssued: async () => plan })
     assert.equal(seen.options.treated, true)
   })
+
+  it('台账里什么都没下发（无预警时跟踪到点）：从最近一次研判的数据时间起观察，treated=false，不问操作员（2026-11-18）', async () => {
+    const seen: { options?: any } = {}
+    const none: LastIssued = { found: false }
+    const out = await reviewEffect(fakeEvidence(seen), {
+      panel: '211016', origin, lastIssued: async () => none,
+      lastAssessment: async () => ({ as_of: '2026-11-02T16:39:41', record_id: 'RP-a' }),
+    })
+    assert.equal(seen.options.treated, false)
+    assert.equal(seen.options.since_source, '未采取处置，从最近一次研判 RP-a 的数据时间起观察')
+    assert.equal(out.result.treated, false)
+  })
+
+  it('台账里没有下发、时间线里也没有研判：返回说明让智能体先研判，不让问起算时间', async () => {
+    await assert.rejects(
+      reviewEffect(fakeEvidence({}), { panel: '211016', origin, lastIssued: async () => ({ found: false }), lastAssessment: async () => undefined }),
+      (e: Error) => /先做研判/.test(e.message) && /不要问指挥人员/.test(e.message),
+    )
+  })
 })

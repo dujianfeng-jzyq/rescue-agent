@@ -30,7 +30,7 @@ import { describeFieldCard, loadFieldConditions, resolveFieldChoices } from './f
 import { applyPriorChoice, describeOptions, interpretChoice, loadResponseOptions, planKeysFor, priorChoice } from './response-options.ts'
 import { draftFirefightingPlan, draftSealingPlan, FIREFIGHTING, type HumanInput, type PlanFlow, type Redline, SEALING } from './sealing.ts'
 import { IncidentStore } from '../incident/store.ts'
-import { evidenceAsOf, noteOnIncident } from '../incident/timeline.ts'
+import { evidenceAsOf, lastAssessmentNote, noteOnIncident } from '../incident/timeline.ts'
 import { UNSEAL_FLOW, assessUnsealing } from './unsealing.ts'
 import { TIMELINE_FLOW, TimelineInputError, reviewTimeline } from './timeline.ts'
 import { EFFECT_FLOW, EffectInputError, type LastIssued, reviewEffect } from './effect.ts'
@@ -455,7 +455,7 @@ export function apply(ctx: Context, config: Config) {
       description:
         '处置效果复评（固定流程，评估注氮、堵漏、封闭等处置的效果一律调它）：对工作面全部发火指标测点（采空区束管 CO、采空区测温、非进风侧安全监控 CO）' +
         '比较处置前后的上升速率，给出总体结论（已受控 / 需继续处置 / 恶化 / 观测时间不足）、各结论测点数、逐点结果和下次复评时刻，存为记录。' +
-        'since 为处置开始的矿井时间（指挥人员给了就照填）；不给时取指令台账里本工作面最近一次已下发的封闭方案或防灭火方案的下发时间，没有方案时取加密监测的开始时间，台账里都没有时会返回说明，这时问指挥人员。' +
+        'since 为处置开始的矿井时间（指挥人员给了就照填）；不给时取指令台账里本工作面最近一次已下发的封闭方案或防灭火方案的下发时间，没有方案时取加密监测的开始时间，什么都没下发时取最近一次研判的数据时间（按“未采取处置”写结论）。不要问指挥人员起算时间。' +
         '完整报告已作为文件交付（网页端右侧预览）；回答时把 brief_markdown（效果评估要点）原样单独成段放进回答，不要改写、不要贴完整报告、不要另写分析。判据为开发占位值。',
       parameters: {
         panel: { type: 'string', required: true, description: '工作面编号，如 1201' },
@@ -481,6 +481,7 @@ export function apply(ctx: Context, config: Config) {
             origin: { channel: 'web', trigger: 'chat', caller: null, conversation_id: null },
             signal: exec.signal,
             lastIssued: async (panel) => ((await callJson(exec, config.lastIssuedTool, { panel }, 'last-issued')) ?? { found: false }) as LastIssued,
+            lastAssessment: (panel) => lastAssessmentNote(incidents, panel),
           })
           await logToIncident(String(args.panel), 'effect_review', out)
           out.delivered = await deliver(exec, `${out.card.record_ids[0]}.docx`, out.report_markdown, `${args.panel} 工作面处置效果复评报告`)

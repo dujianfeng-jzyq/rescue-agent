@@ -498,9 +498,9 @@ def test_ts_effect_flow_matches_python(sim_s4_60, tmp_path):
     spec = parse_collect_spec((SKILLS / "effect-review" / "references" / "collect.yaml").read_text(encoding="utf-8"))
     assert records[e["record_ids"]["evidence"]]["content"] == asyncio.run(collect_from(sim_s4_60, spec, "effect", "1201", clock))
     assert _rerun_and_render(records) == (1, 2)  # 复评报告、要点
-    # 台账里没有下发记录、也没给 since：返回说明（不抛错）
+    # 台账里没有下发记录、没给 since、也没有研判可作观察起点：返回说明让先研判（不再让问指挥人员起算时间，2026-11-18）
     out = subprocess.run(["node", "tools/effect.ts", str(SKILLS), str(tmp_path / "r2"), "1201", sim_s4_60], cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=60)
-    assert out.returncode != 0 and "请问指挥人员处置是什么时候开始的" in out.stderr
+    assert out.returncode != 0 and "先做研判" in out.stderr
 
 
 @NEED_NODE
