@@ -12,3 +12,4 @@ node_modules/
 dsh-bundle/lib/
 *.tsbuildinfo
 .DS_Store
+.vscode/
