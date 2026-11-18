@@ -3,7 +3,8 @@
  *   - 事件所在工作面：按预警等级着色，标签写“等级 · 阶段”（来自监听器写进告警的检测摘要）；
  *   - 矿井自己报警平台里仍在越限的测点：标在测点所在的位置，标签写读数（矿井原值）；
  *   - 火区台账里的火区：标“火区已封闭/已启封”；
- *   - 来了新告警：镜头自动飞到出事的工作面。
+ *   - 来了新告警时镜头飞到出事的工作面：不在这里发指令，由网页端做（先退出全屏地图、面板滑出来，再按面板让开的区域飞过去，
+ *     免得先按全屏飞一次、面板出来后又被挡住）。
  * 标记编号都以 auto: 开头，智能体手动标的（别的编号）不受影响。一个位置最多一个标记，多个来源合并成一条标签；
  * 颜色：位置上有事件的预警等级就用它，否则取各来源里最严重的。
  *
@@ -124,17 +125,10 @@ export function reconcileFigures(current: MapFigure[], desired: MapFigure[]): Ma
 }
 
 /**
- * 自动驾驶：每个周期给一份状态，返回要执行的地图指令。
- * 第一次只记下“已有的告警”，不飞（刚打开或重启时镜头不该乱动）；之后最近一条告警的编号变了才飞到该事件所在的工作面。
+ * 自动驾驶：每个周期给一份状态，返回要执行的地图指令（标记、图元；镜头不动，见文件头）。
  */
 export class Autopilot {
-  private lastAlert: string | null | undefined = undefined
   private lastStatus: string | null = null
-  private readonly zoom: number
-
-  constructor(zoom = 3) {
-    this.zoom = zoom
-  }
 
   step(state: MapState, map: MineMap, currentMarks: MapMark[], currentFigures: MapFigure[] = []): MapCommand[] {
     const cmds = [...reconcile(currentMarks, computeOverlay(state, map)), ...reconcileFigures(currentFigures, state.evacuation?.figures ?? [])]
@@ -146,12 +140,6 @@ export class Autopilot {
       for (const m of currentMarks) if (m.id.startsWith(AGENT_PREFIX) && !already.has(m.id)) cmds.push({ op: 'unmark', id: m.id })
     }
     this.lastStatus = status
-    const key = state.incident ? `${state.incident.id}:${state.incident.latestAlertId ?? ''}` : null
-    if (this.lastAlert !== undefined && key !== null && key !== this.lastAlert && state.incident?.latestAlertId) {
-      const name = anchorForPanel(map, state.incident.panel)
-      if (name) cmds.push({ op: 'focus', name, zoom: this.zoom })
-    }
-    this.lastAlert = key
     return cmds
   }
 }

@@ -39,6 +39,8 @@ export interface StateData {
     alarmCount: number | null
     checkAsOf: string | null
     latestAlertId: string | null
+    /** 事件所在工作面在地图上的名称；没有映射为 null */
+    anchor: string | null
     pendingAlerts: number
     degraded: boolean
     followups: { id: string; dueAt: string; expect: string; state: string }[]

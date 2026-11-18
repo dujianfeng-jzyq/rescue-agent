@@ -61,7 +61,16 @@ export interface PanelsHandle {
   dispose(): void
 }
 
-export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: string) => void, onFireTime: (t: number | null) => void = () => {}): PanelsHandle {
+/**
+ * onPending：点顶栏的“待确认/待回答”标记（全屏时看不到智能体卡片里的待确认指令，标记提醒并可一键展开面板）
+ */
+export function mountPanels(
+  root: HTMLElement,
+  title: string,
+  onFocus: (anchor: string) => void,
+  onFireTime: (t: number | null) => void = () => {},
+  onPending: () => void = () => {},
+): PanelsHandle {
   // 火灾推演回放（第七版）：左栏每次拿到新状态都整块重画，回放控件要跨重画复用（拖动、播放时不能被打断）；换了记录就重置
   let replay: { recordId: string; horizon: number; el: HTMLElement; stop: () => void } | null = null
   const dropReplay = (): void => {
@@ -122,7 +131,14 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
   const wallClock = h('div', { class: 'rm-clock-sub' }, '')
   const chips = h('div', { class: 'rm-chips' })
   const toolsSlot = h('div', { class: 'rm-tools' })
-  const header = h('header', { class: 'rm-header' }, h('div', { class: 'rm-brand' }, logo, titleEl), h('div', { class: 'rm-clock' }, mineClock, wallClock), h('div', { class: 'rm-header-right' }, chips, toolsSlot))
+  // 三段：左边状态（时间、预警等级、数据和监听），中间标题（图标、智能体、矿井名称），右边操作按钮
+  const header = h(
+    'header',
+    { class: 'rm-header' },
+    h('div', { class: 'rm-header-left' }, h('div', { class: 'rm-clock' }, mineClock, wallClock), chips),
+    h('div', { class: 'rm-brand' }, logo, titleEl),
+    h('div', { class: 'rm-header-right' }, toolsSlot),
+  )
 
   // ── 左右栏 ──────────────────────────────────────────────────────
   const left = h('aside', { class: 'rm-card rm-left', 'aria-label': '矿井信息' })
@@ -130,7 +146,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
   root.append(header, left, right)
 
   const tick = (): void => {
-    wallClock.textContent = `本机 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`
+    wallClock.textContent = `矿井时间 · 本机 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`
   }
   tick()
   const timer = window.setInterval(tick, 1000)
@@ -396,7 +412,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                 p.escalated && h('em', null, '已超时升级'),
               )
             }),
-            h('p', { class: 'rm-note' }, '请在屏幕中间的确认框里确认或拒绝。'),
+            h('p', { class: 'rm-note' }, '请在屏幕下方的确认框里确认或拒绝。'),
           ),
       )
     const rec = section(
@@ -425,6 +441,23 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
 
   function renderChips(s: StateData | null, staleS: number, failed: boolean): void {
     const out: HTMLElement[] = []
+    // 预警等级放在顶栏：全屏地图（左栏收起）时也看得到
+    const inc = s?.incident ?? null
+    if (inc) {
+      const lv = inc.level ? (LEVEL_COLOR[inc.level] ?? '#7fb2e6') : '#7f93ab'
+      const name = inc.level === 'none' ? '无预警' : (inc.levelName ?? '未研判')
+      out.push(h('span', { class: 'rm-chip rm-chip-level', style: `--lv:${lv}`, title: `${inc.panel ?? ''} ${inc.stageName ?? ''}`.trim() }, h('i'), name))
+    }
+    // 待人工确认的指令、等操作员回答的卡片：顶栏闪烁提醒。待确认数取自事件库；待回答看页面上有没有 DSH 的提问卡片
+    // （智能体等回答时运行状态是“工作中 · 向操作员提问”，不一定是 waiting_question，2026-11-18 演示里看到）
+    const nApprovals = inc?.pendingApprovals.length ?? 0
+    const asking = s?.agent.state === 'waiting_question' || !!document.querySelector('[data-question-key]')
+    if (nApprovals > 0 || asking) {
+      const text = [nApprovals > 0 && `${nApprovals} 条待确认`, asking && '待回答'].filter(Boolean).join(' · ')
+      const b = h('button', { type: 'button', class: 'rm-chip rm-chip-pending', title: '确认框在屏幕下方；点这里展开两侧面板' }, h('i'), text)
+      b.addEventListener('click', onPending)
+      out.push(b)
+    }
     if (failed || !s) out.push(chip(`状态接口中断${staleS > 0 ? `（${staleS}s）` : ''}`, 'bad'))
     else {
       out.push(chip(s.mine.ok ? '矿井数据' : `矿井数据${s.mine.error ? '异常' : '未配置'}`, s.mine.ok ? 'ok' : 'bad'))
@@ -436,7 +469,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
 
   return {
     update(s, staleS, failed) {
-      mineClock.textContent = s?.mine.now ? `矿井时间 ${clock(s.mine.now)}` : '矿井时间 —'
+      mineClock.textContent = s?.mine.now ? clock(s.mine.now) : '—'
       renderChips(s, staleS, failed)
       renderLeft(s, failed)
       renderRight(s)

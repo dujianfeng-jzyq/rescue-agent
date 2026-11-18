@@ -16,16 +16,22 @@ interface RecordView {
 
 let overlay: HTMLElement | null = null
 
-function close(): void {
-  overlay?.remove()
+/** 关掉弹窗。animate 为真时先播放滑出的动画再删（操作员关的）；换一条记录看时直接删 */
+function close(animate = false): void {
+  const el = overlay
   overlay = null
   document.removeEventListener('keydown', onKey, true)
+  if (!el) return
+  if (!animate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return el.remove()
+  el.classList.add('rm-closing')
+  window.setTimeout(() => el.remove(), 220)
 }
+const closeAnimated = (): void => close(true)
 
 function onKey(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
     e.stopPropagation()
-    close()
+    close(true)
   }
 }
 
@@ -60,11 +66,11 @@ export async function openRecord(id: string): Promise<void> {
   const titleEl = h('b', null, id)
   const meta = h('div', { class: 'rm-modal-meta' })
   const btn = h('button', { type: 'button', class: 'rm-modal-close', 'aria-label': '关闭' }, '×')
-  btn.addEventListener('click', close)
+  btn.addEventListener('click', closeAnimated)
   const dialog = h('div', { class: 'rm-modal', role: 'dialog', 'aria-modal': 'true' }, h('div', { class: 'rm-modal-head' }, titleEl, btn), meta, body)
   overlay = h('div', { class: 'rm-modal-overlay' }, dialog)
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close()
+    if (e.target === overlay) close(true)
   })
   document.body.append(overlay)
   document.addEventListener('keydown', onKey, true)

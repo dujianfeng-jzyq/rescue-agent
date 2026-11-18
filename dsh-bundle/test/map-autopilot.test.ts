@@ -113,20 +113,10 @@ describe('reconcile', () => {
 })
 
 describe('Autopilot', () => {
-  it('第一次只记下已有告警，不飞；告警编号变了才飞到该事件所在的工作面', () => {
+  it('新告警不发镜头指令（由网页端退出全屏后飞过去）', () => {
     const ap = new Autopilot()
-    const s1 = state({ incident: incident({ latestAlertId: 'EVT-1' }) })
-    assert.deepEqual(ap.step(s1, MAP, []).filter((c) => c.op === 'focus'), [])
-    assert.deepEqual(ap.step(s1, MAP, []).filter((c) => c.op === 'focus'), [], '编号没变不飞')
-    const s2 = state({ incident: incident({ latestAlertId: 'EVT-2' }) })
-    assert.deepEqual(ap.step(s2, MAP, []).filter((c) => c.op === 'focus'), [{ op: 'focus', name: '211016采面', zoom: 3 }])
-    assert.deepEqual(ap.step(s2, MAP, []).filter((c) => c.op === 'focus'), [], '只飞一次')
-  })
-
-  it('工作面没有映射时不飞，也不报错', () => {
-    const ap = new Autopilot()
-    ap.step(state({ incident: incident({ panel: '999', latestAlertId: 'E1' }) }), MAP, [])
-    assert.deepEqual(ap.step(state({ incident: incident({ panel: '999', latestAlertId: 'E2' }) }), MAP, []).filter((c) => c.op === 'focus'), [])
+    ap.step(state({ incident: incident({ latestAlertId: 'EVT-1' }) }), MAP, [])
+    assert.deepEqual(ap.step(state({ incident: incident({ latestAlertId: 'EVT-2' }) }), MAP, []).filter((c) => c.op === 'focus'), [])
   })
 
   it('事件转为已稳定时清掉智能体的标记，只在转入那一刻清（之后再标的保留）', () => {

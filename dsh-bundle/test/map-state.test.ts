@@ -108,6 +108,9 @@ describe('buildState', () => {
     assert.equal(s.incident!.pendingAlerts, 1)
     assert.equal(s.agent.state, 'alert_pending')
     assert.equal(s.readings.panel, '211016', '读数的工作面跟随事件')
+    assert.equal(s.incident!.anchor, null, '没有映射表时工作面没有地图位置')
+    const withMap = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine(), map: { panels: { '211016': { anchor: '211016采面' } }, roadways: {}, sensors: {}, nodes: {}, via: {}, status: 'placeholder', reviewedBy: null } as never })
+    assert.equal(withMap.incident!.anchor, '211016采面', '网页端收到新告警时飞到这里')
     // 之后别的条目带了 level 字段（处置选择记的是卡片的等级）：等级仍取监听器的检测
     await f.store.append(id, '2026-11-09T07:20:00', 'note', 'flow', { type: 'response_choice', level: 'orange', choice: 'none', option_ids: [], text: '操作员输入“不采取处置”' })
     const s2 = await buildState({ incidentDir: f.incidentDir, recordDir: f.recordDir, mine: mine() })

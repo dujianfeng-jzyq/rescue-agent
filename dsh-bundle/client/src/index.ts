@@ -95,11 +95,31 @@ function mount(ctx: ClientContext): () => void {
             return undefined
           }
         },
+        // 打开页面时只悄悄切过去，保持全屏地图；投递告警时把对话区拉出来
         switched: (reason) => {
+          if (reason !== 'delivery') return
           hud?.showChat()
-          if (reason === 'delivery') hud?.toast('监听器告警已投递给智能体，已切到值班会话')
+          hud?.toast('监听器告警已投递给智能体，已切到值班会话')
         },
       })
+
+      // 来了新告警（最近一条告警的编号变了）：退出全屏地图，两侧面板滑出来，镜头飞到事件所在的工作面。
+      // 第一次只记下已有的告警（刚打开页面时不动）。飞的目标按面板展开后的空白区域算，和面板滑动同时进行
+      let seenAlert: string | null | undefined
+      const watchAlert = (s: StateData): void => {
+        const inc = s.incident
+        const key = inc?.latestAlertId ? `${inc.id}:${inc.latestAlertId}` : null
+        if (seenAlert === undefined) {
+          seenAlert = key
+          return
+        }
+        if (!inc || key === null || key === seenAlert) return
+        seenAlert = key
+        hud?.setFullscreen(false)
+        if (inc.anchor) view?.focus(inc.anchor, 3)
+        const level = inc.level === 'none' ? '' : (inc.levelName ?? '')
+        hud?.toast(`收到预警：${[inc.panel, level, inc.stageName].filter(Boolean).join(' · ') || inc.summary || inc.id}`, 'alert')
+      }
 
       let last: StateData | null = null
       let lastOk = 0
@@ -108,6 +128,7 @@ function mount(ctx: ClientContext): () => void {
           last = await fetchState()
           lastOk = Date.now()
           hud?.setState(last, 0, false)
+          watchAlert(last)
           followDuty(last)
         } catch {
           hud?.setState(last, lastOk ? Math.round((Date.now() - lastOk) / 1000) : 0, true)

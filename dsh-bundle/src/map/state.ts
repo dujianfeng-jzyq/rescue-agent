@@ -112,8 +112,10 @@ export interface MapState {
     stageName: string | null
     alarmCount: number | null
     checkAsOf: string | null
-    /** 最近一条告警的编号：地图据此判断“来了新告警”，自动飞到出事位置 */
+    /** 最近一条告警的编号：网页端据此判断“来了新告警”，退出全屏地图并飞到出事位置 */
     latestAlertId: string | null
+    /** 事件所在工作面在地图上的名称（映射表 panels 的 anchor）；没有映射为 null */
+    anchor: string | null
     pendingAlerts: number
     degraded: boolean
     followups: { id: string; dueAt: string; expect: string; state: string }[]
@@ -466,6 +468,7 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
       alarmCount: typeof chk?.alarm_count === 'number' ? chk.alarm_count : null,
       checkAsOf: chk?.as_of ?? null,
       latestAlertId: lastAlertId(entries),
+      anchor: null,
       pendingAlerts: main.pending_alerts.length,
       degraded: main.degraded,
       followups: main.followups.filter((f) => f.state !== 'done').map((f) => ({ id: f.followup_id, dueAt: f.due_at, expect: String(f.expect ?? ''), state: f.state })),
@@ -478,6 +481,7 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
   }
 
   const map = deps.map ?? EMPTY_MAP
+  if (incident) incident.anchor = anchorForPanel(map, incident.panel)
   const mine: MapState['mine'] = { now: null, ok: false }
   let readings: MapState['readings'] = { panel: null, rows: [], error: '矿井数据服务没有配置' }
   let alarms: MapState['alarms'] = { items: [], error: '矿井数据服务没有配置' }

@@ -54,8 +54,9 @@ const NAVY = `
 
 const CSS = `
 ${ON}, ${ON} body { background: #0b1522 !important; color-scheme: dark; }
+${ON} body { overflow: hidden; }
 #rescue-map-host { position: fixed; inset: 0; z-index: 0; }
-${ON} { --rm-l: 372px; --rm-chat-w: clamp(420px, 28vw, 560px); --rm-r: calc(var(--rm-chat-w) + 32px); --rm-top: 68px; --rm-agent-h: 0px; }
+${ON} { --rm-l: 372px; --rm-chat-w: clamp(420px, 28vw, 560px); --rm-r: calc(var(--rm-chat-w) + 32px); --rm-top: 68px; --rm-agent-h: 0px; --rm-slide-t: 0.38s; --rm-ease: cubic-bezier(0.2, 0.8, 0.2, 1); }
 ${ON}.rm-hide-left { --rm-l: 16px; }
 ${ON}.rm-hide-right.rm-hide-chat { --rm-r: 16px; }
 ${ON} #root { position: relative; z-index: 2; height: 100%; pointer-events: none; }
@@ -66,26 +67,45 @@ ${ON} ${OVERLAY} { pointer-events: none; }
 ${ON} ${OVERLAY} > * { pointer-events: auto; }
 
 /* 右栏：上面是自绘的智能体卡片（高度由 JS 写进 --rm-agent-h），下面是 DSH 的会话组件，占满剩下的高度 */
-${ON} ${CENTER} { position: absolute !important; right: 16px; width: var(--rm-chat-w); top: calc(var(--rm-top) + var(--rm-agent-h) + 12px); bottom: 16px; pointer-events: auto; ${NAVY} ${CARD} }
+${ON} ${CENTER} { position: absolute !important; right: 16px; width: var(--rm-chat-w); top: calc(var(--rm-top) + var(--rm-agent-h) + 12px); bottom: 16px; pointer-events: auto; ${NAVY} ${CARD}
+  transition: right var(--rm-slide-t) var(--rm-ease), bottom var(--rm-slide-t) var(--rm-ease), top var(--rm-slide-t) var(--rm-ease), visibility 0s; }
 ${ON}.rm-hide-right ${CENTER} { top: var(--rm-top); }
 ${ON} ${CENTER} > * { background: transparent !important; }
-${ON}.rm-hide-chat ${CENTER} { display: none !important; }
+/* 面板收起：滑出屏幕，滑完再隐藏（visibility 延迟到滑动结束）；展开时立即可见再滑进来。
+   会话列滑动用 right 而不是 transform：有 transform 时里面 fixed 定位的确认卡片会跟着它走 */
+${ON}.rm-hide-chat ${CENTER} { right: calc(-1 * var(--rm-chat-w) - 24px); visibility: hidden; pointer-events: none;
+  transition: right var(--rm-slide-t) var(--rm-ease), bottom var(--rm-slide-t) var(--rm-ease), top var(--rm-slide-t) var(--rm-ease), visibility 0s linear var(--rm-slide-t); }
 /* 人工确认卡片和提问卡片（处置选项、现场条件）放到画面下方、左右栏之间的区域，底边对齐面板（2026-11-10 演示复看：右下角不醒目，
    窄栏里显示不全，先移到正中；2026-11-17：正中会挡住地图，改到下方）。宽度不超过左右栏之间的空隙，高度最多半屏，超出在卡片里滚动。
    卡片仍是 DSH 会话组件里的原件，只改位置：会话列的 backdrop-filter 会让 fixed 定位相对它而不是视口，有卡片时去掉；
    对话区被收起时也要显示卡片（列保留布局但不可见，只有卡片可见）。
    外层（DSH 的 root/frame）只当定位容器：不加底色、边框和压暗（第八次复看：外面多一层背景），里面的卡片拉满宽度 */
 ${ON} ${CENTER}:has([data-approval-key], [data-question-key]) { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: rgba(9, 20, 38, 0.95) !important; }
-${ON}.rm-hide-chat ${CENTER}:has([data-approval-key], [data-question-key]) { display: block !important; visibility: hidden; }
 ${ON} ${CENTER} :is([data-approval-key], [data-question-key]) {
-  visibility: visible; position: fixed !important; left: calc((var(--rm-l) + 100vw - var(--rm-r)) / 2); top: auto; bottom: 16px; transform: translateX(-50%); z-index: 100;
+  visibility: visible; pointer-events: auto; position: fixed !important; left: calc((var(--rm-l) + 100vw - var(--rm-r)) / 2); top: auto; bottom: 16px; transform: translateX(-50%); z-index: 100;
   width: min(820px, calc(100vw - var(--rm-l) - var(--rm-r))) !important; max-width: none !important; box-sizing: border-box; margin: 0 !important; padding: 0 !important;
   background: transparent !important; border: 0 !important; box-shadow: none !important;
 }
 ${ON} ${CENTER} :is([data-approval-key], [data-question-key]) > * {
   width: 100% !important; max-width: none !important; max-height: 50vh !important; overflow: auto; box-sizing: border-box; margin: 0 !important;
   background: rgb(12, 28, 52) !important; box-shadow: 0 16px 60px rgba(0, 0, 0, 0.65) !important;
+  animation: rm-card-in var(--rm-slide-t) var(--rm-ease);
 }
+/* 卡片被 DSH 移除后留一个克隆往下滑出（hud.ts watchCards），样式照上面的卡片 */
+.rm-ghost { position: fixed; left: calc((var(--rm-l) + 100vw - var(--rm-r)) / 2); bottom: 16px; transform: translateX(-50%); z-index: 100; pointer-events: none; ${NAVY} }
+.rm-ghost > * { margin: 0 !important; }
+.rm-ghost > * > * { width: 100% !important; max-width: none !important; max-height: 50vh !important; overflow: hidden; box-sizing: border-box; margin: 0 !important;
+  background: rgb(12, 28, 52) !important; box-shadow: 0 16px 60px rgba(0, 0, 0, 0.65) !important; animation: rm-card-out 0.3s ease-in forwards; }
+.rm-ghost [data-approval-key] > * { border: 1px solid rgba(245, 197, 24, 0.7) !important; }
+.rm-ghost [data-question-key] > * { border: 1px solid rgba(90, 160, 255, 0.6) !important; }
+@keyframes rm-card-in { from { transform: translateY(calc(100% + 24px)); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes rm-card-out { from { transform: none; opacity: 1; } to { transform: translateY(calc(100% + 24px)); opacity: 0; } }
+@keyframes rm-from-left { from { transform: translateX(calc(-100% - 24px)); } to { transform: none; } }
+@keyframes rm-from-right { from { transform: translateX(calc(100% + 24px)); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes rm-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rm-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes rm-pop-in { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes rm-pop-out { from { transform: none; opacity: 1; } to { transform: translateY(40px); opacity: 0; } }
 ${ON} ${CENTER} [data-approval-key] > * { border: 1px solid rgba(245, 197, 24, 0.7) !important; }
 ${ON} ${CENTER} [data-question-key] > * { border: 1px solid rgba(90, 160, 255, 0.6) !important; }
 ${ON} ${CENTER} [data-approval-key] [role="group"] > div:first-child { font-size: 15px; line-height: 24px; }
@@ -107,55 +127,83 @@ ${ON} ${CENTER} [data-composer-card] > [class$="_row"] { position: absolute !imp
 ${ON} ${CENTER} [data-composer-card] > [class$="_row"] > * { flex: 0 0 auto !important; pointer-events: auto; }
 
 /* DSH 的会话列表：按钮呼出的抽屉 */
-${ON} ${SIDEBAR} { display: none !important; }
-${ON}.rm-drawer ${SIDEBAR} { display: block !important; position: absolute !important; left: 16px; top: var(--rm-top); bottom: 16px; width: 320px; z-index: 30; pointer-events: auto; ${NAVY} ${CARD} }
+${ON} ${SIDEBAR} { display: block !important; position: absolute !important; left: 16px; top: var(--rm-top); bottom: 16px; width: 320px; z-index: 30; pointer-events: none; ${NAVY} ${CARD}
+  transform: translateX(calc(-100% - 24px)); visibility: hidden; transition: transform var(--rm-slide-t) var(--rm-ease), visibility 0s linear var(--rm-slide-t); }
+${ON}.rm-drawer ${SIDEBAR} { transform: none; visibility: visible; pointer-events: auto; transition: transform var(--rm-slide-t) var(--rm-ease), visibility 0s; }
 ${ON}.rm-drawer ${SIDEBAR} > * { background: transparent !important; }
 
 /* DSH 的右栏（文件预览、终端等）：打开时浮在最上面，收起时不占位 */
 ${ON} ${FRAME}[data-rightbar-collapsed] [data-sidebar-right-panel] { display: none !important; }
 /* 放在右栏左边，不盖住聊天区 */
-${ON} ${RIGHT} { position: absolute !important; right: var(--rm-r); top: var(--rm-top); bottom: 16px; width: min(560px, calc(100vw - var(--rm-r) - 16px)) !important; z-index: 40; pointer-events: auto; ${NAVY} ${CARD} }
+${ON} ${RIGHT} { position: absolute !important; right: var(--rm-r); top: var(--rm-top); bottom: 16px; width: min(560px, calc(100vw - var(--rm-r) - 16px)) !important; z-index: 40; pointer-events: auto; ${NAVY} ${CARD}
+  animation: rm-from-right var(--rm-slide-t) var(--rm-ease); }
 
 /* 自绘部分 */
 #${HUD_ID} { position: fixed; inset: 0; z-index: 1; pointer-events: none; color: #dbe8f5; font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', sans-serif; }
 #${HUD_ID} > * { pointer-events: auto; }
 .rm-header {
-  position: absolute; top: 0; left: 0; right: 0; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 16px;
+  position: absolute; top: 0; left: 0; right: 0; height: 56px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 0 16px;
   background: linear-gradient(180deg, rgba(8, 18, 34, 0.92), rgba(8, 18, 34, 0.55)); border-bottom: 1px solid rgba(90, 160, 255, 0.22);
   box-shadow: 0 6px 30px rgba(0, 0, 0, 0.35); backdrop-filter: blur(10px);
 }
-.rm-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rm-header-left { display: flex; align-items: center; gap: 14px; min-width: 0; justify-self: start; }
+.rm-brand { display: flex; align-items: center; gap: 10px; min-width: 0; justify-self: center; }
 .rm-logo { display: grid; place-items: center; filter: drop-shadow(0 0 6px rgba(79, 209, 255, 0.55)); }
 .rm-title { display: flex; flex-direction: column; min-width: 0; }
 .rm-title b { font-size: 17px; letter-spacing: 0.12em; color: #eaf4ff; text-shadow: 0 0 12px rgba(79, 209, 255, 0.45); white-space: nowrap; }
 .rm-title span { font-size: 11px; color: #7fb2e6; letter-spacing: 0.06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rm-clock { text-align: center; }
+.rm-clock { text-align: left; flex: 0 0 auto; }
 .rm-clock-main { font: 600 18px/1.1 ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; color: #4fd1ff; text-shadow: 0 0 10px rgba(79, 209, 255, 0.5); white-space: nowrap; }
 .rm-clock-sub { font-size: 11px; color: #7f93ab; margin-top: 2px; }
-.rm-header-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.rm-chips { display: flex; gap: 6px; }
+.rm-header-right { display: flex; align-items: center; gap: 12px; min-width: 0; justify-self: end; }
+.rm-chips { display: flex; gap: 6px; min-width: 0; overflow: hidden; }
 .rm-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; background: rgba(120, 160, 210, 0.12); border: 1px solid rgba(120, 160, 210, 0.2); }
 .rm-chip i { width: 7px; height: 7px; border-radius: 50%; background: #7f93ab; }
 .rm-chip[data-tone="ok"] i { background: #35c46a; box-shadow: 0 0 8px #35c46a; }
 .rm-chip[data-tone="warn"] i { background: #f5c518; box-shadow: 0 0 8px #f5c518; }
 .rm-chip[data-tone="bad"] { color: #ff8f8f; border-color: rgba(255, 77, 79, 0.4); }
 .rm-chip[data-tone="bad"] i { background: #ff4d4f; box-shadow: 0 0 8px #ff4d4f; }
+.rm-chip-level { color: var(--lv); font-weight: 600; border-color: color-mix(in srgb, var(--lv) 55%, transparent); background: color-mix(in srgb, var(--lv) 14%, transparent); }
+.rm-chip-level i { background: var(--lv); box-shadow: 0 0 8px var(--lv); }
+.rm-chip-pending { font: inherit; font-size: 12px; cursor: pointer; color: #f5c518; font-weight: 600; border-color: rgba(245, 197, 24, 0.6); background: rgba(245, 197, 24, 0.14); animation: rm-pending 1.4s ease-in-out infinite; }
+.rm-chip-pending i { background: #f5c518; box-shadow: 0 0 8px #f5c518; }
+.rm-chip-pending:hover { background: rgba(245, 197, 24, 0.26); }
+@keyframes rm-pending { 50% { box-shadow: 0 0 0 4px rgba(245, 197, 24, 0.18); border-color: rgba(245, 197, 24, 1); } }
+/* 预警升到橙色、红色时，画面四周闪一圈等级色（只是提醒，不挡操作） */
+#rescue-map-flash { position: fixed; inset: 0; z-index: 70; pointer-events: none; box-shadow: inset 0 0 0 4px var(--lv), inset 0 0 90px 10px var(--lv); opacity: 0; animation: rm-flash 1s ease-in-out 4; }
+@keyframes rm-flash { 0%, 100% { opacity: 0; } 40%, 60% { opacity: 0.85; } }
 .rm-tools { display: flex; gap: 4px; }
 .rm-tools button {
   font: inherit; font-size: 12px; color: #cfe1f5; cursor: pointer; padding: 6px 11px; border-radius: 8px; white-space: nowrap;
   border: 1px solid rgba(120, 160, 210, 0.22); background: rgba(120, 160, 210, 0.08);
 }
 .rm-tools button:hover { background: rgba(79, 209, 255, 0.16); border-color: rgba(79, 209, 255, 0.5); }
-.rm-tools button[aria-pressed="false"] { opacity: 0.5; }
 .rm-tools button[aria-pressed="true"] { border-color: rgba(79, 209, 255, 0.6); color: #4fd1ff; }
+.rm-tools .rm-more { font-size: 14px; line-height: 1; padding: 5px 10px; letter-spacing: -0.1em; }
+/* “更多”菜单：挂在 body 上（顶栏在 DSH 会话组件下层，菜单要盖住聊天区） */
+#rescue-map-menu {
+  position: fixed; top: 60px; right: 16px; z-index: 60; min-width: 176px; padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  color: #dbe8f5; font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', sans-serif; ${CARD}
+  transform-origin: top right; transform: translateY(-8px) scale(0.98); opacity: 0; visibility: hidden; pointer-events: none;
+  transition: transform 0.18s ease, opacity 0.18s ease, visibility 0s linear 0.18s;
+}
+#rescue-map-menu[data-open] { transform: none; opacity: 1; visibility: visible; pointer-events: auto; transition: transform 0.18s ease, opacity 0.18s ease, visibility 0s; }
+#rescue-map-menu button { display: flex; align-items: center; justify-content: space-between; gap: 16px; font: inherit; color: inherit; text-align: left; cursor: pointer; padding: 7px 10px; border: 0; border-radius: 8px; background: transparent; }
+#rescue-map-menu button:hover, #rescue-map-menu button:focus-visible { background: rgba(79, 209, 255, 0.14); outline: none; }
+#rescue-map-menu button::after { content: ''; width: 14px; color: #4fd1ff; text-align: center; }
+#rescue-map-menu button[aria-pressed="true"]::after { content: '✓'; }
+#rescue-map-menu hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid rgba(120, 160, 210, 0.16); }
 
 .rm-card { ${CARD} }
-.rm-left, .rm-right { box-sizing: border-box; position: absolute; top: var(--rm-top); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(120, 160, 210, 0.35) transparent; }
+.rm-left, .rm-right { box-sizing: border-box; position: absolute; top: var(--rm-top); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(120, 160, 210, 0.35) transparent;
+  transition: transform var(--rm-slide-t) var(--rm-ease), visibility 0s; }
 .rm-left { left: 16px; bottom: 16px; width: 340px; padding: 6px 14px 14px; }
 /* 智能体卡片：在聊天区上方，按内容高度，最多占三分之一屏；聊天区隐藏时可以往下长 */
 .rm-right { right: 16px; width: var(--rm-chat-w); max-height: 34vh; padding: 2px 14px 8px; }
 html.rm-hide-chat .rm-right { max-height: calc(100vh - var(--rm-top) - 16px); }
-html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
+html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { visibility: hidden; pointer-events: none; transition: transform var(--rm-slide-t) var(--rm-ease), visibility 0s linear var(--rm-slide-t); }
+html.rm-hide-left .rm-left { transform: translateX(calc(-100% - 24px)); }
+html.rm-hide-right .rm-right { transform: translateX(calc(100% + 24px)); }
 .rm-sec { padding: 10px 0 4px; border-bottom: 1px solid rgba(120, 160, 210, 0.12); }
 .rm-sec:last-child { border-bottom: 0; }
 .rm-sec h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; color: #7fb2e6; display: flex; align-items: center; gap: 8px; }
@@ -213,7 +261,10 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-records time { margin-left: auto; flex: 0 0 auto; white-space: nowrap; }
 .rm-records li { cursor: pointer; }
 .rm-records li:hover, .rm-records li:focus-visible { background: rgba(79, 209, 255, 0.08); outline: none; }
-.rm-modal-overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(3, 8, 18, 0.6); padding: 16px; box-sizing: border-box; }
+.rm-modal-overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(3, 8, 18, 0.6); padding: 16px; box-sizing: border-box; animation: rm-fade-in 0.2s ease; }
+.rm-modal-overlay .rm-modal { animation: rm-pop-in 0.3s var(--rm-ease, ease); }
+.rm-modal-overlay.rm-closing { animation: rm-fade-out 0.2s ease forwards; pointer-events: none; }
+.rm-modal-overlay.rm-closing .rm-modal { animation: rm-pop-out 0.2s ease-in forwards; }
 .rm-modal { width: min(720px, 100%); max-height: min(80vh, 100%); display: flex; flex-direction: column; background: rgba(12, 28, 52, 0.98); border: 1px solid rgba(90, 160, 255, 0.35); border-radius: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); color: #dbe7f5; font-size: 13px; }
 .rm-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px 6px; }
 .rm-modal-head b { font-size: 15px; color: #eaf4ff; }
@@ -245,8 +296,10 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-approvals span { color: #b9cbe0; font-size: 12px; }
 .rm-approvals em { font-style: normal; color: #ff8f8f; font-size: 11px; }
 
-#rescue-map-legend { position: absolute; top: 64px; right: var(--rm-r); width: min(300px, calc(100vw - 24px)); padding: 10px 12px; max-height: calc(100vh - 100px); overflow: auto; ${CARD} z-index: 5; }
-#rescue-map-legend[hidden] { display: none; }
+#rescue-map-legend { position: absolute; top: var(--rm-top); right: var(--rm-r); width: min(300px, calc(100vw - 24px)); padding: 10px 12px; max-height: calc(100vh - 100px); overflow: auto; ${CARD} z-index: 5;
+  transition: transform var(--rm-slide-t) var(--rm-ease), opacity var(--rm-slide-t) ease, right var(--rm-slide-t) var(--rm-ease), visibility 0s; }
+#rescue-map-legend:not([data-open]) { transform: translateX(calc(100% + 24px)); opacity: 0; visibility: hidden; pointer-events: none;
+  transition: transform var(--rm-slide-t) var(--rm-ease), opacity var(--rm-slide-t) ease, right var(--rm-slide-t) var(--rm-ease), visibility 0s linear var(--rm-slide-t); }
 #rescue-map-legend h4 { margin: 0 0 6px; font: 600 12px system-ui, sans-serif; color: #7fb2e6; letter-spacing: 0.14em; }
 
 .rm-label { position: absolute; left: 0; top: 0; white-space: nowrap; font: 11px/1 system-ui, sans-serif; transform-origin: 0 0; margin: -6px 0 0 4px; }
@@ -258,6 +311,8 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 /* 卡片在下方时提示挪到顶栏下面，免得被卡片盖住 */
 ${ON}:has(${CENTER} :is([data-approval-key], [data-question-key])) #rescue-map-toast { bottom: auto; top: calc(var(--rm-top) + 8px); }
 #rescue-map-toast[hidden] { display: none; }
+#rescue-map-toast:not([hidden]) { animation: rm-fade-in 0.25s ease; }
+#rescue-map-toast[data-tone="alert"] { border-color: rgba(255, 138, 31, 0.7) !important; color: #ffd2a8; font-weight: 600; }
 [data-theme="dark"] .rm-label { color: #d6e2ee; text-shadow: 0 0 3px #0b1522, 0 0 3px #0b1522; }
 [data-theme="dark"] .rm-label[data-kind="flow"] { color: #7ad9a1; }
 .rm-evac-total b { font-size: 22px; color: #ffb020; }
@@ -321,14 +376,20 @@ ${ON}:has(${CENTER} :is([data-approval-key], [data-question-key])) #rescue-map-t
 @media (max-width: 1100px) {
   ${ON} { --rm-l: 312px; --rm-chat-w: 360px; }
   .rm-left { width: 280px; }
-  .rm-chips { display: none; }
+  .rm-chip:not(.rm-chip-level) { display: none; }
+  .rm-title span { display: none; }
 }
 @media (max-width: 800px) {
   ${ON} { --rm-l: 12px; --rm-r: 12px; }
   .rm-left, .rm-right { display: none; }
   ${ON} ${CENTER} { left: 12px; right: 12px; width: auto; top: auto; bottom: 12px; height: min(60vh, 560px); }
+  ${ON}.rm-hide-chat ${CENTER} { right: 12px; bottom: calc(-1 * min(60vh, 560px) - 24px); }
   .rm-clock, .rm-title span { display: none; }
-  .rm-tools { overflow-x: auto; max-width: 60vw; }
+}
+/* 系统设置了“减少动态效果”：不滑动，直接显示/隐藏 */
+@media (prefers-reduced-motion: reduce) {
+  #rescue-map-flash { animation: none !important; opacity: 0.6; }
+  ${ON} *, ${ON} *::before, #rescue-map-menu { transition-duration: 0s !important; transition-delay: 0s !important; animation: none !important; }
 }
 `
 
@@ -346,32 +407,26 @@ export interface HudHandlers {
 }
 
 export interface Hud {
-  /** 在聊天区上方显示一条短提示，几秒后消失 */
-  toast(text: string): void
+  /** 在地图下方显示一条短提示，几秒后消失；tone 为 alert 时醒目一些 */
+  toast(text: string, tone?: 'alert'): void
   /** 聊天区被隐藏时把它显示出来（点选引用要往输入框里写） */
   showChat(): void
+  /** 全屏地图 = 左栏、智能体卡片、对话区都收起。返回之前是不是全屏 */
+  setFullscreen(on: boolean): boolean
   setConnected(ok: boolean): void
   setState(s: StateData | null, staleS: number, failed: boolean): void
   dispose(): void
 }
 
 const root = document.documentElement
-const PANEL_CLASSES = ['rm-hide-left', 'rm-hide-chat', 'rm-hide-right']
+const PANEL_CLASSES = ['rm-hide-left', 'rm-hide-right', 'rm-hide-chat'] as const
+const CARD_SEL = '[data-approval-key], [data-question-key]'
+/** 预警等级的先后（只用来判断“升了没有”，等级本身来自监听器） */
+const LEVEL_RANK: Record<string, number> = { none: 0, blue: 1, yellow: 2, orange: 3, red: 4 }
+/** 事件转入平静后多久自动回到全屏地图（界面参数，占位：2 分钟，看演示效果再调） */
+const AUTO_FULL_MS = 120_000
 
-function readFlag(key: string): boolean {
-  try {
-    return localStorage.getItem(`rescue-map:${key}`) === '1'
-  } catch {
-    return false
-  }
-}
-function writeFlag(key: string, v: boolean): void {
-  try {
-    localStorage.setItem(`rescue-map:${key}`, v ? '1' : '0')
-  } catch {
-    /* 隐私模式等：不影响使用 */
-  }
-}
+const reducedMotion = (): boolean => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 
 /** 强制 DSH 用深色变量：body 上的 data-ds-dark-theme 被 DSH 的主题逻辑拿掉时再加回去。返回恢复函数。 */
 function forceDark(): () => void {
@@ -389,6 +444,47 @@ function forceDark(): () => void {
   }
 }
 
+/**
+ * 人工确认卡片、提问卡片关掉时往下滑出：卡片是 DSH 的组件，关掉就直接从 DOM 里拿走了，
+ * 这里在它被拿走时放一个克隆，在原位置往下滑出后删掉（只是画面，克隆不能点）。
+ * 同一批变动里又出现了同一个键的卡片（DSH 重画）就不放克隆。返回停止函数。
+ */
+function watchCards(): () => void {
+  const host = document.getElementById('root')
+  if (!host) return () => {}
+  const widths = new WeakMap<Element, number>()
+  const ro = new ResizeObserver((entries) => {
+    for (const e of entries) if (e.contentRect.width > 0) widths.set(e.target, (e.target as HTMLElement).getBoundingClientRect().width)
+  })
+  const cardsIn = (n: Node): Element[] => {
+    if (!(n instanceof Element)) return []
+    return [...(n.matches(CARD_SEL) ? [n] : []), ...n.querySelectorAll(CARD_SEL)]
+  }
+  const keyOf = (e: Element): string => `${e.getAttribute('data-approval-key') ?? ''}|${e.getAttribute('data-question-key') ?? ''}`
+  host.querySelectorAll(CARD_SEL).forEach((e) => ro.observe(e))
+  const mo = new MutationObserver((muts) => {
+    const added = muts.flatMap((m) => [...m.addedNodes].flatMap(cardsIn))
+    added.forEach((e) => ro.observe(e))
+    const addedKeys = new Set(added.map(keyOf))
+    for (const gone of muts.flatMap((m) => [...m.removedNodes].flatMap(cardsIn))) {
+      ro.unobserve(gone)
+      const w = widths.get(gone)
+      if (!w || addedKeys.has(keyOf(gone)) || reducedMotion() || !root.classList.contains('rm-on')) continue
+      const ghost = h('div', { class: 'rm-ghost', 'aria-hidden': 'true', style: `width:${Math.round(w)}px` })
+      const copy = gone.cloneNode(true) as Element
+      copy.removeAttribute('id')
+      ghost.append(copy)
+      document.body.append(ghost)
+      window.setTimeout(() => ghost.remove(), 340)
+    }
+  })
+  mo.observe(host, { childList: true, subtree: true })
+  return () => {
+    mo.disconnect()
+    ro.disconnect()
+  }
+}
+
 export function mountHud(hd: HudHandlers): Hud {
   const style = document.createElement('style')
   style.id = STYLE_ID
@@ -396,12 +492,19 @@ export function mountHud(hd: HudHandlers): Hud {
   document.head.appendChild(style)
   root.classList.add('rm-on')
   const restoreTheme = forceDark()
+  const stopCards = watchCards()
 
   const hud = document.createElement('div')
   hud.id = HUD_ID
   // 放在 #root 前面：DSH 的抽屉和弹窗（#root 里）要盖在自绘面板上面
   document.body.insertBefore(hud, document.getElementById('root'))
-  const panels: PanelsHandle = mountPanels(hud, hd.title(), (name) => hd.focus(name), (t) => hd.fireSpreadTime(t))
+  const panels: PanelsHandle = mountPanels(
+    hud,
+    hd.title(),
+    (name) => hd.focus(name),
+    (t) => hd.fireSpreadTime(t),
+    () => void setFull(false),
+  )
   const tools = hud.querySelector('.rm-tools') as HTMLElement
   // 智能体卡片的高度决定聊天区从哪里开始（CSS 变量 --rm-agent-h）
   const agentCard = hud.querySelector('.rm-right') as HTMLElement
@@ -411,83 +514,218 @@ export function mountHud(hd: HudHandlers): Hud {
     requestAnimationFrame(() => hd.layoutChanged())
   })
   ro.observe(agentCard)
+  const relayout = (): void => void requestAnimationFrame(() => hd.layoutChanged())
 
-  const btn = (text: string, onClick: () => void, pressed?: boolean): HTMLButtonElement => {
-    const b = h('button', { type: 'button' }, text)
+  // ── 操作按钮：顶栏只放常用的（全屏地图、复位），其余收进“»”菜单 ──
+  const menu = h('div', { id: 'rescue-map-menu', role: 'menu', 'aria-label': '更多操作' })
+  document.body.appendChild(menu)
+  const toolBtn = (text: string, title: string, onClick: () => void): HTMLButtonElement => {
+    const b = h('button', { type: 'button', title }, text)
     b.addEventListener('click', onClick)
-    if (pressed !== undefined) b.setAttribute('aria-pressed', String(pressed))
     tools.appendChild(b)
     return b
   }
-
-  const toggles: { b: HTMLButtonElement; cls: string }[] = []
-  for (const [key, cls, label] of [['left', 'rm-hide-left', '左栏'], ['right', 'rm-hide-right', '智能体'], ['chat', 'rm-hide-chat', '对话']] as const) {
-    const hidden = readFlag(`hide-${key}`)
-    root.classList.toggle(cls, hidden)
-    const b = btn(label, () => {
-      const nowHidden = !root.classList.contains(cls)
-      root.classList.toggle(cls, nowHidden)
-      writeFlag(`hide-${key}`, nowHidden)
-      b.setAttribute('aria-pressed', String(!nowHidden))
-      requestAnimationFrame(() => hd.layoutChanged())
-    }, !hidden)
-    toggles.push({ b, cls })
+  const menuItem = (text: string, onClick: () => void): HTMLButtonElement => {
+    const b = h('button', { type: 'button', role: 'menuitemcheckbox' }, text)
+    b.addEventListener('click', onClick)
+    menu.appendChild(b)
+    return b
   }
-  btn('会话', () => root.classList.toggle('rm-drawer'))
-  btn('全屏地图', () => {
-    const anyShown = toggles.some((t) => !root.classList.contains(t.cls))
-    toggles.forEach((t, i) => {
-      root.classList.toggle(t.cls, anyShown)
-      writeFlag(`hide-${['left', 'right', 'chat'][i]}`, anyShown)
-      t.b.setAttribute('aria-pressed', String(!anyShown))
-    })
-    requestAnimationFrame(() => hd.layoutChanged())
+
+  const isFull = (): boolean => PANEL_CLASSES.every((c) => root.classList.contains(c))
+  const fullBtn = toolBtn('全屏地图', '收起两侧面板，只看地图（快捷键 F）', () => setFull(!isFull()))
+  toolBtn('复位', '地图回到初始视图', () => hd.reset())
+  const moreBtn = toolBtn('»', '更多操作', () => (menu.hasAttribute('data-open') ? closeMenu() : openMenu()))
+  moreBtn.classList.add('rm-more')
+  moreBtn.setAttribute('aria-haspopup', 'menu')
+
+  const panelItems = (
+    [
+      ['rm-hide-left', '矿井信息栏'],
+      ['rm-hide-right', '智能体卡片'],
+      ['rm-hide-chat', '对话区'],
+    ] as const
+  ).map(([cls, label]) => ({
+    cls,
+    b: menuItem(label, () => {
+      root.classList.toggle(cls)
+      sync()
+      relayout()
+    }),
+  }))
+  menu.appendChild(h('hr'))
+  const drawerItem = menuItem('会话列表', () => {
+    root.classList.toggle('rm-drawer')
+    sync()
+    closeMenu()
   })
 
   const legendData = hd.legend()
-  const legendBox = document.createElement('div')
-  legendBox.id = 'rescue-map-legend'
-  legendBox.hidden = true
+  const legendBox = h('div', { id: 'rescue-map-legend' })
+  let legendItem: HTMLButtonElement | null = null
   if (legendData) {
-    const lb = btn('图例', () => {
-      legendBox.hidden = !legendBox.hidden
-      if (!legendBox.hidden) legendBox.replaceChildren(h('h4', null, '图例'), renderLegend(legendData, true))
-      lb.setAttribute('aria-pressed', String(!legendBox.hidden))
-    }, false)
+    legendBox.replaceChildren(h('h4', null, '图例'), renderLegend(legendData, true))
     hud.appendChild(legendBox)
+    legendItem = menuItem('图例', () => {
+      legendBox.toggleAttribute('data-open')
+      sync()
+    })
   }
-  btn('倾斜视角', () => hd.setTilt(hd.tilt() > 1 ? 0 : 40))
-  btn('复位', () => hd.reset())
+  const tiltItem = menuItem('倾斜视角', () => {
+    hd.setTilt(hd.tilt() > 1 ? 0 : 40)
+    sync()
+  })
+
+  function sync(): void {
+    const full = isFull()
+    fullBtn.textContent = full ? '展开面板' : '全屏地图'
+    fullBtn.title = full ? '显示两侧面板（快捷键 F）' : '收起两侧面板，只看地图（快捷键 F）'
+    fullBtn.setAttribute('aria-pressed', String(full))
+    for (const it of panelItems) it.b.setAttribute('aria-pressed', String(!root.classList.contains(it.cls)))
+    drawerItem.setAttribute('aria-pressed', String(root.classList.contains('rm-drawer')))
+    legendItem?.setAttribute('aria-pressed', String(legendBox.hasAttribute('data-open')))
+    tiltItem.setAttribute('aria-pressed', String(hd.tilt() > 1))
+  }
+  function setFull(on: boolean): boolean {
+    const was = isFull()
+    for (const c of PANEL_CLASSES) root.classList.toggle(c, on)
+    sync()
+    if (was !== on) relayout()
+    return was
+  }
+
+  const onDocDown = (e: PointerEvent): void => {
+    const t = e.target as Node
+    if (!menu.contains(t) && !moreBtn.contains(t)) closeMenu()
+  }
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape' && menu.hasAttribute('data-open')) {
+      closeMenu()
+      moreBtn.focus()
+    }
+  }
+  function openMenu(): void {
+    sync()
+    menu.setAttribute('data-open', '')
+    moreBtn.setAttribute('aria-expanded', 'true')
+    document.addEventListener('pointerdown', onDocDown, true)
+    document.addEventListener('keydown', onKey, true)
+  }
+  function closeMenu(): void {
+    menu.removeAttribute('data-open')
+    moreBtn.setAttribute('aria-expanded', 'false')
+    document.removeEventListener('pointerdown', onDocDown, true)
+    document.removeEventListener('keydown', onKey, true)
+  }
+
+  // 快捷键：F 切换全屏地图；Esc 依次收起菜单、会话列表、图例。光标在输入框里、按着修饰键时不生效，也不抢 DSH 自己的 Esc（没有可收起的就不拦）
+  const typing = (t: EventTarget | null): boolean =>
+    t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || !!t.closest('[contenteditable="true"], [role="textbox"]'))
+  const onShortcut = (e: KeyboardEvent): void => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return
+    if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) {
+      e.preventDefault()
+      setFull(!isFull())
+    } else if (e.key === 'Escape') {
+      if (root.classList.contains('rm-drawer')) root.classList.remove('rm-drawer')
+      else if (legendBox.hasAttribute('data-open')) legendBox.removeAttribute('data-open')
+      else return
+      e.preventDefault()
+      sync()
+    }
+  }
+  document.addEventListener('keydown', onShortcut)
+
+  // 启动时是全屏地图（2026-11-18）：面板等来了预警再滑出来（index.ts），或者操作员点“展开面板”
+  setFull(true)
 
   const toastEl = document.createElement('div')
   toastEl.id = 'rescue-map-toast'
   toastEl.hidden = true
   hud.appendChild(toastEl)
   let toastTimer = 0
-  const chatToggle = toggles.find((t) => t.cls === 'rm-hide-chat')
+
+  // 预警升到橙色、红色时闪一圈（第一次只记下当前等级，刚打开页面不闪）
+  const flash = h('div', { id: 'rescue-map-flash', 'aria-hidden': 'true' })
+  let lastRank: { id: string; rank: number } | null | undefined
+  const watchLevel = (s: StateData): void => {
+    const inc = s.incident
+    const now = inc ? { id: inc.id, rank: LEVEL_RANK[inc.level ?? ''] ?? 0 } : null
+    const before = lastRank
+    lastRank = now
+    if (before === undefined || !now || now.rank < LEVEL_RANK.orange!) return
+    const prev = before && before.id === now.id ? before.rank : 0
+    if (now.rank <= prev) return
+    flash.style.setProperty('--lv', now.rank >= LEVEL_RANK.red! ? '#ff4d4f' : '#ff8a1f')
+    flash.remove()
+    void flash.offsetWidth
+    document.body.appendChild(flash)
+    window.setTimeout(() => flash.remove(), 4200)
+  }
+
+  // 事件稳定或关闭、没有待确认和待回答的卡片，持续 AUTO_FULL_MS 后自动回到全屏地图（只在“转入平静”那一刻开始计时；
+  // 计时中事件又有动静就取消；操作员之后自己展开的不再收起，直到下一次转入平静）
+  let calm: boolean | undefined
+  let calmTimer = 0
+  const cardsShown = (): boolean => !!document.querySelector(`${CENTER} :is(${CARD_SEL})`)
+  const watchCalm = (s: StateData): void => {
+    const inc = s.incident
+    const now = (!inc || inc.status === 'stable' || inc.status === 'closed') && (inc?.pendingApprovals.length ?? 0) === 0 && !/^waiting_/.test(s.agent.state)
+    const was = calm
+    calm = now
+    if (!now) {
+      window.clearTimeout(calmTimer)
+      calmTimer = 0
+      return
+    }
+    if (was !== false) return // 第一次（刚打开页面）或一直平静：不计时
+    window.clearTimeout(calmTimer)
+    calmTimer = window.setTimeout(() => {
+      calmTimer = 0
+      if (!calm || cardsShown() || isFull()) return
+      setFull(true)
+      hudApi.toast('事件已稳定，回到全屏地图')
+    }, AUTO_FULL_MS)
+  }
 
   let connected = false
-  return {
-    toast(text) {
+  const hudApi: Hud = {
+    toast(text, tone) {
       toastEl.textContent = text
+      if (tone) toastEl.dataset.tone = tone
+      else delete toastEl.dataset.tone
+      toastEl.hidden = true // 连续两条时重新播放出现的动画
+      void toastEl.offsetWidth
       toastEl.hidden = false
       window.clearTimeout(toastTimer)
-      toastTimer = window.setTimeout(() => (toastEl.hidden = true), 3000)
+      toastTimer = window.setTimeout(() => (toastEl.hidden = true), tone === 'alert' ? 6000 : 3000)
     },
     showChat() {
       if (!root.classList.contains('rm-hide-chat')) return
       root.classList.remove('rm-hide-chat')
-      writeFlag('hide-chat', false)
-      chatToggle?.b.setAttribute('aria-pressed', 'true')
-      requestAnimationFrame(() => hd.layoutChanged())
+      sync()
+      relayout()
     },
+    setFullscreen: setFull,
     setConnected(ok) {
       connected = ok
       hud.dataset.channel = String(connected)
     },
-    setState: (s, staleS, failed) => panels.update(s, staleS, failed),
+    setState(s, staleS, failed) {
+      panels.update(s, staleS, failed)
+      if (s && !failed) {
+        watchLevel(s)
+        watchCalm(s)
+      }
+    },
     dispose() {
       ro.disconnect()
+      window.clearTimeout(calmTimer)
+      flash.remove()
+      document.removeEventListener('keydown', onShortcut)
+      stopCards()
+      closeMenu()
+      menu.remove()
       root.style.removeProperty('--rm-agent-h')
       panels.dispose()
       hud.remove()
@@ -496,6 +734,7 @@ export function mountHud(hd: HudHandlers): Hud {
       root.classList.remove('rm-on', 'rm-drawer', ...PANEL_CLASSES)
     },
   }
+  return hudApi
 }
 
 /** 地图加载失败时退回 DSH 原界面。 */
@@ -505,25 +744,48 @@ export function restoreNative(): void {
   root.classList.remove('rm-on', 'rm-drawer')
 }
 
-/** 悬浮面板当前盖住的边（像素）：左栏、右栏（智能体卡片 + 对话区；窄屏时对话区在底部）；顶部给顶栏留位置。隐藏的面板不算。 */
+/** 元素在页面上的布局位置（不算 transform：面板滑动途中拿到的也是最终位置） */
+function layoutRect(e: HTMLElement): { left: number; top: number; right: number; bottom: number; width: number; height: number } {
+  let x = 0
+  let y = 0
+  for (let n: HTMLElement | null = e; n; n = n.offsetParent as HTMLElement | null) {
+    x += n.offsetLeft
+    y += n.offsetTop
+  }
+  return { left: x, top: y, right: x + e.offsetWidth, bottom: y + e.offsetHeight, width: e.offsetWidth, height: e.offsetHeight }
+}
+
+/**
+ * 悬浮面板盖住的边（像素）：左栏、右栏（智能体卡片 + 对话区；窄屏时对话区在底部）；顶部给顶栏留位置。
+ * 收起的面板不算；按面板展开后的最终位置算（面板正在滑动时地图就飞向最终的空白区域）。下方有确认卡片时底边算到卡片顶上。
+ */
 export function panelInsets(): Insets {
   const w = window.innerWidth
   const hgt = window.innerHeight
-  const rect = (sel: string): DOMRect | null => {
+  const rect = (sel: string, hiddenCls: string): ReturnType<typeof layoutRect> | null => {
+    if (root.classList.contains(hiddenCls)) return null
     const e = document.querySelector<HTMLElement>(sel)
     if (!e || getComputedStyle(e).display === 'none') return null
-    const r = e.getBoundingClientRect()
+    const r = layoutRect(e)
     return r.width > 0 && r.height > 0 ? r : null
   }
-  const left = rect('.rm-left')
-  const right = rect('.rm-right')
-  const chat = rect(`${FRAME} > [class$="_centerCol"]`)
-  const chatAtBottom = !!chat && chat.left < w / 2
+  const left = rect('.rm-left', 'rm-hide-left')
+  const right = rect('.rm-right', 'rm-hide-right')
+  // 会话列用 right/bottom 滑动（见 CSS），布局位置在滑动途中会变：按展开后的位置算（右边或窄屏时的底部，边距同 CSS）
+  const chatBox = rect(CENTER, 'rm-hide-chat')
+  const chatAtBottom = !!chatBox && (window.matchMedia?.('(max-width: 800px)').matches ?? false)
+  const chat = chatBox && (chatAtBottom ? { ...chatBox, top: hgt - 12 - chatBox.height } : { ...chatBox, left: w - 16 - chatBox.width })
   const rightEdge = Math.min(right ? right.left : w, chat && !chatAtBottom ? chat.left : w)
+  // 画面下方的确认卡片、提问卡片也算盖住底边：飞过去的位置落在卡片上方
+  let cardTop = hgt
+  for (const c of document.querySelectorAll<HTMLElement>(`${CENTER} :is(${CARD_SEL})`)) {
+    const r = c.getBoundingClientRect()
+    if (r.width > 0 && r.height > 0) cardTop = Math.min(cardTop, r.top)
+  }
   return {
     left: left ? left.right : 0,
     right: w - rightEdge,
     top: 60,
-    bottom: chat && chatAtBottom ? hgt - chat.top : 0,
+    bottom: Math.max(chat && chatAtBottom ? hgt - chat.top : 0, hgt - cardTop + 8),
   }
 }
