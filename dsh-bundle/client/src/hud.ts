@@ -70,19 +70,20 @@ ${ON} ${CENTER} { position: absolute !important; right: 16px; width: var(--rm-ch
 ${ON}.rm-hide-right ${CENTER} { top: var(--rm-top); }
 ${ON} ${CENTER} > * { background: transparent !important; }
 ${ON}.rm-hide-chat ${CENTER} { display: none !important; }
-/* 人工确认卡片和提问卡片（处置选项、现场条件）放到画面正中（2026-11-10 演示复看：右下角不醒目，窄栏里显示不全）。
+/* 人工确认卡片和提问卡片（处置选项、现场条件）放到画面下方、左右栏之间的区域，底边对齐面板（2026-11-10 演示复看：右下角不醒目，
+   窄栏里显示不全，先移到正中；2026-11-17：正中会挡住地图，改到下方）。宽度不超过左右栏之间的空隙，高度最多半屏，超出在卡片里滚动。
    卡片仍是 DSH 会话组件里的原件，只改位置：会话列的 backdrop-filter 会让 fixed 定位相对它而不是视口，有卡片时去掉；
    对话区被收起时也要显示卡片（列保留布局但不可见，只有卡片可见）。
    外层（DSH 的 root/frame）只当定位容器：不加底色、边框和压暗（第八次复看：外面多一层背景），里面的卡片拉满宽度 */
 ${ON} ${CENTER}:has([data-approval-key], [data-question-key]) { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: rgba(9, 20, 38, 0.95) !important; }
 ${ON}.rm-hide-chat ${CENTER}:has([data-approval-key], [data-question-key]) { display: block !important; visibility: hidden; }
 ${ON} ${CENTER} :is([data-approval-key], [data-question-key]) {
-  visibility: visible; position: fixed !important; left: 50vw; top: 50vh; transform: translate(-50%, -50%); z-index: 100;
-  width: min(820px, calc(100vw - 32px)) !important; max-width: none !important; box-sizing: border-box; margin: 0 !important; padding: 0 !important;
+  visibility: visible; position: fixed !important; left: calc((var(--rm-l) + 100vw - var(--rm-r)) / 2); top: auto; bottom: 16px; transform: translateX(-50%); z-index: 100;
+  width: min(820px, calc(100vw - var(--rm-l) - var(--rm-r))) !important; max-width: none !important; box-sizing: border-box; margin: 0 !important; padding: 0 !important;
   background: transparent !important; border: 0 !important; box-shadow: none !important;
 }
 ${ON} ${CENTER} :is([data-approval-key], [data-question-key]) > * {
-  width: 100% !important; max-width: none !important; max-height: 82vh !important; overflow: auto; box-sizing: border-box; margin: 0 !important;
+  width: 100% !important; max-width: none !important; max-height: 50vh !important; overflow: auto; box-sizing: border-box; margin: 0 !important;
   background: rgb(12, 28, 52) !important; box-shadow: 0 16px 60px rgba(0, 0, 0, 0.65) !important;
 }
 ${ON} ${CENTER} [data-approval-key] > * { border: 1px solid rgba(245, 197, 24, 0.7) !important; }
@@ -254,6 +255,8 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-label.rm-picked { animation: rm-picked 0.9s ease-out; }
 @keyframes rm-picked { 0% { background: rgba(79, 209, 255, 0.55); box-shadow: 0 0 0 4px rgba(79, 209, 255, 0.55); } 100% { background: transparent; box-shadow: 0 0 0 4px transparent; } }
 #rescue-map-toast { position: fixed; left: calc((var(--rm-l) + 100vw - var(--rm-r)) / 2); bottom: 28px; transform: translateX(-50%); z-index: 12; padding: 8px 14px; border-radius: 10px; font-size: 13px; color: #eaf4ff; pointer-events: none; ${CARD} }
+/* 卡片在下方时提示挪到顶栏下面，免得被卡片盖住 */
+${ON}:has(${CENTER} :is([data-approval-key], [data-question-key])) #rescue-map-toast { bottom: auto; top: calc(var(--rm-top) + 8px); }
 #rescue-map-toast[hidden] { display: none; }
 [data-theme="dark"] .rm-label { color: #d6e2ee; text-shadow: 0 0 3px #0b1522, 0 0 3px #0b1522; }
 [data-theme="dark"] .rm-label[data-kind="flow"] { color: #7ad9a1; }
