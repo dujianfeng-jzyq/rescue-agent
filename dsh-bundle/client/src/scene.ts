@@ -566,7 +566,7 @@ export class MapView {
     if (d.type === 'line' && d.points && d.points.length >= 2) {
       // 外部为主、我方兜底（第六、七版 3.1 节）：每组只有一条路线——外部服务的路线（route）绿色流动虚线，
       // 本系统计算的路线（route_local，外部服务不可用时）蓝色流动虚线；蔓延范围要么是推演层（fire_spread，细实线），
-      // 要么是本系统估算的污染巷道（contaminated，粗、半透明，红到橙），不会同时出现
+      // 要么是本系统估算的污染巷道（contaminated，粗、半透明，红到橙），不会同时出现。标签只写“路径规划”“灾害推演”，来源只靠颜色区分
       const contaminated = d.kind === 'contaminated'
       const local = d.kind === 'route_local'
       const fire = d.kind === 'fire_spread'

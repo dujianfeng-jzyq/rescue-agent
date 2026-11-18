@@ -13,6 +13,7 @@
 | 为什么这样做（总体方案和路线） | `docs/implementation-plan.md` |
 | 各版本设计 | 第二版 `docs/design-v2.md`；第三版 `design-v3.md`（rescue-mine、常驻监听与事件、专家型智能体）；第四版 `design-v4-map.md`（地图界面）、`design-v4-evacuation.md`（撤人路线）；第五版 `design-v5-demo-flow.md`（演示导演、选项卡片、批准超时）；第六版 `design-v6-route-service.md`（外部路径规划服务：避灾路线外部为主、我方兜底）；第七版 `design-v7-fire-sim.md`（外部火灾推演服务：火灾蔓延外部为主、我方兜底） |
 | 设计决策 | `docs/decisions/`（ADR 0001–0009） |
+| 发给外部服务提供方的文档（只写测试、问题和需要对方配合的事项，不写我方设计和集成细节） | `docs/route-service-integration-plan.md`、`docs/fire-sim-service-integration-plan.md` |
 | 待专家审定的阈值、判据和参数（集中清单） | `docs/expert-review.md` |
 | 接真实矿井（演示、只读接入、试运行）要准备什么 | `docs/real-mine-integration.md` |
 | rescue-mine 接口（代码生成，`make interface-doc`） | `docs/rescue-mine-interface.md` |

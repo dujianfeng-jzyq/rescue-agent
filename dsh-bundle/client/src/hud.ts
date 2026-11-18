@@ -272,8 +272,21 @@ ${ON}:has(${CENTER} :is([data-approval-key], [data-question-key])) #rescue-map-t
 .rm-fig-blocked { background: #d83a3d; }
 .rm-fig-route { background: #1f9d55; }
 .rm-fig-route_local { background: #2f6fd6; }
-.rm-evac-src { margin-top: 2px; font-size: 11px; color: #7ad9a1; }
-.rm-evac-src[data-source="ours"] { color: #7fb2e6; }
+/* 灾害推演、路径规划的来源只用颜色区分，和地图上的线同色：路径规划 外部服务绿、智能体蓝；灾害推演 外部服务紫、智能体红橙 */
+.rm-src { margin-top: 2px; }
+.rm-src[data-kind="route"][data-source="service"] { color: #7ad9a1; }
+.rm-src[data-kind="route"][data-source="ours"] { color: #7fb2e6; }
+.rm-src[data-kind="fire"][data-source="service"] { color: #b9a4ff; }
+.rm-src[data-kind="fire"][data-source="ours"] { color: #ff9a7a; }
+.rm-evac-route.rm-src[data-tone="bad"] { font-weight: 600; border-left: 3px solid #ff4d4f; padding-left: 6px; }
+.rm-fire-sim.rm-src { border-left: 3px solid currentColor; padding-left: 8px; }
+.rm-fire-sim.rm-src li { color: #dbe8f5; }
+.rm-src-key { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; }
+.rm-swatch { display: inline-block; width: 16px; height: 4px; border-radius: 2px; margin-left: 6px; }
+.rm-swatch[data-kind="route"][data-source="service"] { background: #35c46a; }
+.rm-swatch[data-kind="route"][data-source="ours"] { background: #4d8ff0; }
+.rm-swatch[data-kind="fire"][data-source="service"] { background: #a78bfa; }
+.rm-swatch[data-kind="fire"][data-source="ours"] { background: linear-gradient(90deg, #ff4d4f, #ffb020); }
 .rm-fig-contaminated { background: rgba(216,58,61,.85); }
 .rm-fig-fire_spread { background: rgba(124,92,214,.88); font-size: 10px; }
 .rm-fire-sim { font-size: 12px; }

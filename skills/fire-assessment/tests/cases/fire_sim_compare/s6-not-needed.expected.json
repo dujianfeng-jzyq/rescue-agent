@@ -1,5 +1,5 @@
 {
- "algorithm_version": "fire_sim_compare/1.1.0",
+ "algorithm_version": "fire_sim_compare/1.1.1",
  "params": {
   "co_reach_ppm": 24,
   "co_danger_ppm": 400

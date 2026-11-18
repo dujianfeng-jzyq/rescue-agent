@@ -62,7 +62,7 @@ describe('evacuationView（s4 红色阶段的真实记录）', () => {
     const cont = v.figures.filter((f) => f.kind === 'contaminated')
     assert.deepEqual(cont.map((f) => f.id), ['auto:evac:cont:R-1201-FACE', 'auto:evac:cont:R-1201-RET', 'auto:evac:cont:R-RET-MAIN', 'auto:evac:cont:R-RET-SHAFT'])
     assert.equal(fig('auto:evac:cont:R-1201-RET').value, 1.6)
-    assert.equal(fig('auto:evac:cont:R-1201-RET').text, '约 1.6 分钟到达（本系统估算）')
+    assert.equal(fig('auto:evac:cont:R-1201-RET').text, '灾害推演 · 约 1.6 分钟到达')
     assert.deepEqual(fig('auto:evac:cont:R-1201-FACE').points, [POS.N3, POS.N4])
   })
 
@@ -87,7 +87,7 @@ describe('evacuationView（s4 红色阶段的真实记录）', () => {
   it('撤人路线：沿路线节点的顺序接起来（第一段巷道反向），起点是该组所在巷道的中点，终点是避难硐室', () => {
     const route = fig('auto:evac:route:R-1201-FACE')
     assert.equal(route.kind, 'route_local')
-    assert.equal(route.text, '本系统计算 · 约 32.7 分钟')
+    assert.equal(route.text, '路径规划 · 约 32.7 分钟')
     const pts = route.points!
     // 该组所在巷道 R-1201-FACE：N3(700,300) → N4(760,400)，中点按长度取
     assert.deepEqual(pts[0], [730, 350])
@@ -250,7 +250,7 @@ describe('避灾路线：外部为主、我方兜底（route_compare 的 display
     assert.equal(ret!.route.reachable, true)
     const r = v.figures.find((f) => f.id === 'auto:evac:route:R-1201-RET')!
     assert.equal(r.kind, 'route')
-    assert.equal(r.text, '外部服务 · 约 2970 米')
+    assert.equal(r.text, '路径规划 · 约 2970 米')
     // 从回风巷中点出发，经工作面（反向）N4 → N3、运输巷（反向，含途经点）N3 → N2、联络巷 N2 → 避难硐室 N8（各段首尾相接处重复一个点）
     assert.deepEqual(r.points, [[630, 410], POS.N4, POS.N3, POS.N3, [550, 280], POS.N2, POS.N2, POS.N8])
     assert.equal(v.figures.filter((f) => f.kind === 'route_local').length, 0)
@@ -272,7 +272,8 @@ describe('避灾路线：外部为主、我方兜底（route_compare 的 display
     assert.deepEqual([ret.source, ret.reachable], ['service', false])
     assert.match(ret.note!, /外部路径规划服务没有给出路线/)
     assert.equal(v.figures.find((f) => f.id === 'auto:evac:route:R-1201-RET'), undefined)
-    assert.match(v.figures.find((f) => f.id === 'auto:evac:group:R-1201-RET')!.text!, /外部路径规划服务没有给出路线/)
+    // 图上只写“无可行路线”，不写来源（来源只用颜色区分）
+    assert.equal(v.figures.find((f) => f.id === 'auto:evac:group:R-1201-RET')!.text!, '2 人 · 无可行路线，需人工研判')
   })
 
   it('某组外部服务不可用：这一组用本系统路线（route_local），写明原因', () => {
@@ -325,10 +326,10 @@ describe('有害气体蔓延：外部火灾推演为主、本系统估算兜底'
     ])
     const lines = v.figures.filter((f) => f.kind === 'fire_spread')
     assert.deepEqual(lines.map((f) => [f.id, f.value, f.danger, f.text]), [
-      ['auto:fire:R-1201-GOAF', 1, 3, '推演 1 分钟'],
-      ['auto:fire:R-1201-RET', 3, null, '推演 3 分钟'],
-      ['auto:fire:R-RET-MAIN', 9, null, '推演 9 分钟'],
-      ['auto:fire:R-RET-SHAFT', 16, null, '推演 16 分钟'],
+      ['auto:fire:R-1201-GOAF', 1, 3, '灾害推演 · 1 分钟到达'],
+      ['auto:fire:R-1201-RET', 3, null, '灾害推演 · 3 分钟到达'],
+      ['auto:fire:R-RET-MAIN', 9, null, '灾害推演 · 9 分钟到达'],
+      ['auto:fire:R-RET-SHAFT', 16, null, '灾害推演 · 16 分钟到达'],
     ])
     assert.deepEqual(lines[1]!.points, [POS.N4, POS.N5])
     // 只显示推演结果：不画本系统污染巷道（列表照常给出），各组到达时刻取推演（推演时长内没到为 null）

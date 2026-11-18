@@ -326,11 +326,11 @@ const PART_NAME: Record<string, string> = {
   warning: '预警等级', stage: '自燃阶段', alarms: '实时报警', trend: '趋势', personnel: '受威胁人员', check: '风险检测', explanation_options: '研判说明', explanation: '研判说明', timeline: '时间线',
   explosion_triangle: '爆炸三角形', escalation: '升级建议', effect: '复评结果', skeleton: '方案骨架', compose: '方案', scope: '审核范围', review: '审核结论',
   unsealing_plan: '启封评估', brief: '要点', report: '报告', plan: '方案', assessment: '研判',
-  route_request: '外部路径规划请求', route_compare: '避灾路线选择',
-  fire_sim_request: '外部火灾推演请求', fire_sim_compare: '火灾推演判读',
+  route_request: '路径规划请求', route_compare: '路径规划',
+  fire_sim_request: '灾害推演请求', fire_sim_compare: '灾害推演',
 }
 
-const COLLECT_NAME: Record<string, string> = { assessment: '研判取数', check: '检测取数', effect: '复评取数', plan: '方案取数', unseal: '启封取数', routes: '外部路径规划服务调用', fire_sim: '外部火灾推演服务调用' }
+const COLLECT_NAME: Record<string, string> = { assessment: '研判取数', check: '检测取数', effect: '复评取数', plan: '方案取数', unseal: '启封取数', routes: '路径规划', fire_sim: '灾害推演' }
 
 /** 记录的中文名：技能 + 脚本/模板/采集清单（如“效果复评 · 复评结果”“研判 · 要点”） */
 export function recordTitle(r: Record<string, any>): string {

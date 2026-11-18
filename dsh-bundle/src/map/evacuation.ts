@@ -12,10 +12,10 @@
  *
  * 外部为主、我方兜底（docs/design-v6-route-service.md、design-v7-fire-sim.md 第 3.1 节）：
  *   - 避灾路线：同一次研判的 route_compare 记录（输入的 personnel 就是这份记录）里每组的 display 就是要显示的路线
- *     （选择在技能脚本里做）：外部服务的路线画成 route，我方路线画成 route_local（不同颜色，标“本系统计算”）；
+ *     （选择在技能脚本里做）：外部服务的路线画成 route，我方路线画成 route_local（标签都写“路径规划”，只用颜色区分来源）；
  *     没有 route_compare 记录（没配置外部服务、那一段失败）时画我方路线（route_local）。每组只画一条。
  *   - 蔓延范围：同一次研判的 fire_sim_compare 记录可用（display_source = service）时只画推演中 CO 达到“到达”浓度的巷道
- *     （fire_spread，带到达和危险时刻，前端据此按时间回放），不画我方污染巷道；否则画我方污染巷道（contaminated，标“本系统估算”）。
+ *     （fire_spread，带到达和危险时刻，前端据此按时间回放），不画我方污染巷道；否则画我方污染巷道（contaminated）。两种标签都写“灾害推演”，只用颜色区分来源。
  *   撤人通知按同一份 route_compare 取路线（validation.evacuation_routes），图上和通知一致。
  */
 
@@ -253,7 +253,7 @@ export function evacuationView(
     const r = roads.get(c.roadway_id)
     const path = r ? roadwayPath(r, map) : { missing: [String(c.roadway_id)] }
     const drawn = 'pts' in path && spreadSource === 'ours'
-    if (drawn && show) figures.push({ id: `auto:evac:cont:${c.roadway_id}`, type: 'line', kind: 'contaminated', points: path.pts, at: pointAlong(path.pts, CONTAMINATION_LABEL_FRAC), value: c.arrival_min, text: `约 ${c.arrival_min} 分钟到达（本系统估算）`, stale })
+    if (drawn && show) figures.push({ id: `auto:evac:cont:${c.roadway_id}`, type: 'line', kind: 'contaminated', points: path.pts, at: pointAlong(path.pts, CONTAMINATION_LABEL_FRAC), value: c.arrival_min, text: `灾害推演 · 约 ${c.arrival_min} 分钟到达`, stale })
     return { roadwayId: String(c.roadway_id), name: nameOf(c.roadway_id), arrivalMin: Number(c.arrival_min), drawn }
   })
 
@@ -289,7 +289,7 @@ export function evacuationView(
         kind: route.reachable ? 'threatened' : 'blocked',
         at: groupAt,
         value: g.count,
-        text: route.reachable ? `${g.count} 人` : `${g.count} 人 · ${route.note ?? '无可行路线，需人工研判'}`,
+        text: route.reachable ? `${g.count} 人` : `${g.count} 人 · 无可行路线，需人工研判`,
         stale,
       })
     }
@@ -300,7 +300,8 @@ export function evacuationView(
       if (missing.length === 0 && pts.length >= 2) {
         route.drawn = true
         if (show) {
-          const label = source === 'service' ? (route.lengthM === null ? '外部服务' : `外部服务 · 约 ${route.lengthM} 米`) : route.walkMin === null ? '本系统计算' : `本系统计算 · 约 ${route.walkMin} 分钟`
+          // 界面上只写“路径规划”，来源只用颜色区分（route 绿色、route_local 蓝色）
+          const label = source === 'service' ? (route.lengthM === null ? '路径规划' : `路径规划 · 约 ${route.lengthM} 米`) : route.walkMin === null ? '路径规划' : `路径规划 · 约 ${route.walkMin} 分钟`
           figures.push({ id: `auto:evac:route:${rid}`, type: 'line', kind: source === 'service' ? 'route' : 'route_local', points: pts, at: midpoint(pts), text: label, stale })
           const tgt = nodes.get(String(d.target))
           const at = map.nodes[String(d.target)]
@@ -357,7 +358,7 @@ function fireSpreadView(rec: RecordLike, roads: Map<string, NetworkRoadway>, map
     const drawn = !!path && 'pts' in path
     if (drawn && show) {
       const pts = (path as { pts: Pt[] }).pts
-      figures.push({ id: `auto:fire:${rid}`, type: 'line', kind: 'fire_spread', points: pts, at: pointAlong(pts, 0.6), value: reach, danger, text: `推演 ${reach} 分钟`, stale })
+      figures.push({ id: `auto:fire:${rid}`, type: 'line', kind: 'fire_spread', points: pts, at: pointAlong(pts, 0.6), value: reach, danger, text: `灾害推演 · ${reach} 分钟到达`, stale })
     }
     view.roadways.push({ roadwayId: rid, name: road?.name ?? String(x.name ?? rid), reachMin: reach, dangerMin: danger, peakPpm: num(x.peak_ppm) ?? 0, reversed: !!(x.air_reversed || x.air_stopped), drawn })
   }

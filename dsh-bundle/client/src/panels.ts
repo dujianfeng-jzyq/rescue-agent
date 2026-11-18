@@ -38,6 +38,24 @@ function empty(text: string): HTMLElement {
   return h('div', { class: 'rm-empty' }, text)
 }
 
+/**
+ * 灾害推演、路径规划：界面上只写这两个名字，结果来自外部服务还是智能体只用颜色区分（data-kind + data-source 决定颜色，
+ * 和地图上的线同色）；每节末尾一行颜色说明。
+ */
+type SrcKind = 'fire' | 'route'
+const srcAttrs = (kind: SrcKind, source: 'service' | 'ours'): Record<string, string> => ({ 'data-kind': kind, 'data-source': source })
+function sourceKey(kind: SrcKind): HTMLElement {
+  return h(
+    'p',
+    { class: 'rm-note rm-src-key' },
+    '颜色：',
+    h('span', { class: 'rm-swatch', ...srcAttrs(kind, 'service') }),
+    '外部服务',
+    h('span', { class: 'rm-swatch', ...srcAttrs(kind, 'ours') }),
+    '智能体计算',
+  )
+}
+
 export interface PanelsHandle {
   update(state: StateData | null, staleS: number, failed: boolean): void
   dispose(): void
@@ -238,11 +256,11 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                   const arrival =
                     g.arrival.source === 'service'
                       ? g.arrival.min === null
-                        ? `推演 ${fsv?.horizonMin ?? '—'} 分钟内 CO 未达到 ${fsv?.reachPpm ?? '—'} ppm`
-                        : `推演第 ${g.arrival.min} 分钟 CO 达到 ${fsv?.reachPpm ?? '—'} ppm`
+                        ? `${fsv?.horizonMin ?? '—'} 分钟内 CO 未达到 ${fsv?.reachPpm ?? '—'} ppm`
+                        : `第 ${g.arrival.min} 分钟 CO 达到 ${fsv?.reachPpm ?? '—'} ppm`
                       : g.arrival.min === null
                         ? ''
-                        : `污染预计 ${g.arrival.min} 分钟到达（本系统估算）`
+                        : `约 ${g.arrival.min} 分钟到达`
                   const detail =
                     r.source === 'service'
                       ? `${r.lengthM === null ? '' : `，约 ${r.lengthM} 米`}${r.escapeMin === null ? '' : `，暂时脱险约 ${r.escapeMin} 分钟`}${r.smokeTimeS ? `，烟中通行约 ${r.smokeTimeS} 秒` : ''}`
@@ -250,11 +268,11 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                   const li = h(
                     'div',
                     { class: 'rm-evac-group', 'data-blocked': r.reachable ? '0' : '1', ...(g.anchor ? { 'data-anchor': g.anchor, role: 'button', tabindex: '0', title: `在地图上定位：${g.anchor}` } : {}) },
-                    h('div', null, h('b', null, `${g.count} 人`), h('span', null, ` ${g.roadwayName}`), arrival && h('small', null, `，${arrival}`)),
+                    h('div', null, h('b', null, `${g.count} 人`), h('span', null, ` ${g.roadwayName}`)),
+                    arrival && h('div', { class: 'rm-src', ...srcAttrs('fire', g.arrival.source) }, `灾害推演：${arrival}`),
                     r.reachable
-                      ? h('div', { class: 'rm-evac-route' }, `撤往 ${r.targetName ?? '—'}${detail}`)
-                      : h('div', { class: 'rm-evac-route', 'data-tone': 'bad' }, r.note ?? '无可行路线，需人工研判'),
-                    h('div', { class: 'rm-evac-src', 'data-source': r.source, title: r.reason ?? '' }, r.source === 'service' ? `路线：${r.sourceText}（试验性）` : `路线：${r.sourceText}${r.reason ? `（${r.reason}）` : ''}`),
+                      ? h('div', { class: 'rm-evac-route rm-src', ...srcAttrs('route', r.source) }, `路径规划：撤往 ${r.targetName ?? '—'}${detail}`)
+                      : h('div', { class: 'rm-evac-route rm-src', ...srcAttrs('route', r.source), 'data-tone': 'bad' }, '路径规划：无可行路线，需人工研判'),
                     r.reachable && !r.drawn && h('div', { class: 'rm-note' }, `图上未画出：${r.missing.length ? `有 ${r.missing.length} 处没有映射` : '映射不完整'}`),
                   )
                   if (g.anchor) {
@@ -266,49 +284,54 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                   return li
                 }),
                 ev.method && h('p', { class: 'rm-note' }, ev.method),
-                h(
-                  'p',
-                  { class: 'rm-note' },
-                  ev.routeRecordId
-                    ? `路线依据记录 ${ev.routeRecordId}：外部路径规划服务可用时用其路线（绿色），不可用时用本系统计算的路线（蓝色）；输入含占位值。撤人按预案执行。`
-                    : '没有外部路径规划服务的结果，图上为本系统计算的路线（蓝色）。撤人按预案执行。',
-                ),
+                h('p', { class: 'rm-note' }, ev.routeRecordId ? `路径规划依据记录 ${ev.routeRecordId}，输入含占位值。撤人按预案执行。` : '撤人按预案执行。'),
                 h('p', { class: 'rm-note' }, `${ev.schematic ? '示意映射：' : ''}图上折线只表示走哪几段巷道，距离和时间以文字为准。`),
+                sourceKey('route'),
               ),
         )
       : null
 
-    // 有害气体蔓延（外部为主、我方兜底，第七版 3.1 节）：推演可用时图上只有推演层（可按时间回放），文字照抄记录里的整句；
-    // 不可用或没有推演时图上是本系统估算的污染巷道
+    // 灾害推演（外部为主、我方兜底，第七版 3.1 节）：标题都是“灾害推演”，来源只用颜色区分。
+    // 推演可用时图上只有推演层（可按时间回放），文字照抄记录里的整句；不可用或没有推演时列本系统估算的污染巷道（图上同色）
     const fs = ev?.computed ? (ev.fireSpread ?? null) : null
     if (!fs || fs.status !== 'ok') dropReplay()
-    const notDrawn = fs ? fs.roadways.filter((r) => !r.drawn).map((r) => r.name) : []
+    const svc = fs?.status === 'ok' ? fs : null
+    const notDrawn = svc ? svc.roadways.filter((r) => !r.drawn).map((r) => r.name) : (ev?.contaminated ?? []).filter((c) => !c.drawn).map((c) => c.name)
     const fireSec = ev?.computed
       ? section(
-          fs?.status === 'ok' ? '有害气体蔓延（外部火灾推演，试验性）' : '有害气体蔓延（本系统估算）',
-          !fs
-            ? empty('没有外部火灾推演的结果（未配置或这次研判未请求），图上为本系统按设计风量估算的污染巷道。')
-            : h('p', { class: 'rm-note' }, `依据记录 ${fs.recordId}：外部火灾推演服务模拟巷道内明火，火源和参数是占位值。撤人按预案执行。`),
-          !fs
-            ? null
-            : fs.status !== 'ok'
-            ? empty(`外部火灾推演不可用：${fs.note ?? '原因不明'}；图上为本系统估算的污染巷道。`)
-            : h(
+          '灾害推演',
+          svc
+            ? h(
                 'div',
-                { class: 'rm-fire-sim' },
-                fs.horizonMin !== null && fs.roadways.some((r) => r.drawn) && replayControl(fs.recordId, fs.horizonMin),
-                fs.reachPpm !== null &&
+                { class: 'rm-fire-sim rm-src', ...srcAttrs('fire', 'service') },
+                h('p', { class: 'rm-note' }, `依据记录 ${svc.recordId}；火源和参数是占位值。撤人按预案执行。`),
+                svc.horizonMin !== null && svc.roadways.some((r) => r.drawn) && replayControl(svc.recordId, svc.horizonMin),
+                svc.reachPpm !== null &&
                   h(
                     'div',
                     { class: 'rm-note' },
                     h('span', { class: 'rm-fire-swatch', style: 'background:#a78bfa' }),
-                    `CO 达到 ${fs.reachPpm} ppm`,
-                    fs.dangerPpm !== null && h('span', { class: 'rm-fire-swatch', style: 'background:#f052e6;margin-left:10px' }),
-                    fs.dangerPpm !== null && `达到 ${fs.dangerPpm} ppm`,
+                    `CO 达到 ${svc.reachPpm} ppm`,
+                    svc.dangerPpm !== null && h('span', { class: 'rm-fire-swatch', style: 'background:#f052e6;margin-left:10px' }),
+                    svc.dangerPpm !== null && `达到 ${svc.dangerPpm} ppm`,
                   ),
-                h('ul', null, ...fs.lines.map((l) => h('li', null, l))),
-                notDrawn.length > 0 && h('p', { class: 'rm-note' }, `图上未画出（没有映射）：${notDrawn.join('、')}`),
+                h('ul', null, ...svc.lines.map((l) => h('li', null, l))),
+              )
+            : h(
+                'div',
+                { class: 'rm-fire-sim rm-src', ...srcAttrs('fire', 'ours') },
+                h('p', { class: 'rm-note' }, `依据记录 ${ev.recordId}。撤人按预案执行。`),
+                ev.contaminated.length
+                  ? h(
+                      'div',
+                      null,
+                      h('div', { class: 'rm-note' }, h('span', { class: 'rm-fire-swatch', style: 'background:linear-gradient(90deg,#ff4d4f,#ffb020)' }), '有害气体到达的巷道（越早到达越红）'),
+                      h('ul', null, ...ev.contaminated.map((c) => h('li', null, `${c.name}：约 ${c.arrivalMin} 分钟到达`))),
+                    )
+                  : empty('没有有害气体到达的巷道'),
               ),
+          notDrawn.length > 0 && h('p', { class: 'rm-note' }, `图上未画出（没有映射）：${notDrawn.join('、')}`),
+          sourceKey('fire'),
         )
       : null
 

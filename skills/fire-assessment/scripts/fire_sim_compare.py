@@ -20,7 +20,7 @@
 from _route import roadway_of
 from _skill import evidence, load_reference, main, record_result
 
-VERSION = "fire_sim_compare/1.1.0"
+VERSION = "fire_sim_compare/1.1.1"
 METHOD = "外部服务推演结果按巷道合并（两段取最早到达、最大浓度），按 CO 阈值判读后与我方受污染巷道比较（试验性）"
 
 
@@ -149,13 +149,14 @@ def head_lines(req, per, sim, horizon_min, p, with_ours):
     return [head, f"风流反转或停风的巷道：{'、'.join(flips)}" if flips else "推演中没有巷道风流反转或停风"]
 
 
-def people_lines(groups, extra, horizon_min, p):
+def people_lines(groups, extra, horizon_min, p, with_source):
+    """with_source：写不写避灾路线的来源（存档写；界面和报告只用颜色区分来源，不写）。"""
     out = []
     for g in groups:
         s = f"{g['roadway_id']}（{g['count']} 人）：{exposure(g['sim_reach_min'], g['sim_danger_min'], horizon_min, p)}"
         if g["route_danger_roadways"]:
             s += (
-                f"；避灾路线（{ROUTE_SOURCES[g['route_source']]}）经过的 "
+                (f"；避灾路线（{ROUTE_SOURCES[g['route_source']]}）经过的 " if with_source else "；避灾路线经过的 ")
                 + "、".join(f"{h['roadway_id']}（第 {num(h['danger_min'])} 分钟）" for h in g["route_danger_roadways"])
                 + f"在推演中会达到 {p['co_danger_ppm']} ppm"
             )
@@ -180,12 +181,12 @@ def lines_for(req, per, sim, cmp_, groups, extra, horizon_min, p):
             f"我方列为受污染、推演 {num(horizon_min)} 分钟内 CO 未达到 {p['co_reach_ppm']} ppm 的巷道："
             + "、".join(x["roadway_id"] for x in cmp_["ours_only"])
         )
-    return out + people_lines(groups, extra, horizon_min, p)
+    return out + people_lines(groups, extra, horizon_min, p, with_source=True)
 
 
 def display_lines_for(req, per, sim, groups, extra, horizon_min, p):
-    """界面和报告显示的整句：只写推演结果（第 3.1 节），不写与我方估算的比较。"""
-    return head_lines(req, per, sim, horizon_min, p, with_ours=False) + people_lines(groups, extra, horizon_min, p)
+    """界面和报告显示的整句：只写推演结果（第 3.1 节），不写与我方估算的比较，也不写路线来源（界面只用颜色区分来源）。"""
+    return head_lines(req, per, sim, horizon_min, p, with_ours=False) + people_lines(groups, extra, horizon_min, p, with_source=False)
 
 
 def shown_routes_of(data):
