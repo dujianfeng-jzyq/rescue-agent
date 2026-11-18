@@ -22,7 +22,7 @@ function close(animate = false): void {
   overlay = null
   document.removeEventListener('keydown', onKey, true)
   if (!el) return
-  if (!animate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return el.remove()
+  if (!animate || document.documentElement.classList.contains('rm-no-motion')) return el.remove()
   el.classList.add('rm-closing')
   window.setTimeout(() => el.remove(), 220)
 }

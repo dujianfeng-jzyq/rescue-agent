@@ -7,7 +7,7 @@ import { connect, loadGeometry } from './channel.ts'
 import { dutyFollower } from './duty.ts'
 import type { UiWorkspace } from './duty.ts'
 import type { Channel } from './channel.ts'
-import { mountHud, panelInsets, restoreNative } from './hud.ts'
+import { mountHud, panelInsets, restoreNative, SLIDE_MS } from './hud.ts'
 import { insertIntoComposer, referenceText } from './reference.ts'
 import type { Hud } from './hud.ts'
 import { MapView } from './scene.ts'
@@ -115,8 +115,10 @@ function mount(ctx: ClientContext): () => void {
         }
         if (!inc || key === null || key === seenAlert) return
         seenAlert = key
-        hud?.setFullscreen(false)
-        if (inc.anchor) view?.focus(inc.anchor, 3)
+        const wasFull = hud?.setFullscreen(false) ?? false
+        // 面板滑完再飞：两件事同时做，配置弱的机器上都会掉帧（飞的目标本来就按面板展开后的位置算）
+        const anchor = inc.anchor
+        if (anchor) window.setTimeout(() => view?.focus(anchor, 3), wasFull ? SLIDE_MS : 0)
         const level = inc.level === 'none' ? '' : (inc.levelName ?? '')
         hud?.toast(`收到预警：${[inc.panel, level, inc.stageName].filter(Boolean).join(' · ') || inc.summary || inc.id}`, 'alert')
       }

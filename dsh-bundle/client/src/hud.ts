@@ -20,6 +20,11 @@ import type { StateData } from './state-types.ts'
 import type { Legend } from './types.ts'
 
 const STYLE_ID = 'rescue-map-style'
+/**
+ * 面板滑动时长（毫秒）。缓动曲线前后对称：原来 0.38 秒、前快后慢，帧率低时大部分位移落在头两三帧里，看起来像跳过去。
+ * 新告警时镜头等面板滑完再飞（index.ts）。
+ */
+export const SLIDE_MS = 550
 const HUD_ID = 'rescue-hud'
 const ON = 'html.rm-on'
 const WRAP = '#root > div'
@@ -56,7 +61,10 @@ const CSS = `
 ${ON}, ${ON} body { background: #0b1522 !important; color-scheme: dark; }
 ${ON} body { overflow: hidden; }
 #rescue-map-host { position: fixed; inset: 0; z-index: 0; }
-${ON} { --rm-l: 372px; --rm-chat-w: clamp(420px, 28vw, 560px); --rm-r: calc(var(--rm-chat-w) + 32px); --rm-top: 68px; --rm-agent-h: 0px; --rm-slide-t: 0.38s; --rm-ease: cubic-bezier(0.2, 0.8, 0.2, 1); }
+${ON} { --rm-l: 372px; --rm-chat-w: clamp(420px, 28vw, 560px); --rm-r: calc(var(--rm-chat-w) + 32px); --rm-top: 68px; --rm-agent-h: 0px; --rm-slide-t: ${SLIDE_MS / 1000}s; --rm-ease: cubic-bezier(0.45, 0, 0.25, 1); }
+/* 滑动期间去掉毛玻璃：移动中的面板每帧都要重新模糊背后的地图，配置弱的机器上掉帧，滑动看起来像跳过去（2026-11-18 演示） */
+${ON}.rm-sliding .rm-card, ${ON}.rm-sliding ${CENTER}, ${ON}.rm-sliding ${SIDEBAR}, ${ON}.rm-sliding #rescue-map-legend { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+${ON}.rm-sliding .rm-left, ${ON}.rm-sliding .rm-right, ${ON}.rm-sliding ${SIDEBAR} { will-change: transform; }
 ${ON}.rm-hide-left { --rm-l: 16px; }
 ${ON}.rm-hide-right.rm-hide-chat { --rm-r: 16px; }
 ${ON} #root { position: relative; z-index: 2; height: 100%; pointer-events: none; }
@@ -386,11 +394,14 @@ ${ON}:has(${CENTER} :is([data-approval-key], [data-question-key])) #rescue-map-t
   ${ON}.rm-hide-chat ${CENTER} { right: 12px; bottom: calc(-1 * min(60vh, 560px) - 24px); }
   .rm-clock, .rm-title span { display: none; }
 }
-/* 系统设置了“减少动态效果”：不滑动，直接显示/隐藏 */
-@media (prefers-reduced-motion: reduce) {
-  #rescue-map-flash { animation: none !important; opacity: 0.6; }
-  ${ON} *, ${ON} *::before, #rescue-map-menu { transition-duration: 0s !important; transition-delay: 0s !important; animation: none !important; }
+/* 关掉动态效果（localStorage['rescue-map:no-motion'] = '1'）：不滑动，直接显示/隐藏。
+   不跟随系统的“减少动态效果”：大屏要滑动提示变化，而 Ubuntu 上关掉桌面动画时 Firefox 就报告“减少动态效果”（2026-11-18 演示）。
+   只作用于自绘部分和面板外壳，不动 DSH 组件自己的动画 */
+html.rm-no-motion :is(#rescue-hud, #rescue-hud *, .rm-ghost, .rm-ghost *, .rm-modal-overlay, .rm-modal-overlay *, #rescue-map-menu, ${CENTER}, ${SIDEBAR}, ${RIGHT}),
+html.rm-no-motion ${CENTER} :is([data-approval-key], [data-question-key]) > * {
+  transition-duration: 0s !important; transition-delay: 0s !important; animation: none !important;
 }
+html.rm-no-motion #rescue-map-flash { animation: none !important; opacity: 0.6; }
 `
 
 export interface HudHandlers {
@@ -426,7 +437,15 @@ const LEVEL_RANK: Record<string, number> = { none: 0, blue: 1, yellow: 2, orange
 /** 事件转入平静后多久自动回到全屏地图（界面参数，占位：2 分钟，看演示效果再调） */
 const AUTO_FULL_MS = 120_000
 
-const reducedMotion = (): boolean => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+/** 操作员在浏览器里关掉了动态效果（见 CSS 的 rm-no-motion）；默认不关，也不跟随系统设置 */
+export function noMotion(): boolean {
+  try {
+    return localStorage.getItem('rescue-map:no-motion') === '1'
+  } catch {
+    return false
+  }
+}
+const reducedMotion = (): boolean => root.classList.contains('rm-no-motion')
 
 /** 强制 DSH 用深色变量：body 上的 data-ds-dark-theme 被 DSH 的主题逻辑拿掉时再加回去。返回恢复函数。 */
 function forceDark(): () => void {
@@ -491,6 +510,7 @@ export function mountHud(hd: HudHandlers): Hud {
   style.textContent = CSS
   document.head.appendChild(style)
   root.classList.add('rm-on')
+  root.classList.toggle('rm-no-motion', noMotion())
   const restoreTheme = forceDark()
   const stopCards = watchCards()
 
@@ -515,6 +535,12 @@ export function mountHud(hd: HudHandlers): Hud {
   })
   ro.observe(agentCard)
   const relayout = (): void => void requestAnimationFrame(() => hd.layoutChanged())
+  let slideTimer = 0
+  const markSliding = (): void => {
+    root.classList.add('rm-sliding')
+    window.clearTimeout(slideTimer)
+    slideTimer = window.setTimeout(() => root.classList.remove('rm-sliding'), SLIDE_MS + 80)
+  }
 
   // ── 操作按钮：顶栏只放常用的（全屏地图、复位），其余收进“»”菜单 ──
   const menu = h('div', { id: 'rescue-map-menu', role: 'menu', 'aria-label': '更多操作' })
@@ -548,6 +574,7 @@ export function mountHud(hd: HudHandlers): Hud {
   ).map(([cls, label]) => ({
     cls,
     b: menuItem(label, () => {
+      markSliding()
       root.classList.toggle(cls)
       sync()
       relayout()
@@ -555,6 +582,7 @@ export function mountHud(hd: HudHandlers): Hud {
   }))
   menu.appendChild(h('hr'))
   const drawerItem = menuItem('会话列表', () => {
+    markSliding()
     root.classList.toggle('rm-drawer')
     sync()
     closeMenu()
@@ -567,6 +595,7 @@ export function mountHud(hd: HudHandlers): Hud {
     legendBox.replaceChildren(h('h4', null, '图例'), renderLegend(legendData, true))
     hud.appendChild(legendBox)
     legendItem = menuItem('图例', () => {
+      markSliding()
       legendBox.toggleAttribute('data-open')
       sync()
     })
@@ -588,6 +617,7 @@ export function mountHud(hd: HudHandlers): Hud {
   }
   function setFull(on: boolean): boolean {
     const was = isFull()
+    if (was !== on) markSliding()
     for (const c of PANEL_CLASSES) root.classList.toggle(c, on)
     sync()
     if (was !== on) relayout()
@@ -630,6 +660,7 @@ export function mountHud(hd: HudHandlers): Hud {
       if (root.classList.contains('rm-drawer')) root.classList.remove('rm-drawer')
       else if (legendBox.hasAttribute('data-open')) legendBox.removeAttribute('data-open')
       else return
+      markSliding()
       e.preventDefault()
       sync()
     }
@@ -702,6 +733,7 @@ export function mountHud(hd: HudHandlers): Hud {
     },
     showChat() {
       if (!root.classList.contains('rm-hide-chat')) return
+      markSliding()
       root.classList.remove('rm-hide-chat')
       sync()
       relayout()
@@ -721,6 +753,7 @@ export function mountHud(hd: HudHandlers): Hud {
     dispose() {
       ro.disconnect()
       window.clearTimeout(calmTimer)
+      window.clearTimeout(slideTimer)
       flash.remove()
       document.removeEventListener('keydown', onShortcut)
       stopCards()
@@ -731,7 +764,7 @@ export function mountHud(hd: HudHandlers): Hud {
       hud.remove()
       style.remove()
       restoreTheme()
-      root.classList.remove('rm-on', 'rm-drawer', ...PANEL_CLASSES)
+      root.classList.remove('rm-on', 'rm-drawer', 'rm-sliding', 'rm-no-motion', ...PANEL_CLASSES)
     },
   }
   return hudApi
