@@ -14,6 +14,7 @@ import { parse as parseYaml } from 'yaml'
 import type { Context } from '../adapter/dsh.ts'
 import { defineTool, Schema } from '../adapter/dsh.ts'
 import { McpClient } from '../evidence/mcp-client.ts'
+import { currentLevel, issued, quietNoWarning, TREATMENT_TOOLS } from './quiet.ts'
 import { alertStatuses, IncidentStore, STATUSES, type Entry, type IncidentView } from './store.ts'
 
 export const name = 'rescue-incident'
@@ -73,15 +74,9 @@ export async function followupParams(skillsDir: string): Promise<FollowupParams>
   return { default_after_h: y.default_after_h, max_after_h: y.max_after_h, level_cap_h: caps as Record<string, number> }
 }
 
-const ISSUED = new Set(['issued', 'completed'])
-/**
- * 算“处置”的对外动作：影响矿井现场的方案、撤人、物资调度、启封。发布预警、升级应急响应是通报，加密监测只是多看，都不算
- * （2026-11-11 演示复看：橙色选了“不采取处置”，同一轮提交的预警被当成“下发了新的处置”，复评按 2 小时排，理由也写错了）。
- */
-export const TREATMENT_TOOLS = new Set(['issue_firefighting_plan', 'issue_sealing_plan', 'notify_evacuation', 'issue_dispatch_order', 'approve_unsealing'])
+export { TREATMENT_TOOLS } from './quiet.ts'
 const LEVEL_NAMES: Record<string, string> = { blue: '蓝色（关注）', yellow: '黄色（预警）', orange: '橙色（严重）', red: '红色（危险）' }
 const hoursBetween = (a: string, b: string) => (Date.parse(`${b.slice(0, 19)}Z`) - Date.parse(`${a.slice(0, 19)}Z`)) / 3_600_000
-const issued = (e: Entry, tools: Set<string>) => e.kind === 'note' && e.by === 'guard' && e.data?.type === 'action' && tools.has(String(e.data?.tool)) && ISSUED.has(String(e.data?.status))
 
 /**
  * add_followup 不给 after_h 时的到点时间（代码定，不靠模型）：
@@ -112,8 +107,7 @@ function paceFollowup(entries: Entry[], now: string, p: FollowupParams): { due_a
 /** 当前预警等级（最近一次记了等级的研判）对应的间隔上限；封闭方案已下发、没有研判等级或该级没有上限时为 null */
 function levelCap(entries: Entry[], p: FollowupParams): { h: number; why: string } | null {
   if (!p.level_cap_h || entries.some((e) => issued(e, new Set(['issue_sealing_plan'])))) return null
-  const a = entries.findLast((e) => e.kind === 'note' && e.data?.type === 'assessment' && typeof e.data?.level === 'string')
-  const level = a ? String(a.data!.level) : ''
+  const level = currentLevel(entries) ?? ''
   const h = p.level_cap_h[level]
   if (!(typeof h === 'number' && h > 0)) return null
   return { h, why: `当前预警等级 ${LEVEL_NAMES[level] ?? level}，复评间隔不超过 ${h} 小时` }
@@ -195,7 +189,8 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
       description:
         '登记跟踪计划：处置下发后，过一段矿井时间到点，监听器会唤醒你复评（review_effect）。到点时间由系统按矿井时钟算，你不要自己算。' +
         'after_h 不给时由系统定：最近一次复评之后没有新处置，就用复评给出的下次复评时刻；刚下发了新处置或还没复评过，用技能规定的默认间隔；再按当前预警等级限一个上限（封闭后不限）。返回的 due_at、basis 照抄。指挥人员明确要求某个间隔时才填 after_h。expect 写一句话预期（如“注惰后上隅角 CO 应回落”）。' +
-        '一个事件只保留一条跟踪：没完成的旧跟踪会被新跟踪取代（返回的 superseded），不用再对它们 complete_followup。',
+        '一个事件只保留一条跟踪：没完成的旧跟踪会被新跟踪取代（返回的 superseded），不用再对它们 complete_followup。' +
+        '最近一次研判为无预警、事件里也没下发过处置时不登记（返回 registered=false 和原因），照实告诉操作员即可，不要改填 after_h 再试。',
       parameters: {
         incident_id: { type: 'string', required: true, description: '事件编号' },
         after_h: { type: 'number', description: '多少矿井小时后复评（大于 0）；缺省由系统定（见工具说明）' },
@@ -205,9 +200,17 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
       execute: async (args: { incident_id: string; after_h?: number; expect: string }) => {
         const p = await followups()
         const now = await clock()
+        const entries = await store.entries(String(args.incident_id))
+        // 无预警、没下发过处置：不登记跟踪（2026-11-18 用户要求）；等级变化时监听器会告警
+        if (quietNoWarning(entries)) {
+          return toJson({
+            registered: false,
+            reason: '最近一次研判为无预警，事件里也没有下发过处置：不登记跟踪。监听器继续监视，等级变化时会告警唤醒你。',
+          })
+        }
         let dueAt: string, hours: number, basis: string
         if (args.after_h === undefined) {
-          ;({ due_at: dueAt, after_h: hours, basis } = defaultFollowup(await store.entries(String(args.incident_id)), now, p))
+          ;({ due_at: dueAt, after_h: hours, basis } = defaultFollowup(entries, now, p))
         } else {
           hours = Number(args.after_h)
           if (!Number.isFinite(hours) || hours <= 0 || hours > p.max_after_h) throw new Error(`after_h 应大于 0 且不超过 ${p.max_after_h} 个矿井小时`)
@@ -221,7 +224,7 @@ export function registerTools(c: { tools: { register: (t: unknown) => void } }, 
           await store.append(String(args.incident_id), now, 'followup_done', 'agent', { followup_id: id, result: `被新的跟踪计划 ${followupId} 取代` })
         }
         await store.append(String(args.incident_id), now, 'followup_added', 'agent', { followup_id: followupId, due_at: dueAt, expect: String(args.expect) })
-        return toJson({ followup_id: followupId, due_at: dueAt, now, after_h: hours, basis, superseded })
+        return toJson({ registered: true, followup_id: followupId, due_at: dueAt, now, after_h: hours, basis, superseded })
       },
     }),
   )

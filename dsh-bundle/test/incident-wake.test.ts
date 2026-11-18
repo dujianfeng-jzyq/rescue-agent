@@ -190,6 +190,23 @@ describe('告警是否已处理（代码判断）与重复投递的唤醒消息'
     assert.equal(st.handled_by, '跟踪计划已完成或被取代')
   })
 
+  it('无预警、没下发过处置时跟踪到点：消息要求重新研判、不做复评；下发过处置（如封闭后读数回落为无预警）照常复评（2026-11-18）', async () => {
+    const { store, id } = await setup()
+    await store.append(id, '2026-11-05T09:00:00', 'note', 'flow', { type: 'assessment', text: '无预警', level: 'none', as_of: '2026-11-05T09:00:00' })
+    const fu = await store.append(id, '2026-11-05T12:00:00', 'alert', 'sentinel', { cause: 'followup_due', summary: '跟踪计划到点', followup_id: 'FU-1' })
+    const quiet = composeMessage(await store.get(id), [fu], await store.entries(id))
+    assert.match(quiet, /重新研判（run_fire_assessment），不做效果复评/)
+    assert.match(quiet, /complete_followup/)
+    // 加密监测不算处置：仍算平静
+    await store.append(id, '2026-11-05T12:01:00', 'note', 'guard', { type: 'action', tool: 'start_monitoring', status: 'issued' })
+    assert.match(composeMessage(await store.get(id), [fu], await store.entries(id)), /重新研判/)
+    // 下发过封闭方案：照常复评
+    await store.append(id, '2026-11-05T12:02:00', 'note', 'guard', { type: 'action', tool: 'issue_sealing_plan', status: 'issued' })
+    const treated = composeMessage(await store.get(id), [fu], await store.entries(id))
+    assert.match(treated, /请评估处置效果（review_effect）/)
+    assert.doesNotMatch(treated, /重新研判/)
+  })
+
   it('同一条消息里有多类告警：各自的要求都在', async () => {
     const { store, id, alert } = await setup()
     const b = await store.append(id, '2026-11-05T09:00:00', 'alert', 'sentinel', { cause: 'mine_alarm', summary: '矿井报警' })
@@ -292,6 +309,23 @@ describe('事件工具', () => {
     assert.equal(((await call('add_followup', { incident_id: id, expect: 'x' })) as any).due_at, '2026-11-07T10:00:00')
     // 给了 after_h 就按给的
     assert.equal(((await call('add_followup', { incident_id: id, after_h: 1, expect: 'x' })) as any).due_at, '2026-11-05T11:00:00')
+  })
+
+  it('无预警、没下发过处置时不登记跟踪；等级升高或下发过处置后照常登记（2026-11-18）', async () => {
+    const { store, call } = await tools()
+    const id = await store.open('2026-11-05T08:00:00', { category: 'fire', panel: '1201', summary: 'x' })
+    await store.append(id, '2026-11-05T08:10:00', 'note', 'flow', { type: 'assessment', text: '无预警', level: 'none', as_of: '2026-11-05T08:10:00' })
+    const refused: any = await call('add_followup', { incident_id: id, expect: 'x' })
+    assert.equal(refused.registered, false)
+    assert.match(refused.reason, /无预警/)
+    assert.equal(((await call('add_followup', { incident_id: id, after_h: 1, expect: 'x' })) as any).registered, false, '给了间隔也不登记')
+    assert.equal((await store.get(id)).followups.length, 0)
+    await store.append(id, '2026-11-05T08:20:00', 'note', 'flow', { type: 'assessment', text: '蓝色', level: 'blue', as_of: '2026-11-05T08:20:00' })
+    assert.equal(((await call('add_followup', { incident_id: id, expect: 'x' })) as any).registered, true)
+    // 封闭后读数回落、研判为无预警：下发过处置，照常登记
+    await store.append(id, '2026-11-05T08:30:00', 'note', 'guard', { type: 'action', tool: 'issue_sealing_plan', status: 'issued' })
+    await store.append(id, '2026-11-05T08:40:00', 'note', 'flow', { type: 'assessment', text: '无预警', level: 'none', as_of: '2026-11-05T08:40:00' })
+    assert.equal(((await call('add_followup', { incident_id: id, expect: 'x' })) as any).registered, true)
   })
 
   it('发布预警、升级、加密监测不算新的处置；撤人、调度、方案算（2026-11-11）', async () => {

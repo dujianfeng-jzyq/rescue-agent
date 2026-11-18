@@ -2,7 +2,7 @@
  * 固定流程 review_effect（design-v2 4.4）：处置效果复评。步骤由代码决定，判据全在 effect-review 技能里，没有模型阶段。
  *
  *   处置开始时间 since：调用方给出；否则取 actions 台账里本工作面最近一次已下发的封闭方案或防灭火方案的下发时间，没有方案时取加密监测，
- *   台账里什么都没有（如无预警时跟踪到点）取事件时间线里最近一次研判的依据数据时间
+ *   台账里什么都没有时取事件时间线里最近一次研判的依据数据时间（最近一次研判为无预警时不复评，返回说明让重新研判）
  *   （后两种没有处置：since 是观察起点，effect.py 按“未采取处置”写结论，treated=false）
  *   → 采集证据（effect-review 的 effect 清单，窗口从 since 之前 baseline 小时取到现在）
  *   → effect.py → 复评报告（effect-review/templates/report.md）
@@ -34,7 +34,7 @@ export interface EffectOptions {
   /** 指令台账里本工作面最近一次已下发的方案（actions 的 query_last_issued） */
   lastIssued: (panel: string) => Promise<LastIssued>
   /** 本工作面最近一次研判的依据数据时间（事件时间线）；台账里没有任何下发时用作观察起点 */
-  lastAssessment?: (panel: string) => Promise<{ as_of: string; record_id: string | null } | undefined>
+  lastAssessment?: (panel: string) => Promise<{ as_of: string; record_id: string | null; level?: string | null } | undefined>
 }
 
 /** 调用方能处理的错误（缺处置开始时间等），工具把它作为说明返回 */
@@ -68,6 +68,11 @@ export async function reviewEffect(ev: Evidence, opts: EffectOptions) {
       if (!a) {
         emit('since', 'failed', [], '台账里没有已下发的方案或加密监测，事件时间线里也没有研判')
         throw new EffectInputError(`指令台账里没有工作面 ${opts.panel} 已下发的封闭方案、防灭火方案或加密监测，事件时间线里也没有研判：先做研判（run_fire_assessment），不要问指挥人员起算时间`)
+      }
+      // 无预警、什么都没下发：没有处置效果可评，跟踪到点改为重新研判（2026-11-18 用户要求）
+      if (a.level === 'none') {
+        emit('since', 'failed', [], '无预警，台账里没有任何下发')
+        throw new EffectInputError(`工作面 ${opts.panel} 最近一次研判为无预警，指令台账里也没有任何下发，没有处置效果可评：改为重新研判（run_fire_assessment），不要问指挥人员起算时间`)
       }
       since = a.as_of
       treated = false

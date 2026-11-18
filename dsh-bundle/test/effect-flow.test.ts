@@ -55,6 +55,16 @@ describe('review_effect：有没有采取处置（2026-11-11 演示复看）', (
     assert.equal(out.result.treated, false)
   })
 
+  it('台账里什么都没下发、最近一次研判为无预警：不复评，返回说明改为重新研判（2026-11-18）', async () => {
+    await assert.rejects(
+      reviewEffect(fakeEvidence({}), {
+        panel: '211016', origin, lastIssued: async () => ({ found: false }),
+        lastAssessment: async () => ({ as_of: '2026-11-02T16:39:41', record_id: 'RP-a', level: 'none' }),
+      }),
+      (e: Error) => /无预警/.test(e.message) && /重新研判（run_fire_assessment）/.test(e.message),
+    )
+  })
+
   it('台账里没有下发、时间线里也没有研判：返回说明让智能体先研判，不让问起算时间', async () => {
     await assert.rejects(
       reviewEffect(fakeEvidence({}), { panel: '211016', origin, lastIssued: async () => ({ found: false }), lastAssessment: async () => undefined }),

@@ -11,6 +11,7 @@
  *   告警不会因此更晚被处理：排队的消息本来也要等当前这一轮结束。
  */
 
+import { quietNoWarning } from './quiet.ts'
 import { alertStatuses, type Entry, type IncidentStore, type IncidentView } from './store.ts'
 
 export interface WakeOptions {
@@ -29,6 +30,9 @@ const CAUSE_TEXT: Record<string, string> = {
   anomaly: '请立即对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。不要先问操作员“要不要研判”。',
   mine_alarm: '这是矿井自己的报警平台发来的越限报警（不是规程红线报警）。请对该工作面做完整研判（run_fire_assessment），把要点告知操作员；需要对外动作时按规则提交，由人确认。',
   followup_due: '这是你登记的跟踪计划到点了。请评估处置效果（review_effect），把结果告知操作员；效果不达预期时给出调整建议，对外动作仍由人确认。',
+  // 无预警、没下发过处置时跟踪到点：没有处置效果可评，重新研判（2026-11-18 用户要求）
+  followup_due_quiet:
+    '这是你登记的跟踪计划到点了。最近一次研判为无预警，事件里也没有下发过处置，没有处置效果可评：请重新研判（run_fire_assessment），不做效果复评（review_effect）；把要点告知操作员，用 complete_followup 记下研判结论。研判仍为无预警时不再登记跟踪；等级升高时按等级处理。',
   approval_timeout: '你提交的对外动作等人工确认超时了，系统已提醒上一级并记入事件时间线。请告知操作员这条动作还在等确认、等了多久、已提醒谁；不要重复提交同一个动作，也不要绕过确认。',
   degraded: '监听器取数/检测连续失败，此期间的“无异常”不可信。请如实告知操作员监听已降级及其影响；不要用不可信的数据支撑对外动作。',
 }
@@ -37,10 +41,11 @@ const CAUSE_TEXT: Record<string, string> = {
  * 唤醒消息：只放还没被处理的告警（已被之后的处理覆盖的，投递前已记 acked、不进消息，见 Waker.drain）。
  * 原来还会给已处理的告警标“重复投递”，投递前过滤之后那段走不到，2026-11-11 代码复查第 3 轮删掉。
  */
-export function composeMessage(view: IncidentView, alerts: Entry[]): string {
+export function composeMessage(view: IncidentView, alerts: Entry[], entries: Entry[] = []): string {
+  const quiet = quietNoWarning(entries)
   const head = `【值守事件 ${view.incident_id}】${view.panel ?? '全矿'}（${view.category === 'monitor' ? '监听降级' : '火情'}，${view.status_name}）。以下告警由监听器发现，不经模型：`
   const lines = alerts.map((a) => `- 告警 ${a.event_id}（矿井时间 ${a.at}）：${a.data.summary ?? ''}`)
-  const causes = [...new Set(alerts.map((a) => String(a.data.cause)))]
+  const causes = [...new Set(alerts.map((a) => (String(a.data.cause) === 'followup_due' && quiet ? 'followup_due_quiet' : String(a.data.cause))))]
   const todo = causes.map((c) => CAUSE_TEXT[c] ?? '请核实并告知操作员。').join('\n')
   return `${head}\n${lines.join('\n')}\n${todo}\n（投递可能重复：告警编号已处理过的直接忽略。用 get_incident 查看事件时间线。）`
 }
@@ -98,7 +103,7 @@ export class Waker {
         if (fresh.length === 0) continue
         const ids = fresh.map((a) => a.event_id)
         try {
-          const { sessionId } = await this.opts.deliver(composeMessage(view, fresh), { incidentId: view.incident_id, alertIds: ids })
+          const { sessionId } = await this.opts.deliver(composeMessage(view, fresh, entries), { incidentId: view.incident_id, alertIds: ids })
           for (const id of ids) await this.store.append(view.incident_id, at, 'delivered', 'plugin', { alert_id: id, session_id: sessionId })
           delivered.push(...ids)
         } catch (err) {

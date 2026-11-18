@@ -14,6 +14,8 @@ export interface TimelineNote {
   as_of?: string
   /** 复评（effect_review）给出的下次复评时刻（矿井时间）：add_followup 不给 after_h 且之后没有新处置时按它到点 */
   next_review_at?: string
+  /** 研判（assessment）的预警等级：add_followup 按它限间隔、无预警且没下发过处置时不登记跟踪 */
+  level?: string
 }
 
 /**
@@ -40,7 +42,7 @@ export async function evidenceAsOf(recordIds: string[], read: (id: string) => Pr
  * 复评找不到已下发的处置时，用它作观察起点（2026-11-18：无预警时跟踪到点，复评不该去问操作员从什么时候算）。
  * 没有事件、没有研判或研判没记 as_of 时返回 undefined。
  */
-export async function lastAssessmentNote(store: IncidentStore | undefined, panel: string): Promise<{ as_of: string; record_id: string | null } | undefined> {
+export async function lastAssessmentNote(store: IncidentStore | undefined, panel: string): Promise<{ as_of: string; record_id: string | null; level: string | null } | undefined> {
   if (!store) return undefined
   const found = await store.findOpen('fire', panel)
   if (!found) return undefined
@@ -49,7 +51,7 @@ export async function lastAssessmentNote(store: IncidentStore | undefined, panel
     const d = entries[i]!.data as Record<string, any> | undefined
     if (entries[i]!.kind === 'note' && d?.type === 'assessment' && typeof d.as_of === 'string' && d.as_of) {
       const ids = Array.isArray(d.record_ids) ? d.record_ids : []
-      return { as_of: d.as_of.slice(0, 19), record_id: typeof ids[0] === 'string' ? ids[0] : null }
+      return { as_of: d.as_of.slice(0, 19), record_id: typeof ids[0] === 'string' ? ids[0] : null, level: typeof d.level === 'string' ? d.level : null }
     }
   }
   return undefined
