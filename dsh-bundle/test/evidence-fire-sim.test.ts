@@ -44,7 +44,7 @@ const compare = (ev: Evidence, E: string, P: string, RQ: string, S: string) =>
     .runScript({ skill: 'fire-assessment', script: 'fire_sim_compare', inputs: { evidence: E, personnel: P, fire_sim_request: RQ, fire_sim: S }, origin: ORIGIN })
     .then((x) => (x.record.content as any).result)
 
-describe('火灾蔓延第二意见：collectFireSim → fire_sim_compare', () => {
+describe('外部火灾推演：collectFireSim → fire_sim_compare', () => {
   it('调用一次并存证据，比较结果与自检样例一致', async () => {
     const calls: [string, Record<string, unknown>][] = []
     const { ev, input, E, P, RQ } = await setup(async (tool, args) => {
@@ -72,7 +72,8 @@ describe('火灾蔓延第二意见：collectFireSim → fire_sim_compare', () =>
     assert.equal((sim.content as any).error, '[fire_sim] 请求超过 90000 毫秒')
     const r = await compare(ev, E.record_id, P.record_id, RQ.record_id, sim.record_id)
     assert.equal(r.status, 'unavailable')
-    assert.deepEqual(r.lines, ['第二意见不可用：[fire_sim] 请求超过 90000 毫秒'])
+    assert.deepEqual(r.lines, ['外部火灾推演服务不可用：[fire_sim] 请求超过 90000 毫秒'])
+    assert.equal(r.display_source, 'ours')
   })
 
   it('没有配置时不能调用；不是 fire_sim_request 的记录、不需要推演的请求都不收', async () => {
@@ -81,7 +82,7 @@ describe('火灾蔓延第二意见：collectFireSim → fire_sim_compare', () =>
     await assert.rejects(a.ev.collectFireSim({ request: a.RQ.record_id, origin: ORIGIN }), /没有配置外部火灾推演服务/)
     const b = await setup(async () => ({}))
     await assert.rejects(b.ev.collectFireSim({ request: b.P.record_id, origin: ORIGIN }), /不是 fire-assessment\/fire_sim_request 的结果/)
-    const c = await setup(async () => ({}), 'fire_sim_compare/s5-not-needed.input.json')
+    const c = await setup(async () => ({}), 'fire_sim_compare/s6-not-needed.input.json')
     await assert.rejects(c.ev.collectFireSim({ request: c.RQ.record_id, origin: ORIGIN }), /不需要火灾推演/)
   })
 })

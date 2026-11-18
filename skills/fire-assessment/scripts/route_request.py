@@ -1,4 +1,4 @@
-"""外部路径规划服务（避灾路线第二意见）的请求：每组受威胁人员一个，用我方编号（docs/design-v6-route-service.md 第 4 节、附录 A.2）。
+"""外部路径规划服务（避灾路线：外部为主、我方兜底）的请求：每组受威胁人员一个，用我方编号（docs/design-v6-route-service.md 第 4 节、附录 A.2）。
 
 输入：{"evidence": <证据内容，含 network>, "personnel": <personnel.py 的输出>}。
 输出：requests（每组受威胁人员：所在巷道、人数、服务请求），由证据插件交给 route_planner 适配服务逐个调用。
@@ -63,16 +63,16 @@ def run(data, _args):
     }
     base = {"panel": ev["panel"], "as_of": ev["as_of"], "experimental": True, "method": METHOD}
     if not per.get("computed"):
-        return {**base, "needed": False, "note": "未计算受威胁人员，不需要第二意见", "requests": []}, params, []
+        return {**base, "needed": False, "note": "未计算受威胁人员，不请求外部路径规划服务", "requests": []}, params, []
     if not per["threatened"]:
-        return {**base, "needed": False, "note": "没有受威胁人员，不需要第二意见", "requests": []}, params, []
+        return {**base, "needed": False, "note": "没有受威胁人员，不请求外部路径规划服务", "requests": []}, params, []
     if "network" not in ev:
         raise ValueError("证据里没有通风网络（采集清单 assessment 应取 network）")
     contaminated = {c["roadway_id"] for c in per["contaminated_roadways"]}
     notes: list[str] = []
     nodes, edges, targets = build_network(ev["network"], contaminated, p, p_personnel, notes)
     if not targets:
-        return {**base, "needed": False, "note": "网络里没有地面出口或避难硐室，不能请求第二意见", "requests": []}, params, notes
+        return {**base, "needed": False, "note": "网络里没有地面出口或避难硐室，不能请求外部路径规划服务", "requests": []}, params, notes
     by_id = {r["id"] for r in ev["network"]["roadways"] if r["kind"] != "goaf"}
     requests = []
     for g in per["threatened"]:
@@ -85,7 +85,7 @@ def run(data, _args):
                 "walk_speed": p_personnel["walk_speed_m_s"], "max_smoke_time": p["max_smoke_time_s"],
             },
         })  # fmt: skip
-    warnings = ["外部服务的输入使用占位坐标、断面和烟雾浓度，结果是试验性的第二意见，不替代我方路线", *notes]
+    warnings = ["外部服务的输入使用占位坐标、断面和烟雾浓度，结果是试验性的；服务可用时界面和撤人通知用服务的路线", *notes]
     return {**base, "needed": True, "note": None, "requests": requests}, params, warnings
 
 

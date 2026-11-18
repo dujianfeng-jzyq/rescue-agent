@@ -2,7 +2,7 @@
  "algorithm_version": "fire_sim_request/1.0.0",
  "params": {
   "status": "placeholder",
-  "level_at_least": "red",
+  "level_at_least": "orange",
   "fire_source_kind": "goaf",
   "fire_position": 0.9,
   "total_time_s": 3600,
@@ -20,11 +20,11 @@
  "warnings": [],
  "result": {
   "panel": "1201",
-  "as_of": "2026-11-04T02:00:00",
+  "as_of": "2026-11-03T20:00:00",
   "experimental": true,
-  "method": "占位坐标（同路径规划第二意见，z = 0）+ 占位断面和风阻 + 设计风量作进风量 + 火源放在漏风通道上（试验性）",
+  "method": "占位坐标（同路径规划服务请求，z = 0）+ 占位断面和风阻 + 设计风量作进风量 + 火源放在漏风通道上（试验性）",
   "needed": false,
-  "note": "预警等级未达到红色（危险），不请求火灾推演",
+  "note": "预警等级未达到橙色（严重），不请求火灾推演",
   "request": null
  }
 }

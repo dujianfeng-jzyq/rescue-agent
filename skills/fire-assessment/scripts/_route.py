@@ -1,4 +1,4 @@
-"""外部路径规划服务（第二意见）的编号约定：route_request.py 生成、route_compare.py 换回（docs/design-v6-route-service.md 附录 A.2）。
+"""外部路径规划服务的编号约定：route_request.py 生成、route_compare.py 换回（docs/design-v6-route-service.md 附录 A.2）。
 
 每条巷道拆成两段：起点 → 中间节点 → 终点。中间节点编号 `<巷道编号>#mid`，两段编号 `<巷道编号>#a`、`<巷道编号>#b`。
 受威胁人员所在巷道的中间节点就是服务请求的起点。

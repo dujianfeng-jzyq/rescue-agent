@@ -13,11 +13,12 @@ NOW = datetime(2026, 11, 4, 20, 0)
 ORIGIN = Origin(channel="web", trigger="chat")
 
 
-def put(store: RecordStore, skill: str, script: str, result: dict, *, as_of=NOW, kind=RecordKind.RESULT, panel="1201") -> str:
+def put(store: RecordStore, skill: str, script: str, result: dict, *, as_of=NOW, kind=RecordKind.RESULT, panel="1201", inputs=None) -> str:
     content = {"algorithm_version": "x", "params": {}, "warnings": [], "result": result}
+    source = {"skill": skill, "script": script, **({"inputs": inputs} if inputs else {})}
     rec = Record(
         record_id=new_record_id(kind, as_of), kind=kind, panel=panel, as_of=as_of, created_at=datetime.now(UTC), origin=ORIGIN,
-        source={"skill": skill, "script": script}, content=content, content_sha256=content_sha256(content),
+        source=source, content=content, content_sha256=content_sha256(content),
     )  # fmt: skip
     return store.put(rec).record_id
 
@@ -140,7 +141,7 @@ def test_summary_facts_come_from_records_and_arguments(records):
     # 引用了人员记录：去向写中文名（从记录的避灾路线取）
     pe = put(records, "fire-assessment", "personnel", {"threatened": [{"persons": ["P1"], "escape_route": {"reachable": True, "nodes": ["N1", "N8"], "target": "N8", "target_name": "避难硐室"}}]})
     evac = {"notice": {"reason": "x", "record_id": pe, "persons": ["P1"], "routes": {"P1": ["N1", "N8"]}}}
-    assert check("notify_evacuation", evac, records)["summary"]["facts"] == ["补充撤人名单 1 人", "撤往：避难硐室（N8）"]
+    assert check("notify_evacuation", evac, records)["summary"]["facts"] == ["补充撤人名单 1 人", "撤往：避难硐室（N8）（路线：本系统计算）"]
     r = check("publish_warning", warn(records, record_id="RS-20261104T200000-zzzzzz"), records)
     assert not r["ok"] and r["summary"]["facts"] == []  # 没通过预检的不给要点
 
@@ -158,6 +159,42 @@ def test_evacuation_reason_is_generated_from_the_record():
     }
     text = evacuation_reason(result, ["P1", "P2", "P3"], {"P1": ["N3", "N8"], "P2": ["N3", "N8"]}, "RS-20261104T200000-aaaaaa")
     assert text == (
-        "1201 工作面补充撤人名单 3 人，撤往 1201避难硐室；其中 1 人（P3）避开受污染巷道后没有可达避灾路线，需人工研判；"
+        "1201 工作面补充撤人名单 3 人，撤往 1201避难硐室（路线：本系统计算）；其中 1 人（P3）没有可行的避灾路线，需人工研判；"
         "本通知是预案撤人的补充，不替代、不延迟预案撤人；依据人员记录 RS-20261104T200000-aaaaaa。"
     )
+
+
+def test_evacuation_uses_routes_shown_by_route_compare(records):
+    """外部为主、我方兜底（design-v6 第 3.1 节）：同一次研判有 route_compare 时撤人通知按它每组的 display 取路线：
+    外部服务的路线（含烟中时间）、外部服务说没有路线的组不给路线（不改用我方路线）、外部服务不可用的组用我方路线。"""
+    from rescue_contract.validation import evacuation_from_record
+
+    ours = {"reachable": True, "nodes": ["N3", "N2", "N8"], "target": "N8", "target_name": "1201避难硐室"}
+    pe = put(records, "fire-assessment", "personnel", {
+        "panel": "1201",
+        "threatened": [
+            {"roadway_id": "R-A", "persons": ["P1"], "escape_route": ours},
+            {"roadway_id": "R-B", "persons": ["P2"], "escape_route": ours},
+            {"roadway_id": "R-C", "persons": ["P3"], "escape_route": ours},
+        ],
+    })  # fmt: skip
+    notice = {"record_id": pe, "persons": [], "routes": {}, "reason": ""}
+    # 没有 route_compare：全部用我方路线
+    plain = evacuation_from_record(notice, records)
+    assert plain["routes"] == {"P1": ours["nodes"], "P2": ours["nodes"], "P3": ours["nodes"]} and "避灾路线记录" not in plain["reason"]
+    svc = {"source": "service", "reachable": True, "nodes": ["N4", "N0"], "target": "N0", "target_name": "主井口", "smoke_time_s": 120}
+    cmp_ = put(records, "fire-assessment", "route_compare", {"groups": [
+        {"roadway_id": "R-A", "display": svc},
+        {"roadway_id": "R-B", "display": {"source": "service", "reachable": False, "note": "外部路径规划服务没有给出路线"}},
+        {"roadway_id": "R-C", "display": {**ours, "source": "ours", "reason": "外部服务不可用：超时"}},
+    ]}, inputs={"personnel": pe})  # fmt: skip
+    put(records, "fire-assessment", "route_compare", {"groups": [{"roadway_id": "R-A", "display": {**svc, "nodes": ["X"]}}]}, inputs={"personnel": "RS-20261104T200000-other0"})
+    got = evacuation_from_record(notice, records)
+    assert got["persons"] == ["P1", "P2", "P3"]
+    assert got["routes"] == {"P1": ["N4", "N0"], "P3": ours["nodes"]}
+    assert got["reason"] == (
+        "1201 工作面补充撤人名单 3 人，撤往 主井口、1201避难硐室（路线：外部路径规划服务、本系统计算）；R-A 的 1 人路线烟中通行约 120 秒，须佩戴自救器；"
+        f"其中 1 人（P2）没有可行的避灾路线，需人工研判；本通知是预案撤人的补充，不替代、不延迟预案撤人；依据人员记录 {pe}、避灾路线记录 {cmp_}。"
+    )
+    facts = check("notify_evacuation", {"notice": got}, records)["summary"]["facts"]
+    assert facts == ["补充撤人名单 3 人", "撤往：主井口（N0）、1201避难硐室（N8）（路线：外部路径规划服务、本系统计算）", "没有可达避灾路线 1 人：P2（需人工研判）"]

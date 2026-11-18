@@ -1,5 +1,5 @@
 {{! 研判报告的事实部分（由第一版 mcp/workflow/reports.py 的 assessment 迁移）。数值原样填入，不取整、不加“约”；缺失就写缺失。 }}
-{{! 数据：panel、as_of_text、record_ids、warning、stage、alarms、trend、explosion、personnel（各为结果记录的内容）、chart_markdown、route_opinion（避灾路线第二意见：lines、basis；没有请求时为 null）、fire_sim_opinion（火灾蔓延第二意见：lines、basis；没有请求时为 null）。 }}
+{{! 数据：panel、as_of_text、record_ids、warning、stage、alarms、trend、explosion、personnel（各为结果记录的内容）、chart_markdown、route_opinion（避灾路线，外部为主、我方兜底：lines 是 route_compare 每组显示的路线、basis；没有请求时为 null）、route_from_compare（每组路线照 route_opinion 显示，不在人员行里写我方路线）、fire_sim_opinion（火灾蔓延：lines、basis；没有请求时为 null）、spread_from_sim（蔓延范围和到达时间按推演显示，不在人员行里写我方估算的到达时间）。 }}
 【预警研判】{{panel}} 工作面 {{as_of_text}}
 
 结论：预警等级 {{warning.result.level_name}}（计算结果）
@@ -52,23 +52,14 @@
 {{/explosion.result.failures}}
 
 {{#personnel.result.computed}}
-受威胁人员（通风网络估算，未做风量解算）：受威胁 {{personnel.result.total_threatened}} 人，井下共 {{personnel.result.total_underground}} 人
+受威胁人员（按人员定位和通风网络估算）：受威胁 {{personnel.result.total_threatened}} 人，井下共 {{personnel.result.total_underground}} 人
 
 {{#personnel.result.threatened}}
-- {{roadway_id}}：{{count}} 人（{{persons_text}}），有害气体到达 {{arrival_min}} 分钟；{{#escape_route.reachable}}避灾路线至 {{escape_route.target_name}}，{{escape_route.length_m}} 米，佩戴自救器步行 {{escape_route.walk_with_self_rescuer_min}} 分钟{{/escape_route.reachable}}{{^escape_route.reachable}}{{escape_route.note}}{{/escape_route.reachable}}
+- {{roadway_id}}：{{count}} 人（{{persons_text}}）{{^spread_from_sim}}，有害气体到达 {{arrival_min}} 分钟（本系统估算）{{/spread_from_sim}}{{^route_from_compare}}；{{#escape_route.reachable}}避灾路线至 {{escape_route.target_name}}，{{escape_route.length_m}} 米，佩戴自救器步行 {{escape_route.walk_with_self_rescuer_min}} 分钟{{/escape_route.reachable}}{{^escape_route.reachable}}{{escape_route.note}}{{/escape_route.reachable}}（本系统计算）{{/route_from_compare}}
 {{/personnel.result.threatened}}
 
-{{#route_opinion}}
-避灾路线第二意见（外部路径规划服务；输入含占位值，试验性；与上面的路线不一致时都列出，由人判断）：
-
-{{#lines}}
-- {{.}}
-{{/lines}}
-- 依据：{{basis}}
-
-{{/route_opinion}}
 {{#fire_sim_opinion}}
-火灾蔓延第二意见（外部火灾推演服务，模拟巷道内明火；输入含占位值，试验性；与上面的受污染巷道不一致时都列出，由人判断）：
+有害气体蔓延（{{#spread_from_sim}}外部火灾推演服务，模拟巷道内明火；输入含占位值，试验性{{/spread_from_sim}}{{^spread_from_sim}}外部火灾推演服务不可用，到达时间为上面的本系统估算{{/spread_from_sim}}）：
 
 {{#lines}}
 - {{.}}
@@ -76,6 +67,15 @@
 - 依据：{{basis}}
 
 {{/fire_sim_opinion}}
+{{#route_opinion}}
+避灾路线（外部路径规划服务可用时用其路线，输入含占位值，试验性；不可用时为本系统计算，逐组标明）：
+
+{{#lines}}
+- {{.}}
+{{/lines}}
+- 依据：{{basis}}
+
+{{/route_opinion}}
 撤人按预案立即执行，不等待本结果；以上名单是补充核对用的。
 
 {{/personnel.result.computed}}

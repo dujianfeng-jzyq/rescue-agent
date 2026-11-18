@@ -77,7 +77,7 @@ async def _call_one(http: httpx2.AsyncClient, cfg: Config, idx: Indexed, base: d
             else:
                 out["status"] = "ok" if out["routes"] else "empty"
                 if not out["routes"]:
-                    # 提供方目前不区分“不可达”和“烟中时间超限”（第 6 节第 3 条）；给出原因字段时原样带上
+                    # 提供方目前不区分“不可达”和“烟中时间超限”（第 6 节第 1 条）；给出原因字段时原样带上
                     out["empty_reason"] = body.get("reason") if isinstance(body.get("reason"), str) else None
     out["elapsed_ms"] = round((time.monotonic() - t0) * 1000)
     return out

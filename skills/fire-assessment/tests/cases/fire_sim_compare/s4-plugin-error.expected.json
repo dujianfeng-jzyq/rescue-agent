@@ -1,5 +1,5 @@
 {
- "algorithm_version": "fire_sim_compare/1.0.0",
+ "algorithm_version": "fire_sim_compare/1.1.0",
  "params": {
   "co_reach_ppm": 24,
   "co_danger_ppm": 400
@@ -20,7 +20,11 @@
   "extra_people": [],
   "counts": {},
   "lines": [
-   "第二意见不可用：fire_sim 调用失败：连接被拒绝"
+   "外部火灾推演服务不可用：fire_sim 调用失败：连接被拒绝"
+  ],
+  "display_source": "ours",
+  "display_lines": [
+   "外部火灾推演服务不可用：fire_sim 调用失败：连接被拒绝；有害气体蔓延范围和到达时间按本系统估算显示"
   ]
  }
 }

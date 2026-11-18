@@ -308,8 +308,34 @@ def missing_items(plan_result: dict[str, Any], already: list[Any]) -> list[str]:
     return out
 
 
+ROUTE_SOURCE_TEXT = {"service": "外部路径规划服务", "ours": "本系统计算"}
+
+
+def evacuation_routes(personnel: dict[str, Any], personnel_id: str, records: RecordStore | None) -> tuple[list[dict[str, Any]], str | None]:
+    """撤人通知用的每组避灾路线（docs/design-v6-route-service.md 第 3.1 节：外部为主、我方兜底）。
+    同一次研判有 route_compare 记录时取它每组的 display（选择在技能脚本里做）；没有（没配置外部服务、那一段失败）时取
+    personnel 的 escape_route，来源记为“本系统计算”。返回（[{roadway_id, persons, route}], route_compare 记录编号或 None）。
+    route 的字段与 escape_route 对齐（reachable、target、target_name、nodes、note），另有 source、smoke_time_s 等。"""
+    shown: dict[str, dict[str, Any]] = {}
+    cmp_id = None
+    if records is not None:
+        try:
+            cmp_rec = records.derived(personnel_id, "fire-assessment", "route_compare", "personnel")
+        except RecordTampered:
+            cmp_rec = None  # 被改过的选择记录不用：按我方路线（personnel 记录本身已核对）
+        if cmp_rec is not None:
+            cmp_id = cmp_rec.record_id
+            shown = {str(g.get("roadway_id")): g.get("display") or {} for g in _result(cmp_rec).get("groups") or []}
+    out = []
+    for g in personnel.get("threatened") or []:
+        route = shown.get(str(g.get("roadway_id"))) or {**(g.get("escape_route") or {}), "source": "ours"}
+        out.append({"roadway_id": g.get("roadway_id"), "persons": [str(p) for p in g.get("persons") or []], "route": route})
+    return out, cmp_id
+
+
 def evacuation_from_record(notice: dict[str, Any], records: RecordStore | None) -> dict[str, Any]:
-    """撤人名单留空、给了人员记录（run_fire_assessment 的 record_ids.personnel）时，按记录填受威胁人员和可达的避灾路线。
+    """撤人名单留空、给了人员记录（run_fire_assessment 的 record_ids.personnel）时，按记录填受威胁人员和可行的避灾路线。
+    路线按 evacuation_routes 取（外部路径规划服务可用时用它的路线）。
     名单已给出，或读不到记录、记录没有算出受威胁人员时原样返回（之后的核对会拦下空名单）。"""
     if notice.get("persons") or not notice.get("record_id") or records is None:
         return notice
@@ -317,34 +343,59 @@ def evacuation_from_record(notice: dict[str, Any], records: RecordStore | None) 
         r = _result(records.get(str(notice["record_id"])))
     except (RecordNotFound, RecordTampered, ValueError):
         return notice
+    groups, cmp_id = evacuation_routes(r, str(notice["record_id"]), records)
     persons: list[str] = []
     routes: dict[str, list[str]] = dict(notice.get("routes") or {})
-    for g in r.get("threatened") or []:
-        route = g.get("escape_route") or {}
-        for pid in g.get("persons") or []:
+    for g in groups:
+        route = g["route"]
+        for pid in g["persons"]:
             if pid not in persons:
-                persons.append(str(pid))
+                persons.append(pid)
             if route.get("reachable") and route.get("nodes") and pid not in routes:
-                routes[str(pid)] = [str(n) for n in route["nodes"]]
+                routes[pid] = [str(n) for n in route["nodes"]]
     if not persons:
         return notice
-    return {**notice, "persons": persons, "routes": routes, "reason": evacuation_reason(r, persons, routes, str(notice["record_id"]))}
+    reason = evacuation_reason(r, persons, routes, str(notice["record_id"]), groups, cmp_id)
+    return {**notice, "persons": persons, "routes": routes, "reason": reason}
 
 
-def evacuation_reason(result: dict[str, Any], persons: list[str], routes: dict[str, list[str]], record_id: str) -> str:
-    """按人员记录生成撤人通知正文（不用智能体写的文字）：人数、去向、走不通的人，以及“补充、不替代预案撤人”。"""
+def evacuation_reason(
+    result: dict[str, Any],
+    persons: list[str],
+    routes: dict[str, list[str]],
+    record_id: str,
+    groups: list[dict[str, Any]] | None = None,
+    compare_id: str | None = None,
+) -> str:
+    """按人员记录生成撤人通知正文（不用智能体写的文字）：人数、去向和路线来源、穿过有烟巷道的、走不通的人，
+    以及“补充、不替代预案撤人”。groups 是 evacuation_routes 的结果（不给时按 personnel 的 escape_route）。"""
+    if groups is None:
+        groups = [
+            {"roadway_id": g.get("roadway_id"), "persons": [str(p) for p in g.get("persons") or []], "route": {**(g.get("escape_route") or {}), "source": "ours"}}
+            for g in result.get("threatened") or []
+        ]  # fmt: skip
     panel = str(result.get("panel") or "").strip()
     head = f"{panel} 工作面" if panel else "受影响区域"
-    targets = []
-    for g in result.get("threatened") or []:
-        route = g.get("escape_route") or {}
-        if route.get("reachable") and (name := route.get("target_name") or route.get("target")) and name not in targets:
+    targets: list[str] = []
+    sources: list[str] = []
+    smoke: list[str] = []
+    for g in groups:
+        route = g["route"]
+        if not route.get("reachable"):
+            continue
+        if (name := route.get("target_name") or route.get("target")) and name not in targets:
             targets.append(str(name))
+        if (src := ROUTE_SOURCE_TEXT.get(str(route.get("source")), "本系统计算")) not in sources:
+            sources.append(src)
+        if route.get("smoke_time_s"):
+            smoke.append(f"{g['roadway_id']} 的 {len(g['persons'])} 人路线烟中通行约 {route['smoke_time_s']} 秒，须佩戴自救器")
     blocked = [p for p in persons if p not in routes]
-    parts = [f"{head}补充撤人名单 {len(persons)} 人" + (f"，撤往 {'、'.join(targets)}" if targets else "")]
+    parts = [f"{head}补充撤人名单 {len(persons)} 人" + (f"，撤往 {'、'.join(targets)}（路线：{'、'.join(sources)}）" if targets else "")]
+    parts.extend(smoke)
     if blocked:
-        parts.append(f"其中 {len(blocked)} 人（{'、'.join(blocked)}）避开受污染巷道后没有可达避灾路线，需人工研判")
-    parts.append(f"本通知是预案撤人的补充，不替代、不延迟预案撤人；依据人员记录 {record_id}")
+        parts.append(f"其中 {len(blocked)} 人（{'、'.join(blocked)}）没有可行的避灾路线，需人工研判")
+    basis = f"依据人员记录 {record_id}" + (f"、避灾路线记录 {compare_id}" if compare_id else "")
+    parts.append(f"本通知是预案撤人的补充，不替代、不延迟预案撤人；{basis}")
     return "；".join(parts) + "。"
 
 
@@ -426,18 +477,22 @@ def _facts(tool: str, arguments: dict[str, Any], records: RecordStore | None) ->
             routes = {str(k): v for k, v in (body.get("routes") or {}).items() if isinstance(v, list) and v}
             # 去向的中文名从引用的人员记录取（避难硐室、出口）；取不到就用节点编号（2026-11-11 演示：弹窗只写了“撤往：N8”）
             names: dict[str, str] = {}
+            sources: list[str] = []
             if body.get("record_id") and records is not None:
                 try:
-                    for g in _result(records.get(str(body["record_id"]))).get("threatened") or []:
-                        r = g.get("escape_route") or {}
+                    shown, _ = evacuation_routes(_result(records.get(str(body["record_id"]))), str(body["record_id"]), records)
+                    for g in shown:
+                        r = g["route"]
                         if r.get("target") and r.get("target_name"):
                             names[str(r["target"])] = str(r["target_name"])
+                        if r.get("reachable") and (src := ROUTE_SOURCE_TEXT.get(str(r.get("source")), "本系统计算")) not in sources:
+                            sources.append(src)
                 except (RecordNotFound, RecordTampered, ValueError):
                     pass
             dest = sorted({str(v[-1]) for v in routes.values()})
             out = [f"补充撤人名单 {len(persons)} 人"]
             if dest:
-                out.append(f"撤往：{'、'.join(f'{names[d]}（{d}）' if d in names else d for d in dest)}")
+                out.append(f"撤往：{'、'.join(f'{names[d]}（{d}）' if d in names else d for d in dest)}" + (f"（路线：{'、'.join(sources)}）" if sources else ""))
             # 没有可达避灾路线的人要让确认人看到（名单里有人、却没有路线）
             stranded = [p for p in persons if p not in routes]
             if stranded and routes:
@@ -540,6 +595,7 @@ __all__ = [
     "evacuation_from_record",
     "escalation_message",
     "evacuation_reason",
+    "evacuation_routes",
     "mentions_panel",
     "plan_from_record",
     "precheck",

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """生成 fire-assessment 的 fire_sim_request、fire_sim_compare 自检样例（第七版，docs/design-v7-fire-sim.md 附录 A.5）。
 
-    uv run --project mcp python scripts/make_fire_sim_cases.py [提供方地址，缺省 http://192.168.0.200:5079]
+    uv run --project mcp python scripts/make_fire_sim_cases.py [提供方地址，缺省 http://192.168.0.200:5079 | --reuse]
 
 在仓库根目录运行。输入取现有样例（route_request 的 s4 红色证据和 personnel、warning 的 s4 红色和 s5 橙色）；
 s4 红色那组**会调用提供方服务**（经 rescue_fire_sim 适配层），所以不并进 make_skill_cases.py。
 personnel 或 warning 样例重新生成后要重跑本脚本；提供方结果变了时 s4 两组的期望会跟着变，提交前看 diff。
+--reuse：不调用提供方，沿用现有 s4-escalation-60h-red-service 样例里的服务返回（只改了我方脚本时用）。
 """
 
 import asyncio
@@ -47,13 +48,20 @@ personnel = load("route_request/s4-escalation-60h-red.input.json")["personnel"]
 red_w = load("warning/s4-escalation-60h-red.expected.json")
 orange_in = load("warning/s5-sealed-42h-released-orange.input.json")
 orange_w = load("warning/s5-sealed-42h-released-orange.expected.json")
+none_in = load("warning/s6-sensor-faults-36h.input.json")
+none_w = load("warning/s6-sensor-faults-36h.expected.json")
+route_cmp = load("route_compare/s4-escalation-60h-red-service.expected.json")
 
 req_in = {"evidence": red_ev, "warning": red_w}
 req = run("fire_sim_request", req_in)
 write("fire_sim_request", "s4-escalation-60h-red", req_in, req)
-nreq_in = {"evidence": orange_in["evidence"], "warning": orange_w}
+# 2026-11-17 起橙色也请求（fire_sim.yaml 的 level_at_least）；不需要的样例取无预警的 s6
+oreq_in = {"evidence": orange_in["evidence"], "warning": orange_w}
+write("fire_sim_request", "s5-sealed-42h-orange", oreq_in, run("fire_sim_request", oreq_in))
+nreq_in = {"evidence": none_in["evidence"], "warning": none_w}
 nreq = run("fire_sim_request", nreq_in)
-write("fire_sim_request", "s5-sealed-42h-orange-not-needed", nreq_in, nreq)
+assert not nreq["result"]["needed"]
+write("fire_sim_request", "s6-no-warning-not-needed", nreq_in, nreq)
 
 
 def sim_ev(result=None, error=None):
@@ -69,7 +77,10 @@ def sim_ev(result=None, error=None):
 
 
 URL = sys.argv[1] if len(sys.argv) > 1 else "http://192.168.0.200:5079"
-real = asyncio.run(simulate(SimInput(**req["result"]["request"]), Config(url=URL)))
+if URL == "--reuse":
+    real = load("fire_sim_compare/s4-escalation-60h-red-service.input.json")["fire_sim"]["result"]
+else:
+    real = asyncio.run(simulate(SimInput(**req["result"]["request"]), Config(url=URL)))
 assert real["available"], real["error"]
 base = {"evidence": red_ev, "personnel": personnel, "fire_sim_request": req}
 for case, ev in (
@@ -91,11 +102,11 @@ for case, ev in (
     data = {**base, "fire_sim": ev}
     write("fire_sim_compare", case, data, run("fire_sim_compare", data))
 nd = {
-    "evidence": orange_in["evidence"],
+    "evidence": none_in["evidence"],
     "personnel": personnel,
     "fire_sim_request": nreq,
 }
-write("fire_sim_compare", "s5-not-needed", nd, run("fire_sim_compare", nd))
+write("fire_sim_compare", "s6-not-needed", nd, run("fire_sim_compare", nd))
 out = json.loads((CASES / "fire_sim_compare/s4-escalation-60h-red-service.expected.json").read_text())
 print("\n".join(out["result"]["lines"]))
 print(out["result"]["counts"])
@@ -121,6 +132,7 @@ for b in syn["branches"]:
     if b["id"] == "R-1201-IN#b":
         b["air_speed_m_s"] = [v if k < 10 else -0.3 for k, v in enumerate(b["air_speed_m_s"])]
         b["air_reversed"] = True
-data = {**base, "fire_sim": sim_ev(syn)}
+# 带上 route_compare（外部路径规划服务给出的显示路线）：危险巷道按显示的路线核对
+data = {**base, "fire_sim": sim_ev(syn), "route_compare": route_cmp}
 write("fire_sim_compare", "s4-synthetic-backflow", data, run("fire_sim_compare", data))
 print("\n".join(json.loads((CASES / "fire_sim_compare/s4-synthetic-backflow.expected.json").read_text())["result"]["lines"]))

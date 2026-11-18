@@ -68,7 +68,7 @@ describe('避灾路线第二意见：collectRoutes → route_compare', () => {
     const r = (record.content as any).result
     assert.equal(r.status, 'partial')
     assert.deepEqual(r.counts, { same_route: 1, service_unavailable: 1 })
-    assert.match(r.lines[1], /第二意见不可用：\[route_planner\] 请求超过/)
+    assert.match(r.lines[1], /外部服务不可用：\[route_planner\] 请求超过/)
   })
 
   it('没有配置时不能调用；不是 route_request 的记录不收', async () => {

@@ -1,0 +1,402 @@
+{
+ "algorithm_version": "fire_sim_request/1.0.0",
+ "params": {
+  "status": "placeholder",
+  "level_at_least": "orange",
+  "fire_source_kind": "goaf",
+  "fire_position": 0.9,
+  "total_time_s": 3600,
+  "output_interval_s": 60,
+  "fuel_type": 0,
+  "burning_area_m2": 10,
+  "fuel_load_kg": 90,
+  "oxygen_pct": 21,
+  "default_resistance_ns2_m8": 0.05,
+  "goaf_section_m2": 2.0,
+  "co_reach_ppm": 24,
+  "co_danger_ppm": 400,
+  "default_section_m2": 12.0
+ },
+ "warnings": [
+  "外部服务模拟巷道内明火，输入使用占位坐标、断面、风阻和火源参数，结果是试验性的；推演可用时界面只显示推演结果",
+  "巷道 R-REFUGE 没有风阻，按占位值 0.05 N·s²/m⁸"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T02:00:00",
+  "experimental": true,
+  "method": "占位坐标（同路径规划服务请求，z = 0）+ 占位断面和风阻 + 设计风量作进风量 + 火源放在漏风通道上（试验性）",
+  "needed": true,
+  "note": null,
+  "fire_roadway": "R-1201-GOAF",
+  "fire_roadway_name": "1201采空区漏风通道",
+  "fire_position": 0.9,
+  "request": {
+   "nodes": [
+    {
+     "id": "N0",
+     "xyz": [
+      26.287,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "id": "N1",
+     "xyz": [
+      21.266,
+      15.451,
+      0.0
+     ]
+    },
+    {
+     "id": "N2",
+     "xyz": [
+      8.123,
+      25.0,
+      0.0
+     ]
+    },
+    {
+     "id": "N3",
+     "xyz": [
+      -8.123,
+      25.0,
+      0.0
+     ]
+    },
+    {
+     "id": "N4",
+     "xyz": [
+      -21.266,
+      15.451,
+      0.0
+     ]
+    },
+    {
+     "id": "N5",
+     "xyz": [
+      -26.287,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "id": "N6",
+     "xyz": [
+      -21.266,
+      -15.451,
+      0.0
+     ]
+    },
+    {
+     "id": "N7",
+     "xyz": [
+      -8.123,
+      -25.0,
+      0.0
+     ]
+    },
+    {
+     "id": "N8",
+     "xyz": [
+      8.123,
+      -25.0,
+      0.0
+     ]
+    },
+    {
+     "id": "N9",
+     "xyz": [
+      21.266,
+      -15.451,
+      0.0
+     ]
+    },
+    {
+     "id": "R-MAIN-SHAFT#mid",
+     "xyz": [
+      -261.436,
+      -84.946,
+      0.0
+     ]
+    },
+    {
+     "id": "R-MAIN-IN#mid",
+     "xyz": [
+      -426.118,
+      -586.502,
+      0.0
+     ]
+    },
+    {
+     "id": "R-1201-IN#mid",
+     "xyz": [
+      0.0,
+      -874.963,
+      0.0
+     ]
+    },
+    {
+     "id": "R-1201-FACE#mid",
+     "xyz": [
+      49.785,
+      -68.523,
+      0.0
+     ]
+    },
+    {
+     "id": "R-1201-GOAF#mid",
+     "xyz": [
+      58.623,
+      -80.688,
+      0.0
+     ]
+    },
+    {
+     "id": "R-1201-RET#mid",
+     "xyz": [
+      832.14,
+      -270.379,
+      0.0
+     ]
+    },
+    {
+     "id": "R-RET-MAIN#mid",
+     "xyz": [
+      689.474,
+      224.024,
+      0.0
+     ]
+    },
+    {
+     "id": "R-RET-SHAFT#mid",
+     "xyz": [
+      161.576,
+      222.391,
+      0.0
+     ]
+    },
+    {
+     "id": "R-REFUGE#mid",
+     "xyz": [
+      8.123,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "id": "R-1202-IN#mid",
+     "xyz": [
+      471.001,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "id": "R-1202-RET#mid",
+     "xyz": [
+      0.0,
+      -514.998,
+      0.0
+     ]
+    }
+   ],
+   "branches": [
+    {
+     "id": "R-MAIN-SHAFT#a",
+     "from_node": "N0",
+     "to_node": "R-MAIN-SHAFT#mid",
+     "resistance": 0.006,
+     "area_m2": 12.0,
+     "boundary": "inlet"
+    },
+    {
+     "id": "R-MAIN-SHAFT#b",
+     "from_node": "R-MAIN-SHAFT#mid",
+     "to_node": "N1",
+     "resistance": 0.006,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-MAIN-IN#a",
+     "from_node": "N1",
+     "to_node": "R-MAIN-IN#mid",
+     "resistance": 0.018,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-MAIN-IN#b",
+     "from_node": "R-MAIN-IN#mid",
+     "to_node": "N2",
+     "resistance": 0.018,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1201-IN#a",
+     "from_node": "N2",
+     "to_node": "R-1201-IN#mid",
+     "resistance": 0.03,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1201-IN#b",
+     "from_node": "R-1201-IN#mid",
+     "to_node": "N3",
+     "resistance": 0.03,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1201-FACE#a",
+     "from_node": "N3",
+     "to_node": "R-1201-FACE#mid",
+     "resistance": 0.04,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1201-FACE#b",
+     "from_node": "R-1201-FACE#mid",
+     "to_node": "N4",
+     "resistance": 0.04,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1201-GOAF#a",
+     "from_node": "N3",
+     "to_node": "R-1201-GOAF#mid",
+     "resistance": 4.0,
+     "area_m2": 2.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1201-GOAF#b",
+     "from_node": "R-1201-GOAF#mid",
+     "to_node": "N4",
+     "resistance": 4.0,
+     "area_m2": 2.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1201-RET#a",
+     "from_node": "N4",
+     "to_node": "R-1201-RET#mid",
+     "resistance": 0.033,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1201-RET#b",
+     "from_node": "R-1201-RET#mid",
+     "to_node": "N5",
+     "resistance": 0.033,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-RET-MAIN#a",
+     "from_node": "N5",
+     "to_node": "R-RET-MAIN#mid",
+     "resistance": 0.02,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-RET-MAIN#b",
+     "from_node": "R-RET-MAIN#mid",
+     "to_node": "N6",
+     "resistance": 0.02,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-RET-SHAFT#a",
+     "from_node": "N6",
+     "to_node": "R-RET-SHAFT#mid",
+     "resistance": 0.007,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-RET-SHAFT#b",
+     "from_node": "R-RET-SHAFT#mid",
+     "to_node": "N7",
+     "resistance": 0.007,
+     "area_m2": 12.0,
+     "boundary": "outlet"
+    },
+    {
+     "id": "R-REFUGE#a",
+     "from_node": "N2",
+     "to_node": "R-REFUGE#mid",
+     "resistance": 0.025,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-REFUGE#b",
+     "from_node": "R-REFUGE#mid",
+     "to_node": "N8",
+     "resistance": 0.025,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1202-IN#a",
+     "from_node": "N1",
+     "to_node": "R-1202-IN#mid",
+     "resistance": 0.025,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1202-IN#b",
+     "from_node": "R-1202-IN#mid",
+     "to_node": "N9",
+     "resistance": 0.025,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1202-RET#a",
+     "from_node": "N9",
+     "to_node": "R-1202-RET#mid",
+     "resistance": 0.025,
+     "area_m2": 12.0,
+     "boundary": null
+    },
+    {
+     "id": "R-1202-RET#b",
+     "from_node": "R-1202-RET#mid",
+     "to_node": "N6",
+     "resistance": 0.025,
+     "area_m2": 12.0,
+     "boundary": null
+    }
+   ],
+   "fire": {
+    "branch": "R-1201-GOAF#b",
+    "position": 0.8,
+    "total_time_s": 3600,
+    "output_interval_s": 60,
+    "fuel_type": 0,
+    "burning_area_m2": 10,
+    "fuel_load_kg": 90,
+    "oxygen_pct": 21
+   },
+   "boundary": {
+    "mode": "forced",
+    "inlet_flows_m3_s": {
+     "N0": 150.0
+    },
+    "outlet_pressures_pa": {}
+   }
+  }
+ }
+}

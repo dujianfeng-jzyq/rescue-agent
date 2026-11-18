@@ -234,22 +234,28 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                 ev.freshness !== 'fresh' && FRESH_TEXT[ev.freshness] && h('p', { class: 'rm-note', 'data-tone': 'warn' }, FRESH_TEXT[ev.freshness]!),
                 ...ev.groups.map((g) => {
                   const r = g.route
+                  const fsv = ev.fireSpread
+                  const arrival =
+                    g.arrival.source === 'service'
+                      ? g.arrival.min === null
+                        ? `推演 ${fsv?.horizonMin ?? '—'} 分钟内 CO 未达到 ${fsv?.reachPpm ?? '—'} ppm`
+                        : `推演第 ${g.arrival.min} 分钟 CO 达到 ${fsv?.reachPpm ?? '—'} ppm`
+                      : g.arrival.min === null
+                        ? ''
+                        : `污染预计 ${g.arrival.min} 分钟到达（本系统估算）`
+                  const detail =
+                    r.source === 'service'
+                      ? `${r.lengthM === null ? '' : `，约 ${r.lengthM} 米`}${r.escapeMin === null ? '' : `，暂时脱险约 ${r.escapeMin} 分钟`}${r.smokeTimeS ? `，烟中通行约 ${r.smokeTimeS} 秒` : ''}`
+                      : `${r.lengthM === null ? '' : `，${r.lengthM} 米`}${r.walkMin === null ? '' : `，步行约 ${r.walkMin} 分钟`}${r.selfRescuerMin === null ? '' : `（佩戴自救器约 ${r.selfRescuerMin} 分钟）`}`
                   const li = h(
                     'div',
                     { class: 'rm-evac-group', 'data-blocked': r.reachable ? '0' : '1', ...(g.anchor ? { 'data-anchor': g.anchor, role: 'button', tabindex: '0', title: `在地图上定位：${g.anchor}` } : {}) },
-                    h('div', null, h('b', null, `${g.count} 人`), h('span', null, ` ${g.roadwayName}`), h('small', null, `，污染预计 ${g.arrivalMin} 分钟到达`)),
+                    h('div', null, h('b', null, `${g.count} 人`), h('span', null, ` ${g.roadwayName}`), arrival && h('small', null, `，${arrival}`)),
                     r.reachable
-                      ? h('div', { class: 'rm-evac-route' }, `撤往 ${r.targetName ?? '—'}${r.lengthM === null ? '' : `，${r.lengthM} 米`}${r.walkMin === null ? '' : `，步行约 ${r.walkMin} 分钟`}${r.selfRescuerMin === null ? '' : `（佩戴自救器约 ${r.selfRescuerMin} 分钟）`}`)
-                      : h('div', { class: 'rm-evac-route', 'data-tone': 'bad' }, r.note ?? '无可达路线，需人工研判'),
+                      ? h('div', { class: 'rm-evac-route' }, `撤往 ${r.targetName ?? '—'}${detail}`)
+                      : h('div', { class: 'rm-evac-route', 'data-tone': 'bad' }, r.note ?? '无可行路线，需人工研判'),
+                    h('div', { class: 'rm-evac-src', 'data-source': r.source, title: r.reason ?? '' }, r.source === 'service' ? `路线：${r.sourceText}（试验性）` : `路线：${r.sourceText}${r.reason ? `（${r.reason}）` : ''}`),
                     r.reachable && !r.drawn && h('div', { class: 'rm-note' }, `图上未画出：${r.missing.length ? `有 ${r.missing.length} 处没有映射` : '映射不完整'}`),
-                    g.reference &&
-                      h(
-                        'div',
-                        { class: 'rm-evac-ref', 'data-status': g.reference.status, title: g.reference.text },
-                        h('small', null, '参考（外部服务，试验性）：'),
-                        g.reference.caseText,
-                        g.reference.status === 'route' && !g.reference.drawn && h('small', null, '（图上未画出：映射不完整）'),
-                      ),
                   )
                   if (g.anchor) {
                     li.addEventListener('click', () => onFocus(g.anchor!))
@@ -260,22 +266,33 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
                   return li
                 }),
                 ev.method && h('p', { class: 'rm-note' }, ev.method),
-                ev.referenceRecordId && h('p', { class: 'rm-note' }, `参考路线依据记录 ${ev.referenceRecordId}：外部路径规划服务，输入含占位值，只作对照；两者不一致时由人判断，撤人按预案执行。`),
+                h(
+                  'p',
+                  { class: 'rm-note' },
+                  ev.routeRecordId
+                    ? `路线依据记录 ${ev.routeRecordId}：外部路径规划服务可用时用其路线（绿色），不可用时用本系统计算的路线（蓝色）；输入含占位值。撤人按预案执行。`
+                    : '没有外部路径规划服务的结果，图上为本系统计算的路线（蓝色）。撤人按预案执行。',
+                ),
                 h('p', { class: 'rm-note' }, `${ev.schematic ? '示意映射：' : ''}图上折线只表示走哪几段巷道，距离和时间以文字为准。`),
               ),
         )
       : null
 
-    // 火灾蔓延第二意见（外部火灾推演服务，试验性）：文字照抄记录里的整句；图上一层可按时间回放
+    // 有害气体蔓延（外部为主、我方兜底，第七版 3.1 节）：推演可用时图上只有推演层（可按时间回放），文字照抄记录里的整句；
+    // 不可用或没有推演时图上是本系统估算的污染巷道
     const fs = ev?.computed ? (ev.fireSpread ?? null) : null
     if (!fs || fs.status !== 'ok') dropReplay()
     const notDrawn = fs ? fs.roadways.filter((r) => !r.drawn).map((r) => r.name) : []
-    const fireSec = fs
+    const fireSec = ev?.computed
       ? section(
-          '火灾蔓延第二意见（推演，试验性）',
-          h('p', { class: 'rm-note' }, `依据记录 ${fs.recordId}：外部火灾推演服务模拟巷道内明火，火源和参数是占位值，只作对照；与上面的污染巷道不一致时由人判断，撤人按预案执行。`),
-          fs.status !== 'ok'
-            ? empty(`第二意见不可用：${fs.note ?? '原因不明'}`)
+          fs?.status === 'ok' ? '有害气体蔓延（外部火灾推演，试验性）' : '有害气体蔓延（本系统估算）',
+          !fs
+            ? empty('没有外部火灾推演的结果（未配置或这次研判未请求），图上为本系统按设计风量估算的污染巷道。')
+            : h('p', { class: 'rm-note' }, `依据记录 ${fs.recordId}：外部火灾推演服务模拟巷道内明火，火源和参数是占位值。撤人按预案执行。`),
+          !fs
+            ? null
+            : fs.status !== 'ok'
+            ? empty(`外部火灾推演不可用：${fs.note ?? '原因不明'}；图上为本系统估算的污染巷道。`)
             : h(
                 'div',
                 { class: 'rm-fire-sim' },

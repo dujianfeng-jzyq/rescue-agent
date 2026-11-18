@@ -1,13 +1,17 @@
-"""外部火灾推演服务的结果（火灾蔓延第二意见）与我方受污染巷道估算的比较（docs/design-v7-fire-sim.md 附录 A.3、A.4）。
+"""外部火灾推演服务的结果：判读、选定蔓延范围显示哪一种，并与我方受污染巷道估算比较（docs/design-v7-fire-sim.md 第 3.1 节、附录 A.3、A.4）。
 
 输入：{"evidence": <证据内容，含 network>, "personnel": <personnel.py 的输出>, "fire_sim_request": <fire_sim_request.py 的输出>,
-       "fire_sim": <证据插件调用 fire_sim 得到的证据内容：{result | error}>}。
+       "fire_sim": <证据插件调用 fire_sim 得到的证据内容：{result | error}>,
+       "route_compare": <可选，route_compare.py 的输出：有它时按每组显示的避灾路线核对危险巷道，没有时按我方路线>}。
 输出：
 - roadways：按我方巷道（拆开的两段合并）给出 CO 到达时刻（≥ co_reach_ppm）、危险时刻（≥ co_danger_ppm）、峰值、风向反转；
 - comparison：与我方受污染巷道（personnel 的 contaminated_roadways）比较：两者都有、只有推演有、只有我方有，及到达时间差；
 - groups：每组受威胁人员所在巷道的推演到达和危险时刻，以及我方避灾路线经过的、推演中会达到危险浓度的巷道；
 - extra_people：我方判为不受威胁、推演中 CO 会到达其所在巷道的人员（单独列出，由人核对）；
-- lines：报告里的整句。全部在这里算好，照抄，不要自己判断“哪个对”：两者不一致时都显示，由人判断。
+- lines：完整的判读和比较整句（存档、复盘用）；
+- display_source / display_lines：界面和报告显示哪一种蔓延范围（外部为主、我方兜底）及显示的整句：推演可用时 service，
+  只显示推演结果（不写与我方估算的比较）；推演不可用时 ours，写明原因，蔓延范围和到达时间按我方估算显示。
+全部在这里算好，照抄。
 
 两种方法的假设不同：我方按设计风量沿风流估算，源头取工作面巷道；推演按风阻解算风量、模拟巷道内明火，火源按参数放在漏风通道上。
 所以源头附近的差别是预期中会出现的，lines 里写明两边的源头。时刻从推演开始计，单位分钟；推演结束仍未到达的为 null。
@@ -16,7 +20,7 @@
 from _route import roadway_of
 from _skill import evidence, load_reference, main, record_result
 
-VERSION = "fire_sim_compare/1.0.0"
+VERSION = "fire_sim_compare/1.1.0"
 METHOD = "外部服务推演结果按巷道合并（两段取最早到达、最大浓度），按 CO 阈值判读后与我方受污染巷道比较（试验性）"
 
 
@@ -84,11 +88,15 @@ def compare_roadways(sim, per, goaf):
     return {"both": both, "sim_only": sim_only, "ours_only": ours_only}
 
 
-def groups_view(per, sim_by, horizon_min):
+ROUTE_SOURCES = {"service": "外部路径规划服务", "ours": "本系统计算"}
+
+
+def groups_view(per, sim_by, horizon_min, shown_routes):
+    """shown_routes：每组显示的避灾路线（route_compare 的 display）；没有的组按我方路线。"""
     groups = []
     for g in per["threatened"]:
         s = sim_by.get(g["roadway_id"], {})
-        er = g["escape_route"]
+        er = shown_routes.get(g["roadway_id"]) or {**g["escape_route"], "source": "ours"}
         hits = []
         if er.get("reachable"):
             hits = [
@@ -99,7 +107,7 @@ def groups_view(per, sim_by, horizon_min):
         groups.append({
             "roadway_id": g["roadway_id"], "count": g["count"], "ours_arrival_min": g["arrival_min"],
             "sim_reach_min": s.get("reach_min"), "sim_danger_min": s.get("danger_min"), "sim_peak_ppm": s.get("peak_ppm", 0.0),
-            "route_reachable": bool(er.get("reachable")), "route_danger_roadways": hits,
+            "route_source": er["source"], "route_reachable": bool(er.get("reachable")), "route_danger_roadways": hits,
         })  # fmt: skip
     extra = []
     for g in per["not_threatened"]:
@@ -128,17 +136,40 @@ def exposure(reach, danger, horizon_min, p):
     )
 
 
-def lines_for(req, per, sim, cmp_, groups, extra, horizon_min, p):
+def head_lines(req, per, sim, horizon_min, p, with_ours):
     reached = [r for r in sim if r["reach_min"] is not None]
+    source = f"推演火源：{req['fire_roadway_name']}（{req['fire_roadway']}，位置 {req['fire_position']}）"
     head = (
-        f"推演火源：{req['fire_roadway_name']}（{req['fire_roadway']}，位置 {req['fire_position']}）；我方估算源头：{per['source_roadway']}。"
-        f"推演 {num(horizon_min)} 分钟内 CO 达到 {p['co_reach_ppm']} ppm 的巷道 {len(reached)} 条"
-    )
+        source + (f"；我方估算源头：{per['source_roadway']}。" if with_ours else "。")
+        + f"推演 {num(horizon_min)} 分钟内 CO 达到 {p['co_reach_ppm']} ppm 的巷道 {len(reached)} 条"
+    )  # fmt: skip
     if reached:
         head += "：" + "、".join(f"{r['roadway_id']}（第 {num(r['reach_min'])} 分钟，峰值 {num(r['peak_ppm'])} ppm）" for r in reached)
-    out = [head]
     flips = [r["roadway_id"] for r in sim if r["air_reversed"] or r["air_stopped"]]
-    out.append(f"风流反转或停风的巷道：{'、'.join(flips)}" if flips else "推演中没有巷道风流反转或停风")
+    return [head, f"风流反转或停风的巷道：{'、'.join(flips)}" if flips else "推演中没有巷道风流反转或停风"]
+
+
+def people_lines(groups, extra, horizon_min, p):
+    out = []
+    for g in groups:
+        s = f"{g['roadway_id']}（{g['count']} 人）：{exposure(g['sim_reach_min'], g['sim_danger_min'], horizon_min, p)}"
+        if g["route_danger_roadways"]:
+            s += (
+                f"；避灾路线（{ROUTE_SOURCES[g['route_source']]}）经过的 "
+                + "、".join(f"{h['roadway_id']}（第 {num(h['danger_min'])} 分钟）" for h in g["route_danger_roadways"])
+                + f"在推演中会达到 {p['co_danger_ppm']} ppm"
+            )
+        out.append(s)
+    for x in extra:
+        out.append(
+            f"{x['roadway_id']}（{x['count']} 人，不在受威胁名单内）：{exposure(x['sim_reach_min'], x['sim_danger_min'], horizon_min, p)}，请核对"
+        )
+    return out
+
+
+def lines_for(req, per, sim, cmp_, groups, extra, horizon_min, p):
+    """完整的判读和比较（存档、复盘用）。"""
+    out = head_lines(req, per, sim, horizon_min, p, with_ours=True)
     if cmp_["sim_only"]:
         out.append(
             "推演中 CO 会到达、我方未列为受污染的巷道："
@@ -149,20 +180,21 @@ def lines_for(req, per, sim, cmp_, groups, extra, horizon_min, p):
             f"我方列为受污染、推演 {num(horizon_min)} 分钟内 CO 未达到 {p['co_reach_ppm']} ppm 的巷道："
             + "、".join(x["roadway_id"] for x in cmp_["ours_only"])
         )
-    for g in groups:
-        s = f"{g['roadway_id']}（{g['count']} 人）：{exposure(g['sim_reach_min'], g['sim_danger_min'], horizon_min, p)}"
-        if g["route_danger_roadways"]:
-            s += (
-                "；我方避灾路线经过的 "
-                + "、".join(f"{h['roadway_id']}（第 {num(h['danger_min'])} 分钟）" for h in g["route_danger_roadways"])
-                + f"在推演中会达到 {p['co_danger_ppm']} ppm"
-            )
-        out.append(s)
-    for x in extra:
-        out.append(
-            f"{x['roadway_id']}（{x['count']} 人，我方判为不受威胁）：{exposure(x['sim_reach_min'], x['sim_danger_min'], horizon_min, p)}"
-        )
-    return out
+    return out + people_lines(groups, extra, horizon_min, p)
+
+
+def display_lines_for(req, per, sim, groups, extra, horizon_min, p):
+    """界面和报告显示的整句：只写推演结果（第 3.1 节），不写与我方估算的比较。"""
+    return head_lines(req, per, sim, horizon_min, p, with_ours=False) + people_lines(groups, extra, horizon_min, p)
+
+
+def shown_routes_of(data):
+    """可选输入 route_compare：每组显示的避灾路线（route_compare 的 display）。"""
+    rc = data.get("route_compare")
+    if rc is None:
+        return {}
+    res = record_result(data, "route_compare")
+    return {g["roadway_id"]: g["display"] for g in res.get("groups") or []}
 
 
 def run(data, _args):
@@ -184,6 +216,8 @@ def run(data, _args):
         "extra_people": [],
         "counts": {},
         "lines": [],
+        "display_source": None,
+        "display_lines": [],
     }
     if not req.get("needed"):
         return (
@@ -204,7 +238,7 @@ def run(data, _args):
     res = sim_ev.get("result")
     error = sim_ev.get("error") or (None if res and res.get("available") else (res or {}).get("error") or "服务不可用")
     if error:
-        line = f"第二意见不可用：{error}"
+        line = f"外部火灾推演服务不可用：{error}"
         return (
             {
                 **base,
@@ -214,6 +248,8 @@ def run(data, _args):
                 "horizon_min": None,
                 **empty,
                 "lines": [line],
+                "display_source": "ours",
+                "display_lines": [f"{line}；有害气体蔓延范围和到达时间按本系统估算显示"],
             },
             params,
             [],
@@ -225,7 +261,7 @@ def run(data, _args):
     sim_by = {r["roadway_id"]: r for r in sim}
     goaf = {r["id"] for r in ev["network"]["roadways"] if r["kind"] == "goaf"}
     cmp_ = compare_roadways(sim, per, goaf)
-    groups, extra = groups_view(per, sim_by, horizon_min)
+    groups, extra = groups_view(per, sim_by, horizon_min, shown_routes_of(data))
     counts = {
         "sim_reached": sum(1 for r in sim if r["reach_min"] is not None), "sim_danger": sum(1 for r in sim if r["danger_min"] is not None),
         "both": len(cmp_["both"]), "sim_only": len(cmp_["sim_only"]), "ours_only": len(cmp_["ours_only"]),
@@ -234,8 +270,9 @@ def run(data, _args):
     out = {
         **base, "computed": True, "status": "ok", "note": None, "horizon_min": horizon_min, "roadways": sim, "comparison": cmp_,
         "groups": groups, "extra_people": extra, "counts": counts, "lines": lines_for(req, per, sim, cmp_, groups, extra, horizon_min, p),
+        "display_source": "service", "display_lines": display_lines_for(req, per, sim, groups, extra, horizon_min, p),
     }  # fmt: skip
-    warnings = ["外部服务推演的是巷道内明火、输入含占位值，结果是试验性的第二意见，不替代我方研判；两者不一致时都显示，由人判断"]
+    warnings = ["外部服务推演的是巷道内明火、输入含占位值，结果是试验性的；推演可用时界面只显示推演结果，不可用时显示我方估算并写明原因"]
     return out, params, warnings
 
 

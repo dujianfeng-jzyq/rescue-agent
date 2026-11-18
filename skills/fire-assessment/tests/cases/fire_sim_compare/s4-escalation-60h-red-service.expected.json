@@ -1,11 +1,11 @@
 {
- "algorithm_version": "fire_sim_compare/1.0.0",
+ "algorithm_version": "fire_sim_compare/1.1.0",
  "params": {
   "co_reach_ppm": 24,
   "co_danger_ppm": 400
  },
  "warnings": [
-  "外部服务推演的是巷道内明火、输入含占位值，结果是试验性的第二意见，不替代我方研判；两者不一致时都显示，由人判断"
+  "外部服务推演的是巷道内明火、输入含占位值，结果是试验性的；推演可用时界面只显示推演结果，不可用时显示我方估算并写明原因"
  ],
  "result": {
   "panel": "1201",
@@ -154,6 +154,7 @@
     "sim_reach_min": null,
     "sim_danger_min": null,
     "sim_peak_ppm": 0.0,
+    "route_source": "ours",
     "route_reachable": true,
     "route_danger_roadways": []
    },
@@ -164,6 +165,7 @@
     "sim_reach_min": 3.0,
     "sim_danger_min": null,
     "sim_peak_ppm": 340.0,
+    "route_source": "ours",
     "route_reachable": false,
     "route_danger_roadways": []
    }
@@ -182,6 +184,13 @@
    "推演火源：1201采空区漏风通道（R-1201-GOAF，位置 0.9）；我方估算源头：R-1201-FACE。推演 60 分钟内 CO 达到 24 ppm 的巷道 4 条：R-1201-GOAF（第 1 分钟，峰值 3700 ppm）、R-1201-RET（第 3 分钟，峰值 340 ppm）、R-RET-MAIN（第 9 分钟，峰值 340 ppm）、R-RET-SHAFT（第 16 分钟，峰值 130 ppm）",
    "推演中没有巷道风流反转或停风",
    "我方列为受污染、推演 60 分钟内 CO 未达到 24 ppm 的巷道：R-1201-FACE",
+   "R-1201-FACE（9 人）：推演 60 分钟内 CO 未达到 24 ppm",
+   "R-1201-RET（2 人）：CO 第 3 分钟达到 24 ppm，60 分钟内未达到 400 ppm"
+  ],
+  "display_source": "service",
+  "display_lines": [
+   "推演火源：1201采空区漏风通道（R-1201-GOAF，位置 0.9）。推演 60 分钟内 CO 达到 24 ppm 的巷道 4 条：R-1201-GOAF（第 1 分钟，峰值 3700 ppm）、R-1201-RET（第 3 分钟，峰值 340 ppm）、R-RET-MAIN（第 9 分钟，峰值 340 ppm）、R-RET-SHAFT（第 16 分钟，峰值 130 ppm）",
+   "推演中没有巷道风流反转或停风",
    "R-1201-FACE（9 人）：推演 60 分钟内 CO 未达到 24 ppm",
    "R-1201-RET（2 人）：CO 第 3 分钟达到 24 ppm，60 分钟内未达到 400 ppm"
   ]

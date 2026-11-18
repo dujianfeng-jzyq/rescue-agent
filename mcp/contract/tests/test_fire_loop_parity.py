@@ -25,6 +25,7 @@ from rescue_contract.collect import collect_from, parse_collect_spec
 from rescue_contract.records import RecordStore
 from rescue_contract.skills import load_skill, run_script
 from rescue_contract.template import render, report_data
+from rescue_contract.validation import evacuation_from_record
 
 ROOT = Path(__file__).resolve().parents[3]
 BUNDLE = ROOT / "dsh-bundle"
@@ -317,7 +318,7 @@ def _route_planner(provider_url: str):
 @pytest.mark.parametrize("mode", ["fake_provider", "planner_down"])
 def test_ts_flow_route_second_opinion(sim_s4_60, tmp_path, mode):
     """第六版：配置了 route_planner 时研判多出 route_request → route_service → route_compare；route_planner 不可用时
-    研判照常完成（各组记“不可用”）。全部记录仍与 Python 侧一致。"""
+    研判照常完成（各组记“不可用”、按我方路线显示）。全部记录仍与 Python 侧一致；撤人通知按 route_compare 的显示路线取。"""
     provider, seen, stop = _fake_provider()
     planner = _route_planner(provider)
     try:
@@ -337,17 +338,23 @@ def test_ts_flow_route_second_opinion(sim_s4_60, tmp_path, mode):
     cmp_ = records[a["record_ids"]["route_compare"]]["content"]["result"]
     routes = records[a["record_ids"]["route_service"]]
     assert routes["kind"] == "evidence" and routes["parent_ids"] == [a["record_ids"]["route_request"]]
-    assert "避灾路线第二意见" in a["report_markdown"]
+    report = a["report_markdown"]
+    assert "避灾路线（外部路径规划服务可用时用其路线" in report
     assert a["result"]["route_opinion"]["record_id"] == a["record_ids"]["route_compare"]
+    store = RecordStore(tmp_path / "records")
+    notice = evacuation_from_record({"record_id": a["record_ids"]["personnel"], "persons": [], "routes": {}, "reason": ""}, store)
+    assert notice["persons"] and f"避灾路线记录 {a['record_ids']['route_compare']}" in notice["reason"]
     if mode == "fake_provider":
-        # 两组受威胁人员 × 3 个终点（主井口、回风井口、避难硐室），服务都说没有路线
+        # 两组受威胁人员 × 3 个终点（主井口、回风井口、避难硐室），服务都说没有路线：照服务的结果显示“无可行路线”，不改用我方路线
         assert len(seen) == 6 and len({b["target"] for b in seen}) == 3 and all(b["maxSmokeTime"] == 900 and b["nodes"][0][2] == 0 for b in seen)
         assert cmp_["status"] == "ok" and cmp_["counts"] == {"both_none": 1, "ours_route_service_none": 1}
+        assert cmp_["display_counts"] == {"service": 2} and "外部路径规划服务没有给出路线" in report and "（本系统计算）" not in report
+        assert notice["routes"] == {} and "没有可行的避灾路线" in notice["reason"]
     else:
         assert seen == [] and cmp_["status"] == "unavailable" and cmp_["counts"] == {"service_unavailable": 2}
-        assert "第二意见不可用：[route_planner]" in a["report_markdown"]
+        assert cmp_["display_counts"] == {"ours": 2} and "（本系统计算；外部服务不可用：[route_planner]" in report
+        assert notice["routes"] and "（路线：本系统计算）" in notice["reason"]
     assert _rerun_and_render(records) == (11, 4)  # 研判 8 个脚本 + route_request、route_compare + 检测 1 个；报告数不变
-    store = RecordStore(tmp_path / "records")
     for rid in records:
         store.get(rid)
 
@@ -449,7 +456,7 @@ def test_ts_flow_fire_sim_second_opinion(sim_s4_60, tmp_path, mode):
     cmp_ = records[a["record_ids"]["fire_sim_compare"]]["content"]["result"]
     sim = records[a["record_ids"]["fire_sim"]]
     assert sim["kind"] == "evidence" and sim["parent_ids"] == [a["record_ids"]["fire_sim_request"]]
-    assert "火灾蔓延第二意见" in a["report_markdown"]
+    report = a["report_markdown"]
     assert a["result"]["fire_sim_opinion"]["record_id"] == a["record_ids"]["fire_sim_compare"]
     if mode == "fake_provider":
         # 一次调用；11 条巷道拆成 22 段，火源在漏风通道后半段（位置 0.9 → 段内 0.8），压入式进风量 = 主井设计风量 9000 ÷ 60
@@ -461,9 +468,11 @@ def test_ts_flow_fire_sim_second_opinion(sim_s4_60, tmp_path, mode):
         )
         assert cmp_["status"] == "ok" and [r["roadway_id"] for r in cmp_["roadways"] if r["reach_min"] is not None] == ["R-1201-GOAF"]
         assert cmp_["comparison"]["sim_only"] == [] and len(cmp_["comparison"]["ours_only"]) == 4  # 漏风通道不参与比较
+        # 推演可用：只显示推演结果，人员行里不写我方估算的到达时间
+        assert cmp_["display_source"] == "service" and "有害气体蔓延（外部火灾推演服务" in report and "（本系统估算）" not in report
     else:
-        assert seen == [] and cmp_["status"] == "unavailable"
-        assert "第二意见不可用：[fire_sim]" in a["report_markdown"]
+        assert seen == [] and cmp_["status"] == "unavailable" and cmp_["display_source"] == "ours"
+        assert "外部火灾推演服务不可用：[fire_sim]" in report and "有害气体到达 0 分钟（本系统估算）" in report
     assert _rerun_and_render(records) == (11, 4)  # 研判 8 个脚本 + fire_sim_request、fire_sim_compare + 检测 1 个；报告数不变
     store = RecordStore(tmp_path / "records")
     for rid in records:

@@ -3,10 +3,12 @@
  *
  *   采集证据（fire-assessment 的 assessment 清单）
  *   → alarms、warning → stage → trend → explosion_triangle（逐个束管测点）→ personnel（脚本按等级决定是否计算）
- *   → 避灾路线第二意见（第六版，配置了外部路径规划服务且 personnel 已计算时）：route_request → route_service（证据插件调用
- *     route_planner，原始输入输出存成证据）→ route_compare；这一段失败不中断研判，报告写“第二意见不可用”
- *   → 火灾蔓延第二意见（第七版，配置了外部火灾推演服务、personnel 已计算、预警等级达到 fire_sim.yaml 的 level_at_least 时）：
- *     fire_sim_request（脚本按等级决定是否需要）→ fire_sim（证据插件调用 fire_sim）→ fire_sim_compare；失败同样不中断研判
+ *   → 避灾路线（第六版，配置了外部路径规划服务且 personnel 已计算时）：route_request → route_service（证据插件调用
+ *     route_planner，原始输入输出存成证据）→ route_compare（每组显示哪条路线：外部为主、我方兜底）；这一段失败不中断研判，
+ *     报告写“外部服务不可用”并按我方路线显示
+ *   → 火灾蔓延（第七版，配置了外部火灾推演服务、personnel 已计算、预警等级达到 fire_sim.yaml 的 level_at_least 时）：
+ *     fire_sim_request（脚本按等级决定是否需要）→ fire_sim（证据插件调用 fire_sim）→ fire_sim_compare（蔓延范围显示哪一种）；
+ *     失败同样不中断研判，按我方估算显示
  *   → escalation（emergency-escalation）
  *   → 研判报告（fire-assessment/templates/report.md，含风险图）+ 升级建议（emergency-escalation/templates/report.md）
  *
@@ -136,8 +138,9 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
   await step('escalation', () => script('emergency-escalation', 'escalation', { warning: ids.warning!, stage: ids.stage!, alarms: ids.alarms! }))
 
   /**
-   * 避灾路线第二意见（docs/design-v6-route-service.md）：外部服务的结果与我方路线并列，不替代我方路线。
-   * 没配置服务、或没算受威胁人员时跳过（不产生记录，报告不出现这一节）；任何一步失败只记 failed，研判照常完成。
+   * 避灾路线（docs/design-v6-route-service.md 第 3.1 节）：外部为主、我方兜底，每组显示哪条路线由 route_compare 给出（display_lines）。
+   * 没配置服务、或没算受威胁人员时跳过（不产生记录，报告不出现这一节，人员行里写我方路线）；任何一步失败只记 failed，
+   * 研判照常完成，报告写“外部服务不可用”，人员行里写我方路线（ok = false）。
    */
   async function secondOpinion(): Promise<{ lines: string[]; basis: string; ok: boolean } | null> {
     if (!ev.routesConfigured) {
@@ -158,15 +161,16 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       const cmp = await step('route_compare', () =>
         script(FA, 'route_compare', { evidence: E, personnel: ids.personnel!, route_request: rq.record_id, routes: routes.record_id }),
       )
-      return { lines: content(cmp).lines, basis: `记录 ${cmp.record_id}（比较）、${routes.record_id}（服务调用）`, ok: true }
+      return { lines: content(cmp).display_lines, basis: `记录 ${cmp.record_id}（选择和比较）、${routes.record_id}（服务调用）`, ok: true }
     } catch (err) {
       if (opts.signal?.aborted) throw err
-      return { lines: [`第二意见不可用：${(err as Error).message}`], basis: '无', ok: false }
+      return { lines: [`外部路径规划服务不可用：${(err as Error).message}；避灾路线为上面的本系统计算`], basis: '无', ok: false }
     }
   }
 
   /**
-   * 火灾蔓延第二意见（docs/design-v7-fire-sim.md）：外部服务推演巷道明火的 CO 蔓延，与我方受污染巷道估算并列，不替代。
+   * 火灾蔓延（docs/design-v7-fire-sim.md 第 3.1 节）：外部服务推演巷道明火的 CO 蔓延；推演可用时只显示推演结果（display_lines），
+   * 不可用时按我方估算显示。有 route_compare 时一并传入，危险巷道按每组显示的避灾路线核对。
    * 没配置服务、没算受威胁人员、等级不够时跳过（不产生比较记录，报告不出现这一节）；任何一步失败只记 failed，研判照常完成。
    */
   async function fireSpreadOpinion(): Promise<{ lines: string[]; basis: string; ok: boolean } | null> {
@@ -186,13 +190,19 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       }
       const sim = await step('fire_sim', () => ev.collectFireSim({ request: rq.record_id, origin, ...sig }))
       const cmp = await step('fire_sim_compare', () =>
-        script(FA, 'fire_sim_compare', { evidence: E, personnel: ids.personnel!, fire_sim_request: rq.record_id, fire_sim: sim.record_id }),
+        script(FA, 'fire_sim_compare', {
+          evidence: E,
+          personnel: ids.personnel!,
+          fire_sim_request: rq.record_id,
+          fire_sim: sim.record_id,
+          ...(ids.route_compare ? { route_compare: ids.route_compare } : {}),
+        }),
       )
       const c = content(cmp)
-      return { lines: c.lines, basis: `记录 ${cmp.record_id}（判读和比较）、${sim.record_id}（服务调用）`, ok: c.status === 'ok' }
+      return { lines: c.display_lines, basis: `记录 ${cmp.record_id}（判读和比较）、${sim.record_id}（服务调用）`, ok: c.display_source === 'service' }
     } catch (err) {
       if (opts.signal?.aborted) throw err
-      return { lines: [`第二意见不可用：${(err as Error).message}`], basis: '无', ok: false }
+      return { lines: [`外部火灾推演服务不可用：${(err as Error).message}；有害气体到达时间为上面的本系统估算`], basis: '无', ok: false }
     }
   }
 
@@ -208,7 +218,13 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       skill: FA,
       template: 'report',
       inputs: Object.fromEntries(['evidence', 'warning', 'stage', 'alarms', 'trend', 'explosion', 'personnel'].map((k) => [k, ids[k]!])),
-      extra: { chart_markdown: chartMarkdown, route_opinion: routeOpinion, fire_sim_opinion: fireSimOpinion },
+      extra: {
+        chart_markdown: chartMarkdown,
+        route_opinion: routeOpinion,
+        route_from_compare: routeOpinion?.ok === true,
+        fire_sim_opinion: fireSimOpinion,
+        spread_from_sim: fireSimOpinion?.ok === true,
+      },
       origin,
     }),
   )
@@ -330,9 +346,25 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       },
       personnel: pe.computed ? { computed: true, total_threatened: pe.total_threatened, total_underground: pe.total_underground } : { computed: false, note: pe.note },
       ...(ids.fire_sim_compare
-        ? { fire_sim_opinion: { record_id: ids.fire_sim_compare, status: content(rec.fire_sim_compare!).status, counts: content(rec.fire_sim_compare!).counts } }
+        ? {
+            fire_sim_opinion: {
+              record_id: ids.fire_sim_compare,
+              status: content(rec.fire_sim_compare!).status,
+              display_source: content(rec.fire_sim_compare!).display_source,
+              counts: content(rec.fire_sim_compare!).counts,
+            },
+          }
         : {}),
-      ...(ids.route_compare ? { route_opinion: { record_id: ids.route_compare, status: content(rec.route_compare!).status, counts: content(rec.route_compare!).counts } } : {}),
+      ...(ids.route_compare
+        ? {
+            route_opinion: {
+              record_id: ids.route_compare,
+              status: content(rec.route_compare!).status,
+              display_counts: content(rec.route_compare!).display_counts,
+              counts: content(rec.route_compare!).counts,
+            },
+          }
+        : {}),
       escalation: { recommend: es.recommend, articles: es.articles.map((a: any) => ({ document: a.document, article: a.article })) },
       explanation: explanationMd ? { generated: true, record_id: ids.explanation } : { generated: false, note: explanationNote },
     },

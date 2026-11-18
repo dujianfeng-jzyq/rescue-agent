@@ -10,12 +10,13 @@
  *   - 路线走不通：不画线，写记录里的原话“需人工研判”。
  * 图上的折线只表示走哪几段，不表示距离：长度、时间一律用记录里的值。
  *
- * 避灾路线第二意见（第六版，docs/design-v6-route-service.md）：同一次研判的 route_compare 记录（输入的 personnel 就是这份记录）
- * 里外部服务给出的路线，另画一条不同样式的“参考路线（外部服务，试验性）”。与我方路线不一致时两条都画，不选。
- *
- * 火灾蔓延第二意见（第七版，docs/design-v7-fire-sim.md）：同一次研判的 fire_sim_compare 记录（输入的 personnel 就是这份记录）
- * 里推演中 CO 达到“到达”浓度的巷道，另画一层（紫色细线），带到达和危险时刻（记录原值），前端据此按时间回放。
- * 与我方污染巷道不一致时两层都画，不选；浓度阈值也取记录里的参数。
+ * 外部为主、我方兜底（docs/design-v6-route-service.md、design-v7-fire-sim.md 第 3.1 节）：
+ *   - 避灾路线：同一次研判的 route_compare 记录（输入的 personnel 就是这份记录）里每组的 display 就是要显示的路线
+ *     （选择在技能脚本里做）：外部服务的路线画成 route，我方路线画成 route_local（不同颜色，标“本系统计算”）；
+ *     没有 route_compare 记录（没配置外部服务、那一段失败）时画我方路线（route_local）。每组只画一条。
+ *   - 蔓延范围：同一次研判的 fire_sim_compare 记录可用（display_source = service）时只画推演中 CO 达到“到达”浓度的巷道
+ *     （fire_spread，带到达和危险时刻，前端据此按时间回放），不画我方污染巷道；否则画我方污染巷道（contaminated，标“本系统估算”）。
+ *   撤人通知按同一份 route_compare 取路线（validation.evacuation_routes），图上和通知一致。
  */
 
 import { readdir, readFile, stat } from 'node:fs/promises'
@@ -49,29 +50,27 @@ export interface Network {
   roadways: NetworkRoadway[]
 }
 
+export type Source = 'service' | 'ours'
+
 export interface RouteView {
+  /** service：外部路径规划服务的路线；ours：本系统计算（外部服务不可用、没有结果） */
+  source: Source
+  sourceText: string
+  /** 用本系统路线的原因；用外部服务的路线时为 null */
+  reason: string | null
   reachable: boolean
   targetName: string | null
   lengthM: number | null
   walkMin: number | null
   selfRescuerMin: number | null
-  /** 记录里的原话（走不通时是“避开受污染巷道后无可达出口或避难硐室，需人工研判”） */
+  /** 外部服务的暂时脱险时间（分钟）和烟中通行时间（秒）；本系统路线为 null */
+  escapeMin: number | null
+  smokeTimeS: number | null
+  /** 记录里的原话（走不通时，如“避开受污染巷道后无可达出口或避难硐室，需人工研判”） */
   note: string | null
   /** 图上画出来了吗 */
   drawn: boolean
   /** 没画出来的原因：路线里缺映射的巷道/节点 */
-  missing: string[]
-}
-
-/** 外部服务的参考路线（第二意见，试验性）：文字照抄 route_compare 记录 */
-export interface ReferenceView {
-  /** route：给出路线；no_route：没有路线；unavailable：第二意见不可用 */
-  status: 'route' | 'no_route' | 'unavailable'
-  /** 比较情况的说明（如“两种路线相同”“我方…无路可走；外部服务给出穿过有烟巷道的参考路线，能否穿烟由人判断”） */
-  caseText: string
-  /** 记录里这一组的整句说明 */
-  text: string
-  drawn: boolean
   missing: string[]
 }
 
@@ -81,16 +80,15 @@ export interface GroupView {
   /** 地图上的名称（点击定位用）；没有映射为 null */
   anchor: string | null
   count: number
-  arrivalMin: number
+  /** 有害气体到达这一组所在巷道的时刻（分钟）：推演可用时取推演（CO 达到“到达”浓度，推演时长内没到为 null），否则取本系统估算 */
+  arrival: { source: Source; min: number | null }
   route: RouteView
-  /** 外部服务的参考路线；没有第二意见记录为 null */
-  reference: ReferenceView | null
 }
 
-/** 火灾蔓延第二意见（外部火灾推演服务，试验性）：数值全部照抄 fire_sim_compare 记录 */
+/** 外部火灾推演服务的结果（试验性）：数值全部照抄 fire_sim_compare 记录 */
 export interface FireSpreadView {
   recordId: string
-  /** ok：有推演结果；unavailable：第二意见不可用（note 写原因） */
+  /** ok：有推演结果；unavailable：推演不可用（note 写原因），蔓延范围按本系统估算显示 */
   status: 'ok' | 'unavailable'
   note: string | null
   /** 推演时长（分钟） */
@@ -102,7 +100,7 @@ export interface FireSpreadView {
   roadways: { roadwayId: string; name: string; reachMin: number; dangerMin: number | null; peakPpm: number; reversed: boolean; drawn: boolean }[]
   /** 风流反转或停风的巷道 */
   flowChanged: string[]
-  /** 记录里的整句说明（报告里的那几行） */
+  /** 记录里显示用的整句（display_lines，报告里的那几行） */
   lines: string[]
 }
 
@@ -127,11 +125,16 @@ export interface EvacuationView {
   figures: MapFigure[]
   /** 按已下发的撤人通知显示时，通知的指令编号（路线就是通知里的那份记录） */
   noticeActionId?: string | null
-  /** 第二意见的 route_compare 记录编号；没有为 null */
-  referenceRecordId: string | null
-  /** 火灾蔓延第二意见；没有 fire_sim_compare 记录为 null */
+  /** 选定避灾路线的 route_compare 记录编号；没有为 null（全部按本系统路线） */
+  routeRecordId: string | null
+  /** 蔓延范围显示哪一种：service 推演（fireSpread 可用）；ours 本系统估算 */
+  spreadSource: Source
+  /** 外部火灾推演的结果；没有 fire_sim_compare 记录为 null */
   fireSpread: FireSpreadView | null
 }
+
+export const SOURCE_TEXT: Record<Source, string> = { service: '外部路径规划服务', ours: '本系统计算' }
+const NO_ROUTE_RECORD = '没有外部路径规划服务的结果（未配置或这次研判未返回）'
 
 type Json = Record<string, any>
 
@@ -225,7 +228,8 @@ export function evacuationView(
     ageHours: age,
     freshness,
     schematic: isSchematic(map),
-    referenceRecordId: null as string | null,
+    routeRecordId: null as string | null,
+    spreadSource: 'ours' as Source,
     fireSpread: null as FireSpreadView | null,
   }
   if (!res.computed) {
@@ -238,33 +242,45 @@ export function evacuationView(
   const stale = freshness !== 'fresh'
   const show = freshness !== 'hidden'
   const figures: MapFigure[] = []
-  // 第二意见只认同一次研判的比较记录（输入的 personnel 就是这份记录）
+  // 只认同一次研判的选择记录（输入的 personnel 就是这份记录）
   const cmp: Json | null = compare && (compare.source as Json | undefined)?.inputs?.personnel === record.record_id ? (compare.content?.result ?? null) : null
-  const refGroups = new Map(((cmp?.computed ? cmp.groups : []) as Json[]).map((g) => [String(g.roadway_id), g]))
+  const shown = new Map(((cmp?.computed ? cmp.groups : []) as Json[]).map((g) => [String(g.roadway_id), (g.display ?? null) as Json | null]))
+  const fireSpread = fireCompare && (fireCompare.source as Json | undefined)?.inputs?.personnel === record.record_id ? fireSpreadView(fireCompare, roads, map, show, stale, figures) : null
+  const spreadSource: Source = fireSpread?.status === 'ok' ? 'service' : 'ours'
+  const simGroups = new Map(((fireSpread?.status === 'ok' ? (fireCompare!.content as Json)?.result?.groups : []) ?? []).map((g: Json) => [String(g.roadway_id), g]))
 
   const contaminated = ((res.contaminated_roadways ?? []) as Json[]).map((c) => {
     const r = roads.get(c.roadway_id)
     const path = r ? roadwayPath(r, map) : { missing: [String(c.roadway_id)] }
-    const drawn = 'pts' in path
-    if (drawn && show) figures.push({ id: `auto:evac:cont:${c.roadway_id}`, type: 'line', kind: 'contaminated', points: path.pts, at: pointAlong(path.pts, CONTAMINATION_LABEL_FRAC), value: c.arrival_min, text: `约 ${c.arrival_min} 分钟到达`, stale })
+    const drawn = 'pts' in path && spreadSource === 'ours'
+    if (drawn && show) figures.push({ id: `auto:evac:cont:${c.roadway_id}`, type: 'line', kind: 'contaminated', points: path.pts, at: pointAlong(path.pts, CONTAMINATION_LABEL_FRAC), value: c.arrival_min, text: `约 ${c.arrival_min} 分钟到达（本系统估算）`, stale })
     return { roadwayId: String(c.roadway_id), name: nameOf(c.roadway_id), arrivalMin: Number(c.arrival_min), drawn }
   })
 
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
   const groups: GroupView[] = ((res.threatened ?? []) as Json[]).map((g) => {
     const rid = String(g.roadway_id)
     const road = roads.get(rid)
     const own = road ? roadwayPath(road, map) : { missing: [rid] }
-    const er: Json = g.escape_route ?? {}
+    const d: Json = shown.get(rid) ?? { ...(g.escape_route ?? {}), source: 'ours', reason: cmp ? null : NO_ROUTE_RECORD }
+    const source: Source = d.source === 'service' ? 'service' : 'ours'
     const route: RouteView = {
-      reachable: !!er.reachable,
-      targetName: typeof er.target_name === 'string' ? er.target_name : null,
-      lengthM: typeof er.length_m === 'number' ? er.length_m : null,
-      walkMin: typeof er.walk_min === 'number' ? er.walk_min : null,
-      selfRescuerMin: typeof er.walk_with_self_rescuer_min === 'number' ? er.walk_with_self_rescuer_min : null,
-      note: typeof er.note === 'string' ? er.note : null,
+      source,
+      sourceText: SOURCE_TEXT[source],
+      reason: source === 'ours' ? (typeof d.reason === 'string' ? d.reason : NO_ROUTE_RECORD) : null,
+      reachable: !!d.reachable,
+      targetName: typeof d.target_name === 'string' ? d.target_name : null,
+      lengthM: num(d.length_m),
+      walkMin: num(d.walk_min),
+      selfRescuerMin: num(d.walk_with_self_rescuer_min),
+      escapeMin: num(d.escape_min),
+      smokeTimeS: num(d.smoke_time_s),
+      note: typeof d.note === 'string' ? d.note : null,
       drawn: false,
       missing: [],
     }
+    const sg = simGroups.get(rid) as Json | undefined
+    const arrival: GroupView['arrival'] = spreadSource === 'service' ? { source: 'service', min: num(sg?.sim_reach_min) } : { source: 'ours', min: num(g.arrival_min) }
     const groupAt = 'pts' in own ? midpoint(own.pts) : null
     if (groupAt && show) {
       figures.push({
@@ -273,59 +289,44 @@ export function evacuationView(
         kind: route.reachable ? 'threatened' : 'blocked',
         at: groupAt,
         value: g.count,
-        text: route.reachable ? `${g.count} 人` : `${g.count} 人 · ${route.note ?? '无可达路线，需人工研判'}`,
+        text: route.reachable ? `${g.count} 人` : `${g.count} 人 · ${route.note ?? '无可行路线，需人工研判'}`,
         stale,
       })
     }
     const ownMissing = 'missing' in own ? own.missing : []
-    if (route.reachable && Array.isArray(er.nodes) && Array.isArray(er.roadways)) {
-      const { pts, missing } = chain(groupAt, ownMissing, er.nodes as string[], er.roadways as string[], roads, map)
+    if (route.reachable && Array.isArray(d.nodes) && Array.isArray(d.roadways)) {
+      const { pts, missing } = chain(groupAt, ownMissing, d.nodes as string[], d.roadways as string[], roads, map)
       route.missing = missing
       if (missing.length === 0 && pts.length >= 2) {
         route.drawn = true
         if (show) {
-          figures.push({ id: `auto:evac:route:${rid}`, type: 'line', kind: 'route', points: pts, at: midpoint(pts), text: route.walkMin === null ? undefined : `约 ${route.walkMin} 分钟`, stale })
-          const tgt = nodes.get(String(er.target))
-          const at = map.nodes[String(er.target)]
+          const label = source === 'service' ? (route.lengthM === null ? '外部服务' : `外部服务 · 约 ${route.lengthM} 米`) : route.walkMin === null ? '本系统计算' : `本系统计算 · 约 ${route.walkMin} 分钟`
+          figures.push({ id: `auto:evac:route:${rid}`, type: 'line', kind: source === 'service' ? 'route' : 'route_local', points: pts, at: midpoint(pts), text: label, stale })
+          const tgt = nodes.get(String(d.target))
+          const at = map.nodes[String(d.target)]
           if (at) figures.push({ id: `auto:evac:target:${rid}`, type: 'target', kind: tgt?.is_refuge ? 'refuge' : 'exit', at, text: route.targetName ?? undefined, stale })
         }
       }
     }
-    let reference: ReferenceView | null = null
-    const rg = refGroups.get(rid)
-    if (rg) {
-      const svc: Json = rg.service ?? {}
-      const status: ReferenceView['status'] = svc.status === 'route' ? 'route' : svc.status === 'no_route' ? 'no_route' : 'unavailable'
-      reference = { status, caseText: String(rg.comparison?.case_text ?? ''), text: String(rg.text ?? ''), drawn: false, missing: [] }
-      if (status === 'route' && Array.isArray(svc.nodes) && Array.isArray(svc.roadways)) {
-        const { pts, missing } = chain(groupAt, ownMissing, svc.nodes as string[], svc.roadways as string[], roads, map)
-        reference.missing = missing
-        if (missing.length === 0 && pts.length >= 2) {
-          reference.drawn = true
-          if (show) figures.push({ id: `auto:evac:ref:${rid}`, type: 'line', kind: 'reference', points: pts, at: pointAlong(pts, 0.35), text: '参考路线（外部服务，试验性）', stale })
-        }
-      }
-    }
-    return { roadwayId: rid, roadwayName: nameOf(rid), anchor: map.roadways[rid] ?? null, count: Number(g.count), arrivalMin: Number(g.arrival_min), route, reference }
+    return { roadwayId: rid, roadwayName: nameOf(rid), anchor: map.roadways[rid] ?? null, count: Number(g.count), arrival, route }
   })
-
-  const fireSpread = fireCompare && (fireCompare.source as Json | undefined)?.inputs?.personnel === record.record_id ? fireSpreadView(fireCompare, roads, map, show, stale, figures) : null
 
   return {
     ...base,
     fireSpread,
+    spreadSource,
     computed: true,
     totalThreatened: typeof res.total_threatened === 'number' ? res.total_threatened : null,
     totalUnderground: typeof res.total_underground === 'number' ? res.total_underground : null,
     contaminated,
     groups,
     figures,
-    referenceRecordId: cmp ? compare!.record_id : null,
+    routeRecordId: cmp ? compare!.record_id : null,
   }
 }
 
 /**
- * 火灾蔓延第二意见：fire_sim_compare 记录 → 左栏的文字和图上的一层（每条推演中 CO 到达的巷道一条线）。
+ * 外部火灾推演：fire_sim_compare 记录 → 左栏的文字和图上的一层（每条推演中 CO 到达的巷道一条线）。
  * 线上带到达时刻（value）和危险时刻（danger），都是记录原值；巷道没有映射时不画，列表里照常列出。
  */
 function fireSpreadView(rec: RecordLike, roads: Map<string, NetworkRoadway>, map: MineMap, show: boolean, stale: boolean, figures: MapFigure[]): FireSpreadView {
@@ -342,7 +343,7 @@ function fireSpreadView(rec: RecordLike, roads: Map<string, NetworkRoadway>, map
     dangerPpm: num(params.co_danger_ppm),
     roadways: [],
     flowChanged: [],
-    lines: Array.isArray(r.lines) ? r.lines.map(String) : [],
+    lines: Array.isArray(r.display_lines) ? r.display_lines.map(String) : [],
   }
   if (view.status !== 'ok') return view
   for (const x of (r.roadways ?? []) as Json[]) {
@@ -411,7 +412,7 @@ async function scan(dir: string, panel: string, mtime: number): Promise<NonNulla
 }
 
 /**
- * 某份 personnel 记录对应的第二意见（route_compare 记录，输入的 personnel 就是它）；只在最近的几十份记录里找，找不到返回 null（不画参考路线）。
+ * 某份 personnel 记录对应的避灾路线选择（route_compare 记录，输入的 personnel 就是它）；只在最近的几十份记录里找，找不到返回 null（按本系统路线画）。
  */
 export async function routeCompareFor(dir: string, personnelId: string, panel: string): Promise<PRec | null> {
   let mtime = 0
@@ -424,7 +425,7 @@ export async function routeCompareFor(dir: string, personnelId: string, panel: s
   return c.compares.find((r) => (r.source as Json | undefined)?.inputs?.personnel === personnelId) ?? null
 }
 
-/** 某份 personnel 记录对应的火灾蔓延第二意见（fire_sim_compare 记录，输入的 personnel 就是它）；找不到返回 null。 */
+/** 某份 personnel 记录对应的外部火灾推演结果（fire_sim_compare 记录，输入的 personnel 就是它）；找不到返回 null（按本系统估算画）。 */
 export async function fireSimCompareFor(dir: string, personnelId: string, panel: string): Promise<PRec | null> {
   let mtime = 0
   try {

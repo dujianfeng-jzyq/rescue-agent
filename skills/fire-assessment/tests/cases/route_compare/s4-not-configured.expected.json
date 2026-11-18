@@ -1,8 +1,8 @@
 {
- "algorithm_version": "route_compare/1.0.0",
+ "algorithm_version": "route_compare/1.1.0",
  "params": {},
  "warnings": [
-  "外部服务的结果是试验性的第二意见（输入含占位值），不替代我方路线；两者不一致时都显示，由人判断"
+  "外部服务的输入含占位值，结果是试验性的；服务可用时界面和撤人通知用服务的路线，不可用时用我方路线并写明原因"
  ],
  "result": {
   "panel": "1201",
@@ -36,9 +36,31 @@
      "same_route": null,
      "roadway_overlap": null,
      "length_diff_m": null,
-     "case_text": "第二意见不可用"
+     "case_text": "外部服务不可用"
     },
-    "text": "R-1201-FACE（9 人）：第二意见不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）"
+    "text": "R-1201-FACE（9 人）：外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）",
+    "display": {
+     "source": "ours",
+     "source_text": "本系统计算",
+     "reason": "外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）",
+     "reachable": true,
+     "target": "N8",
+     "target_name": "1201避难硐室",
+     "nodes": [
+      "N3",
+      "N2",
+      "N8"
+     ],
+     "roadways": [
+      "R-1201-IN",
+      "R-REFUGE"
+     ],
+     "length_m": 1960,
+     "walk_min": 32.7,
+     "walk_with_self_rescuer_min": 46.7,
+     "note": null,
+     "text": "R-1201-FACE（9 人）：避灾路线至 1201避难硐室，1960 米，佩戴自救器步行 46.7 分钟（本系统计算；外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置））"
+    }
    },
    {
     "roadway_id": "R-1201-RET",
@@ -56,17 +78,32 @@
      "same_route": null,
      "roadway_overlap": null,
      "length_diff_m": null,
-     "case_text": "第二意见不可用"
+     "case_text": "外部服务不可用"
     },
-    "text": "R-1201-RET（2 人）：第二意见不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）"
+    "text": "R-1201-RET（2 人）：外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）",
+    "display": {
+     "source": "ours",
+     "source_text": "本系统计算",
+     "reason": "外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）",
+     "reachable": false,
+     "note": "避开受污染巷道后无可达出口或避难硐室，需人工研判",
+     "text": "R-1201-RET（2 人）：避开受污染巷道后无可达出口或避难硐室，需人工研判（本系统计算；外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置））"
+    }
    }
   ],
   "counts": {
    "service_unavailable": 2
   },
   "lines": [
-   "R-1201-FACE（9 人）：第二意见不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）",
-   "R-1201-RET（2 人）：第二意见不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）"
+   "R-1201-FACE（9 人）：外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）",
+   "R-1201-RET（2 人）：外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置）"
+  ],
+  "display_counts": {
+   "ours": 2
+  },
+  "display_lines": [
+   "R-1201-FACE（9 人）：避灾路线至 1201避难硐室，1960 米，佩戴自救器步行 46.7 分钟（本系统计算；外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置））",
+   "R-1201-RET（2 人）：避开受污染巷道后无可达出口或避难硐室，需人工研判（本系统计算；外部服务不可用：未配置（RESCUE_ROUTE_SERVICE_URL 未设置））"
   ]
  }
 }

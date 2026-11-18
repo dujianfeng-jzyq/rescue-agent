@@ -2,7 +2,7 @@
  "algorithm_version": "fire_sim_request/1.0.0",
  "params": {
   "status": "placeholder",
-  "level_at_least": "red",
+  "level_at_least": "orange",
   "fire_source_kind": "goaf",
   "fire_position": 0.9,
   "total_time_s": 3600,
@@ -18,14 +18,14 @@
   "default_section_m2": 12.0
  },
  "warnings": [
-  "外部服务模拟巷道内明火，输入使用占位坐标、断面、风阻和火源参数，结果是试验性的第二意见，不替代我方研判",
+  "外部服务模拟巷道内明火，输入使用占位坐标、断面、风阻和火源参数，结果是试验性的；推演可用时界面只显示推演结果",
   "巷道 R-REFUGE 没有风阻，按占位值 0.05 N·s²/m⁸"
  ],
  "result": {
   "panel": "1201",
   "as_of": "2026-11-04T20:00:00",
   "experimental": true,
-  "method": "占位坐标（同路径规划第二意见，z = 0）+ 占位断面和风阻 + 设计风量作进风量 + 火源放在漏风通道上（试验性）",
+  "method": "占位坐标（同路径规划服务请求，z = 0）+ 占位断面和风阻 + 设计风量作进风量 + 火源放在漏风通道上（试验性）",
   "needed": true,
   "note": null,
   "fire_roadway": "R-1201-GOAF",

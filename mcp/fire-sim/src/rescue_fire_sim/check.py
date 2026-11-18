@@ -135,7 +135,7 @@ async def run(cfg: Config) -> list[tuple[str, bool | None, str]]:
         status, body, _ = await post(b0)
         out.append(
             (
-                "火源放在 0 号巷道（第 6 节第 3 条，原为 500）",
+                "火源放在 0 号巷道（第 6 节第 4 条，原为 500）",
                 None,
                 f"{status} {json.dumps(body, ensure_ascii=False)[:80]}" if status != 200 else "已能计算",
             )

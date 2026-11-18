@@ -65,13 +65,29 @@ export interface StateData {
       roadwayName: string
       anchor: string | null
       count: number
-      arrivalMin: number
-      route: { reachable: boolean; targetName: string | null; lengthM: number | null; walkMin: number | null; selfRescuerMin: number | null; note: string | null; drawn: boolean; missing: string[] }
-      /** 外部服务的参考路线（第二意见，试验性，第六版）；没有为 null */
-      reference: null | { status: 'route' | 'no_route' | 'unavailable'; caseText: string; text: string; drawn: boolean; missing: string[] }
+      /** 有害气体到达时刻（分钟）：service 取推演（推演时长内没到为 null），ours 取本系统估算 */
+      arrival: { source: 'service' | 'ours'; min: number | null }
+      /** 要显示的避灾路线（外部为主、我方兜底，第六版 3.1 节）：source 是来源，reason 是用本系统路线的原因 */
+      route: {
+        source: 'service' | 'ours'
+        sourceText: string
+        reason: string | null
+        reachable: boolean
+        targetName: string | null
+        lengthM: number | null
+        walkMin: number | null
+        selfRescuerMin: number | null
+        escapeMin: number | null
+        smokeTimeS: number | null
+        note: string | null
+        drawn: boolean
+        missing: string[]
+      }
     }[]
-    referenceRecordId: string | null
-    /** 火灾蔓延第二意见（外部火灾推演服务，试验性，第七版）；没有为 null */
+    routeRecordId: string | null
+    /** 蔓延范围显示哪一种：service 外部推演；ours 本系统估算 */
+    spreadSource: 'service' | 'ours'
+    /** 外部火灾推演的结果（试验性，第七版）；没有为 null */
     fireSpread?: null | {
       recordId: string
       status: 'ok' | 'unavailable'

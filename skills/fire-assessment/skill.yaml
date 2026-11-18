@@ -30,17 +30,17 @@ scripts:
     timeout_s: 10
   route_request:
     file: scripts/route_request.py
-    description: 外部路径规划服务（避灾路线第二意见，试验性）的请求：每组受威胁人员一个，占位坐标、断面和烟雾浓度
+    description: 外部路径规划服务（避灾路线，试验性）的请求：每组受威胁人员一个，占位坐标、断面和烟雾浓度
     timeout_s: 20
   route_compare:
     file: scripts/route_compare.py
-    description: 外部路径规划服务的结果与我方避灾路线的比较（情况、终点、重合比例、长度差）
+    description: 外部路径规划服务的结果与我方避灾路线：每组显示哪条路线（外部为主、我方兜底）及比较（情况、终点、重合比例、长度差）
     timeout_s: 20
   fire_sim_request:
     file: scripts/fire_sim_request.py
-    description: 外部火灾推演服务（火灾蔓延第二意见，试验性）的请求：红色预警时，占位坐标、断面、风阻和火源参数
+    description: 外部火灾推演服务（火灾蔓延，试验性）的请求：橙色及以上预警时，占位坐标、断面、风阻和火源参数
     timeout_s: 20
   fire_sim_compare:
     file: scripts/fire_sim_compare.py
-    description: 外部火灾推演结果的判读（CO 到达、危险时刻）与我方受污染巷道、受威胁人员、避灾路线的比较
+    description: 外部火灾推演结果的判读（CO 到达、危险时刻）、显示来源（外部为主、我方兜底）及与我方受污染巷道、受威胁人员、避灾路线的比较
     timeout_s: 20

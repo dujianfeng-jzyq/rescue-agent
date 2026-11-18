@@ -95,7 +95,7 @@ async def run(cfg: Config) -> list[tuple[str, bool | None, str]]:
         unknown = copy.deepcopy(base)
         unknown["noSuchField"] = 1
         status, _ = await post(unknown)
-        out.append(("未知顶层字段（希望改为 400，第 6 节第 4 条）", None, f"{status}"))
+        out.append(("未知顶层字段（希望改为 400，第 6 节第 10 条）", None, f"{status}"))
 
         stretched = copy.deepcopy(base)
         for e in stretched["edges"]:
@@ -103,7 +103,7 @@ async def run(cfg: Config) -> list[tuple[str, bool | None, str]]:
         status, body = await post(stretched)
         got = ((body.get("routes") or [{}])[0].get("effectiveDistance") if isinstance(body, dict) else None) if status == 200 else None
         honoured = isinstance(got, int | float) and not close(got, EXPECTED_METRICS["effectiveDistance"])
-        out.append(("巷道 length 字段（希望支持，第 6 节第 1 条）", None, "已生效" if honoured else f"被忽略（当量距离 {got}）"))
+        out.append(("巷道 length 字段（希望支持，第 6 节第 7 条）", None, "已生效" if honoured else f"被忽略（当量距离 {got}）"))
 
     res = await plan(to_plan_input(base), cfg)
     best = res.get("best") or {}

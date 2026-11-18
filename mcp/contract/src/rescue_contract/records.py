@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from datetime import datetime
 from pathlib import Path
@@ -73,3 +74,21 @@ class RecordStore:
         if not path.is_file():
             raise RecordNotFound(f"找不到记录 {record_id}")
         return verify(Record.model_validate_json(path.read_text(encoding="utf-8")))
+
+    def derived(self, record_id: str, skill: str, script: str, input_name: str) -> Record | None:
+        """以 record_id 为输入 input_name 的结果记录（skill/script 产生），找不到返回 None。
+        同一次研判的记录矿井时间相同（编号里的时间段相同），只看这些文件。例：撤人通知引用 personnel 记录，
+        按它找同一次研判的 route_compare（每组显示哪条避灾路线，docs/design-v6-route-service.md 第 3.1 节）。
+        找到的记录内容被改过时抛 RecordTampered。"""
+        m = re.match(r"^[A-Z]{2}-(\d{8}T\d{6})-[a-z0-9]{6}$", record_id)
+        if not m:
+            return None
+        for path in sorted(self.dir.glob(f"RS-{m.group(1)}-*.json")):
+            try:
+                rec = Record.model_validate_json(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            src = rec.source
+            if src.get("skill") == skill and src.get("script") == script and (src.get("inputs") or {}).get(input_name) == record_id:
+                return verify(rec)
+        return None

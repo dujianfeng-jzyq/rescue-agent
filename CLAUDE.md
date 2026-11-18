@@ -11,7 +11,7 @@
 | 现行架构（怎么连起来、一次指令的路径、运行时文件） | `docs/architecture.md` |
 | 做了什么、什么时候、评测结果、踩过的坑（第一至第七版逐阶段） | `docs/progress-log.md` |
 | 为什么这样做（总体方案和路线） | `docs/implementation-plan.md` |
-| 各版本设计 | 第二版 `docs/design-v2.md`；第三版 `design-v3.md`（rescue-mine、常驻监听与事件、专家型智能体）；第四版 `design-v4-map.md`（地图界面）、`design-v4-evacuation.md`（撤人路线）；第五版 `design-v5-demo-flow.md`（演示导演、选项卡片、批准超时）；第六版 `design-v6-route-service.md`（外部路径规划服务作避灾路线第二意见）；第七版 `design-v7-fire-sim.md`（外部火灾推演服务作火灾蔓延第二意见） |
+| 各版本设计 | 第二版 `docs/design-v2.md`；第三版 `design-v3.md`（rescue-mine、常驻监听与事件、专家型智能体）；第四版 `design-v4-map.md`（地图界面）、`design-v4-evacuation.md`（撤人路线）；第五版 `design-v5-demo-flow.md`（演示导演、选项卡片、批准超时）；第六版 `design-v6-route-service.md`（外部路径规划服务：避灾路线外部为主、我方兜底）；第七版 `design-v7-fire-sim.md`（外部火灾推演服务：火灾蔓延外部为主、我方兜底） |
 | 设计决策 | `docs/decisions/`（ADR 0001–0009） |
 | 待专家审定的阈值、判据和参数（集中清单） | `docs/expert-review.md` |
 | 接真实矿井（演示、只读接入、试运行）要准备什么 | `docs/real-mine-integration.md` |
@@ -62,8 +62,8 @@ python -m rescue_fire_sim.check http://192.168.0.200:5079        # 外部火灾�
 - 记录（`Record`）：只有 DSH 进程（证据插件）能写，bash 沙箱和 guard（actions）只读；指令引用 `record_id`。**事件库不是记录库**：监听器的检测摘要不能被指令引用，智能体被唤醒后自己研判、产生记录。
 - `mcp/contract/`：数据契约（pydantic）、红线引擎 `redlines.py`、方案校验 `validation.py`、动作分级表 `action_policy.py`、处置选项表 `response_options.py`、现场条件卡片 `field_conditions.py`、事件库 `incidents.py`、`MineData` 客户端、一致性测试、技能自检、模板与规范化 JSON。**契约是各工作线之间的边界**，改 `models.py` 要谨慎并 `make schema`。
 - `mcp/mine-data-sim`（模拟矿井，rescue-mine 接口的一个实现；含演示控制台 `/console` 和演示导演 `director.py`）、`mcp/actions`（**guard 守卫服务**：对外动作的唯一通道，校验后经 rescue-mine 执行并写台账）：各自 `src/rescue_<名>/server.py` 里 `build_server()`，用 `rescue_contract.serving.serve` 启动（streamable-http，端口 8101、8106；服务名 `mine_data`、`actions` 没变）。
-- `mcp/route-planner`（第六版）：外部路径规划服务（提供方的 `mine-route-api`）的适配服务 `route_planner`（端口 8107），只由证据插件按 `route_request` 记录调用，**任何预设都不挂载**（`check_patches.py` 检查）；结果是避灾路线的“第二意见”（试验性），与我方 `personnel` 路线并列显示、不替代。设了 `RESCUE_ROUTE_SERVICE_URL` 时 `make up` 才启动它，DSH 侧设 `RESCUE_MCP_ROUTE_PLANNER_URL` 才会请求。
-- `mcp/fire-sim`（第七版）：外部火灾推演服务（提供方的 `MineFireSimulation`）的适配服务 `fire_sim`（端口 8108），边界同 route_planner（只由证据插件按 `fire_sim_request` 记录调用，任何预设都不挂载）；只做数据整理（下标转换、结果压缩成每条巷道每帧的风速和最大 CO），**不做判读**，阈值在 `skills/fire-assessment/references/fire_sim.yaml`。红色预警时才请求；结果是火灾蔓延的“第二意见”（试验性，服务模拟巷道明火、火源位置是近似）。设了 `RESCUE_FIRE_SIM_URL` 时 `make up` 才启动它，DSH 侧设 `RESCUE_MCP_FIRE_SIM_URL` 才会请求；自检样例 `scripts/make_fire_sim_cases.py` 生成（会调用提供方服务）。
+- `mcp/route-planner`（第六版）：外部路径规划服务（提供方的 `mine-route-api`）的适配服务 `route_planner`（端口 8107），只由证据插件按 `route_request` 记录调用，**任何预设都不挂载**（`check_patches.py` 检查）；结果按“外部为主、我方兜底”使用（试验性）：`route_compare` 逐组选定路线（`display`），报告、地图和撤人通知（guard 按 personnel 记录找同一次研判的 route_compare）都只用选定的那条，外部服务不可用时用我方 `personnel` 路线并标明。设了 `RESCUE_ROUTE_SERVICE_URL` 时 `make up` 才启动它，DSH 侧设 `RESCUE_MCP_ROUTE_PLANNER_URL` 才会请求。
+- `mcp/fire-sim`（第七版）：外部火灾推演服务（提供方的 `MineFireSimulation`）的适配服务 `fire_sim`（端口 8108），边界同 route_planner（只由证据插件按 `fire_sim_request` 记录调用，任何预设都不挂载）；只做数据整理（下标转换、结果压缩成每条巷道每帧的风速和最大 CO），**不做判读**，阈值在 `skills/fire-assessment/references/fire_sim.yaml`。橙色及以上预警时请求；推演可用时只显示推演的蔓延范围，不可用时显示我方估算并标明（试验性，服务模拟巷道明火、火源位置是近似；受威胁人员名单仍按我方估算）。设了 `RESCUE_FIRE_SIM_URL` 时 `make up` 才启动它，DSH 侧设 `RESCUE_MCP_FIRE_SIM_URL` 才会请求；自检样例 `scripts/make_fire_sim_cases.py` 生成（会调用提供方服务）。
 - `mcp/sentinel`：常驻监听器 `python -m rescue_sentinel`，不经模型；判据只用 `skills/fire-assessment`（`check.py`，参数在 `references/watch.yaml` 的 `sentinel` 节）。事件库 `var/incidents/<事件编号>.jsonl`（只追加、折叠出状态；Python 与 TS `incident/store.ts` 共用 `contract/tests/fixtures/incidents`）。
 - `scenarios/*.yaml`：标准场景 = 演示脚本 = 评测集 = 回归集；`scenarios/demo/flow.yaml` 是演示导演的分支剧本（放子目录，免得被当成场景加载）。
 - `eval/baseline.py` + `expectations.yaml`：确定性回归基线。`eval/agent/`：智能体端到端评测（`cases.yaml` 用例，`run.py` 经 DSH 网页端 + Playwright 提问并点确认，`grade.py` 读会话日志判定，`story.py` 故事线，`demo_run.py` 导演驱动的演示脚本，`decisions.py` 期望决策比较）。

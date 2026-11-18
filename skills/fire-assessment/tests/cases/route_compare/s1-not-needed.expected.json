@@ -1,5 +1,5 @@
 {
- "algorithm_version": "route_compare/1.0.0",
+ "algorithm_version": "route_compare/1.1.0",
  "params": {},
  "warnings": [],
  "result": {
@@ -12,6 +12,8 @@
   "note": "未计算受威胁人员，不需要第二意见",
   "groups": [],
   "counts": {},
-  "lines": []
+  "lines": [],
+  "display_counts": {},
+  "display_lines": []
  }
 }

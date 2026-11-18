@@ -46,7 +46,12 @@ describe('evacuationView（s4 红色阶段的真实记录）', () => {
     assert.equal(v.totalThreatened, 11)
     assert.equal(v.totalUnderground, 22)
     assert.equal(v.method, RESULT.method)
-    assert.deepEqual(v.groups.map((g) => [g.roadwayId, g.count, g.arrivalMin]), [['R-1201-FACE', 9, 0], ['R-1201-RET', 2, 1.6]])
+    assert.deepEqual(v.groups.map((g) => [g.roadwayId, g.count, g.arrival]), [['R-1201-FACE', 9, { source: 'ours', min: 0 }], ['R-1201-RET', 2, { source: 'ours', min: 1.6 }]])
+    // 没有 route_compare、fire_sim_compare 记录：路线和蔓延范围都是本系统的，写明原因
+    assert.equal(v.groups[0]!.route.source, 'ours')
+    assert.match(v.groups[0]!.route.reason!, /没有外部路径规划服务的结果/)
+    assert.equal(v.spreadSource, 'ours')
+    assert.equal(v.routeRecordId, null)
     assert.equal(v.groups[0]!.route.lengthM, 1960)
     assert.equal(v.groups[0]!.route.walkMin, 32.7)
     assert.equal(v.groups[0]!.route.selfRescuerMin, 46.7)
@@ -57,7 +62,7 @@ describe('evacuationView（s4 红色阶段的真实记录）', () => {
     const cont = v.figures.filter((f) => f.kind === 'contaminated')
     assert.deepEqual(cont.map((f) => f.id), ['auto:evac:cont:R-1201-FACE', 'auto:evac:cont:R-1201-RET', 'auto:evac:cont:R-RET-MAIN', 'auto:evac:cont:R-RET-SHAFT'])
     assert.equal(fig('auto:evac:cont:R-1201-RET').value, 1.6)
-    assert.equal(fig('auto:evac:cont:R-1201-RET').text, '约 1.6 分钟到达')
+    assert.equal(fig('auto:evac:cont:R-1201-RET').text, '约 1.6 分钟到达（本系统估算）')
     assert.deepEqual(fig('auto:evac:cont:R-1201-FACE').points, [POS.N3, POS.N4])
   })
 
@@ -81,8 +86,8 @@ describe('evacuationView（s4 红色阶段的真实记录）', () => {
 
   it('撤人路线：沿路线节点的顺序接起来（第一段巷道反向），起点是该组所在巷道的中点，终点是避难硐室', () => {
     const route = fig('auto:evac:route:R-1201-FACE')
-    assert.equal(route.kind, 'route')
-    assert.equal(route.text, '约 32.7 分钟')
+    assert.equal(route.kind, 'route_local')
+    assert.equal(route.text, '本系统计算 · 约 32.7 分钟')
     const pts = route.points!
     // 该组所在巷道 R-1201-FACE：N3(700,300) → N4(760,400)，中点按长度取
     assert.deepEqual(pts[0], [730, 350])
@@ -218,10 +223,11 @@ describe('latestPersonnelRecord', () => {
   })
 })
 
-// 第六版：外部服务的参考路线（第二意见）。比较结果用 route_compare 的自检样例（烟中时间上限放宽：回风巷那组得到穿烟路线）
+// 第六版：避灾路线外部为主、我方兜底。选择结果用 route_compare 的自检样例（烟中时间上限放宽：回风巷那组得到穿烟路线）
 const CMP_CASES = new URL('../../skills/fire-assessment/tests/cases/route_compare/', import.meta.url)
 const CMP = JSON.parse(readFileSync(new URL('s4-through-smoke-raised-limit.expected.json', CMP_CASES), 'utf8'))
 const CMP_NONE = JSON.parse(readFileSync(new URL('s4-escalation-60h-red-service.expected.json', CMP_CASES), 'utf8'))
+const CMP_PARTIAL = JSON.parse(readFileSync(new URL('s4-partial-timeout.expected.json', CMP_CASES), 'utf8'))
 const compareRecord = (personnelId: string, content = CMP, id = 'RS-20261104T200000-cmp001') => ({
   record_id: id,
   kind: 'result',
@@ -231,41 +237,49 @@ const compareRecord = (personnelId: string, content = CMP, id = 'RS-20261104T200
   content,
 })
 
-describe('参考路线（外部服务，第二意见）', () => {
+describe('避灾路线：外部为主、我方兜底（route_compare 的 display）', () => {
   const MAP_ALL: MineMap = { ...MAP, roadways: {} }
   const P = 'RS-20261104T200000-aaaaaa'
 
-  it('同一次研判的比较记录：每组附比较说明；有路线的另画一条 reference 折线，与我方路线并列', () => {
+  it('同一次研判的选择记录：外部服务给出路线的组只画外部路线（route），不画本系统路线', () => {
     const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, compareRecord(P))
-    assert.equal(v.referenceRecordId, 'RS-20261104T200000-cmp001')
+    assert.equal(v.routeRecordId, 'RS-20261104T200000-cmp001')
     const [face, ret] = v.groups
-    assert.equal(face!.reference?.caseText, '两种路线相同')
-    assert.equal(ret!.reference?.status, 'route')
-    assert.match(ret!.reference!.caseText, /能否穿烟由人判断/)
-    assert.equal(ret!.reference!.text, CMP.result.groups[1].text)
-    const ref = v.figures.find((f) => f.id === 'auto:evac:ref:R-1201-RET')!
-    assert.equal(ref.kind, 'reference')
-    assert.equal(ref.text, '参考路线（外部服务，试验性）')
-    // 从回风巷中点出发，经工作面（反向）N4 → N3、运输巷（反向，含途经点）N3 → N2、联络巷 N2 → 避难硐室 N8（与我方路线一样，各段首尾相接处重复一个点）
-    assert.deepEqual(ref.points, [[630, 410], POS.N4, POS.N3, POS.N3, [550, 280], POS.N2, POS.N2, POS.N8])
-    // 我方这一组走不通：没有我方路线，只有参考路线
-    assert.equal(v.figures.find((f) => f.id === 'auto:evac:route:R-1201-RET'), undefined)
-    assert.ok(v.figures.find((f) => f.id === 'auto:evac:route:R-1201-FACE'))
-    assert.ok(v.figures.find((f) => f.id === 'auto:evac:ref:R-1201-FACE'))
+    assert.deepEqual([face!.route.source, face!.route.reason, face!.route.lengthM, face!.route.escapeMin, face!.route.smokeTimeS], ['service', null, 1960, 3.3, 200])
+    assert.equal(ret!.route.source, 'service')
+    assert.equal(ret!.route.reachable, true)
+    const r = v.figures.find((f) => f.id === 'auto:evac:route:R-1201-RET')!
+    assert.equal(r.kind, 'route')
+    assert.equal(r.text, '外部服务 · 约 2970 米')
+    // 从回风巷中点出发，经工作面（反向）N4 → N3、运输巷（反向，含途经点）N3 → N2、联络巷 N2 → 避难硐室 N8（各段首尾相接处重复一个点）
+    assert.deepEqual(r.points, [[630, 410], POS.N4, POS.N3, POS.N3, [550, 280], POS.N2, POS.N2, POS.N8])
+    assert.equal(v.figures.filter((f) => f.kind === 'route_local').length, 0)
+    // 我方这一组走不通，外部服务给出穿烟路线：人数标记按显示的路线（可走）
+    assert.equal(v.figures.find((f) => f.id === 'auto:evac:group:R-1201-RET')!.kind, 'threatened')
   })
 
-  it('比较记录不是这份 personnel 记录的（别的研判）：不用', () => {
+  it('选择记录不是这份 personnel 记录的（别的研判）：不用，按本系统路线', () => {
     const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, compareRecord('RS-20261104T190000-zzzzzz'))
-    assert.equal(v.referenceRecordId, null)
-    assert.ok(v.groups.every((g) => g.reference === null))
-    assert.equal(v.figures.filter((f) => f.kind === 'reference').length, 0)
+    assert.equal(v.routeRecordId, null)
+    assert.ok(v.groups.every((g) => g.route.source === 'ours'))
+    assert.equal(v.figures.filter((f) => f.kind === 'route').length, 0)
+    assert.equal(v.figures.filter((f) => f.kind === 'route_local').length, 1)
   })
 
-  it('服务没有给出路线：只有文字，不画线', () => {
+  it('外部服务正常返回“无路线”：照外部结果显示无可行路线，不改用本系统路线', () => {
     const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, compareRecord(P, CMP_NONE))
-    assert.equal(v.groups[1]!.reference?.status, 'no_route')
-    assert.equal(v.groups[1]!.reference?.caseText, '两种方法都没有给出路线，需人工研判')
-    assert.equal(v.figures.find((f) => f.id === 'auto:evac:ref:R-1201-RET'), undefined)
+    const ret = v.groups[1]!.route
+    assert.deepEqual([ret.source, ret.reachable], ['service', false])
+    assert.match(ret.note!, /外部路径规划服务没有给出路线/)
+    assert.equal(v.figures.find((f) => f.id === 'auto:evac:route:R-1201-RET'), undefined)
+    assert.match(v.figures.find((f) => f.id === 'auto:evac:group:R-1201-RET')!.text!, /外部路径规划服务没有给出路线/)
+  })
+
+  it('某组外部服务不可用：这一组用本系统路线（route_local），写明原因', () => {
+    const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, compareRecord(P, CMP_PARTIAL))
+    const [face, ret] = v.groups
+    assert.equal(face!.route.source, 'service')
+    assert.deepEqual([ret!.route.source, ret!.route.reason], ['ours', '外部服务不可用：调用 route_planner 超时'])
   })
 
   it('routeCompareFor 按输入的 personnel 编号找比较记录', async () => {
@@ -291,18 +305,18 @@ const fireRecord = (personnelId: string, content = fireCase('s4-escalation-60h-r
   content,
 })
 
-describe('火灾蔓延第二意见（外部火灾推演服务）', () => {
+describe('有害气体蔓延：外部火灾推演为主、本系统估算兜底', () => {
   const MAP_ALL: MineMap = { ...MAP, roadways: {} }
   const P = 'RS-20261104T200000-aaaaaa'
 
-  it('同一次研判的记录：推演中 CO 到达的巷道各画一条 fire_spread 线，带到达和危险时刻（记录原值）', () => {
+  it('同一次研判的记录：推演中 CO 到达的巷道各画一条 fire_spread 线，带到达和危险时刻（记录原值）；不画本系统污染巷道', () => {
     const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, null, fireRecord(P))
     const fs = v.fireSpread!
     assert.equal(fs.recordId, 'RS-20261104T200000-fire01')
     assert.equal(fs.status, 'ok')
     assert.equal(fs.horizonMin, 60)
     assert.deepEqual([fs.reachPpm, fs.dangerPpm], [24, 400])
-    assert.deepEqual(fs.lines, fireCase('s4-escalation-60h-red-service').result.lines)
+    assert.deepEqual(fs.lines, fireCase('s4-escalation-60h-red-service').result.display_lines)
     assert.deepEqual(fs.roadways.map((r) => [r.roadwayId, r.reachMin, r.dangerMin, r.peakPpm]), [
       ['R-1201-GOAF', 1, 3, 3700],
       ['R-1201-RET', 3, null, 340],
@@ -317,8 +331,11 @@ describe('火灾蔓延第二意见（外部火灾推演服务）', () => {
       ['auto:fire:R-RET-SHAFT', 16, null, '推演 16 分钟'],
     ])
     assert.deepEqual(lines[1]!.points, [POS.N4, POS.N5])
-    // 我方污染巷道照常画，两层并列
-    assert.equal(v.figures.filter((f) => f.kind === 'contaminated').length, 4)
+    // 只显示推演结果：不画本系统污染巷道（列表照常给出），各组到达时刻取推演（推演时长内没到为 null）
+    assert.equal(v.spreadSource, 'service')
+    assert.equal(v.figures.filter((f) => f.kind === 'contaminated').length, 0)
+    assert.equal(v.contaminated.length, 4)
+    assert.deepEqual(v.groups.map((g) => g.arrival), [{ source: 'service', min: null }, { source: 'service', min: 3 }])
   })
 
   it('风流反转写进 flowChanged；没有映射的巷道列出但不画', () => {
@@ -332,11 +349,14 @@ describe('火灾蔓延第二意见（外部火灾推演服务）', () => {
     assert.equal(fs.roadways.find((r) => r.roadwayId === 'R-1201-IN')!.reversed, true)
   })
 
-  it('第二意见不可用：只有原因，不画线；记录不是这份 personnel 的：不用', () => {
+  it('推演不可用：写原因，不画推演线，画本系统污染巷道；记录不是这份 personnel 的：不用', () => {
     const down = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, null, fireRecord(P, fireCase('s4-provider-500')))
     assert.equal(down.fireSpread?.status, 'unavailable')
     assert.match(down.fireSpread!.note!, /服务返回 500/)
     assert.equal(down.figures.filter((f) => f.kind === 'fire_spread').length, 0)
+    assert.equal(down.spreadSource, 'ours')
+    assert.equal(down.figures.filter((f) => f.kind === 'contaminated').length, 4)
+    assert.deepEqual(down.groups[1]!.arrival, { source: 'ours', min: 1.6 })
     const other = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, null, fireRecord('RS-20261104T190000-zzzzzz'))
     assert.equal(other.fireSpread, null)
   })
