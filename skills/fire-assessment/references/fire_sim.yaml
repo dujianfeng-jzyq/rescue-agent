@@ -1,0 +1,21 @@
+# 外部火灾推演服务（火灾蔓延第二意见）的输入参数和判读阈值：快速接入阶段的占位值（docs/design-v7-fire-sim.md 第 4 节、附录 B）。
+# 所有结果标明“试验性”；拿到矿方数据后逐项替换（第 7 节），拿到提供方答复后调整（第 6 节）。
+# 断面缺省值取 personnel.yaml 的 default_section_m2（与我方估算一致），不在这里重复。
+status: placeholder
+reviewed_by: null
+
+level_at_least: red                 # 预警等级达到此级别才请求推演（服务模拟的是巷道内明火，不是采空区阴燃）
+# 火源位置：服务只能把火源放在巷道上。采空区自燃按“漏风通道靠上隅角一端”近似（待专家确认，可选 goaf / working_face）
+fire_source_kind: goaf
+fire_position: 0.9                  # 火源在巷道上的相对位置，0 = 起点、1 = 终点（漏风通道终点是上隅角）
+total_time_s: 3600                  # 推演时长
+output_interval_s: 60               # 输出间隔
+fuel_type: 0                        # 0 煤、1 木材、2 输送带、3 柴油、4 电缆、5 PVC
+burning_area_m2: 10                 # 燃烧面积（服务的 CO 峰值实测只随它变化，第 5 节）
+fuel_load_kg: 90                    # 燃料质量（提供方示例值；实测 10–500 kg 结果相同）
+oxygen_pct: 21                      # 入风氧气浓度
+default_resistance_ns2_m8: 0.05     # 网络里没有风阻的巷道（如避难硐室联络巷）用此值
+goaf_section_m2: 2.0                # 采空区漏风通道的等效断面
+# 判读（推演结果 → 我方结论），浓度单位 ppm（服务给 vol%，×10000）
+co_reach_ppm: 24                    # “CO 到达”：取《煤矿安全规程》CO 最高允许浓度 0.0024% 作占位
+co_danger_ppm: 400                  # “危险”：示例值，待专家定（人员耐受、自救器）

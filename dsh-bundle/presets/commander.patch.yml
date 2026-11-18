@@ -102,6 +102,9 @@
                   # 不设地址时研判跳过第二意见
                   routePlannerUrl: !!js "process.env.RESCUE_MCP_ROUTE_PLANNER_URL || undefined"
                   routePlannerToken: !!js "process.env.RESCUE_MCP_ROUTE_PLANNER_TOKEN || process.env.RESCUE_MCP_TOKEN || undefined"
+                  # 外部火灾推演服务的适配 fire_sim（第七版，火灾蔓延第二意见）：同上，只由本插件按请求记录调用。不设地址时研判跳过
+                  fireSimUrl: !!js "process.env.RESCUE_MCP_FIRE_SIM_URL || undefined"
+                  fireSimToken: !!js "process.env.RESCUE_MCP_FIRE_SIM_TOKEN || process.env.RESCUE_MCP_TOKEN || undefined"
               # 知识库：条文索引（离线由 scripts/kb/ 建立，随 bundle 发布）+ RAGFlow 检索。
               # TODO(P5)：RAGFlow 凭据改放 DSH 凭据服务、设置页里配置和测试连接（design-v2 4.7）
               - id: rescue-knowledge

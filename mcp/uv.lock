@@ -10,6 +10,7 @@ resolution-markers = [
 members = [
     "rescue-actions",
     "rescue-contract",
+    "rescue-fire-sim",
     "rescue-mcp-workspace",
     "rescue-mine-data-sim",
     "rescue-route-planner",
@@ -673,6 +674,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "rescue-fire-sim"
+version = "0.1.0"
+source = { editable = "fire-sim" }
+dependencies = [
+    { name = "rescue-contract" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "rescue-contract", editable = "contract" }]
+
+[[package]]
 name = "rescue-mcp-workspace"
 version = "0.1.0"
 source = { virtual = "." }
@@ -680,6 +692,7 @@ dependencies = [
     { name = "networkx" },
     { name = "rescue-actions" },
     { name = "rescue-contract" },
+    { name = "rescue-fire-sim" },
     { name = "rescue-mine-data-sim" },
     { name = "rescue-route-planner" },
     { name = "rescue-sentinel" },
@@ -696,6 +709,7 @@ requires-dist = [
     { name = "networkx", specifier = ">=3.3" },
     { name = "rescue-actions", editable = "actions" },
     { name = "rescue-contract", editable = "contract" },
+    { name = "rescue-fire-sim", editable = "fire-sim" },
     { name = "rescue-mine-data-sim", editable = "mine-data-sim" },
     { name = "rescue-route-planner", editable = "route-planner" },
     { name = "rescue-sentinel", editable = "sentinel" },

@@ -352,6 +352,124 @@ def test_ts_flow_route_second_opinion(sim_s4_60, tmp_path, mode):
         store.get(rid)
 
 
+def _fake_fire_provider():
+    """假的提供方火灾推演服务：GET 返回接口说明；POST 按请求的帧数返回风速一律 1 m/s、只有火源巷道有 CO（0.05 vol%）。
+    返回（地址, 收到的请求, 关闭函数）。"""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    seen: list[dict] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def _send(self, payload: dict):
+            body = json.dumps(payload).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            self._send({"info": {"version": "1.0"}, "paths": {"/FireSimulation/GetMineFireSimulationResult": {}}})
+
+        def do_POST(self):
+            req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            seen.append(req)
+            fs, n = req["fireSource"], len(req["branches"])
+            times = [k * fs["outputInterval"] for k in range(int(fs["totalTime"] // fs["outputInterval"]) + 1)]
+            co = lambda i, k: [0.0, 0.05] if i == fs["branchId"] and k > 0 else 0  # noqa: E731
+            self._send({
+                "windSpeed": {"timeUnit": "s", "valueUnit": "m/s", "branchIds": list(range(n)), "rows": [{"time": t, "values": [1.0] * n} for t in times]},
+                "coConcentration": {"timeUnit": "s", "positionUnit": "m", "valueUnit": "vol%", "branches": [
+                    {"branchId": i, "positions": [0.0, 2.0], "rows": [{"time": t, "values": co(i, k)} for k, t in enumerate(times)]} for i in range(n)
+                ]},
+            })  # fmt: skip
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{srv.server_address[1]}", seen, srv.shutdown
+
+
+def _fire_sim(provider_url: str):
+    """起 fire_sim 适配服务（指向 provider_url），返回 MCP 地址（生成器：用完关闭）。"""
+    import time
+
+    port = _free_port()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RESCUE_MCP_TOKEN")}
+    env.update(RESCUE_FIRE_SIM_PORT=str(port), RESCUE_FIRE_SIM_URL=provider_url)
+    proc = subprocess.Popen([sys.executable, "-m", "rescue_fire_sim"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(150):
+            try:
+                _get(f"http://127.0.0.1:{port}/healthz")
+                break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise RuntimeError("fire_sim 15 秒内没有就绪")
+        yield f"http://127.0.0.1:{port}/mcp"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+
+
+@NEED_NODE
+@pytest.mark.parametrize("mode", ["fake_provider", "fire_sim_down"])
+def test_ts_flow_fire_sim_second_opinion(sim_s4_60, tmp_path, mode):
+    """第七版：s4 第 60 小时是红色预警，配置了 fire_sim 时研判多出 fire_sim_request → fire_sim → fire_sim_compare；
+    fire_sim 不可用时研判照常完成（比较记“不可用”）。全部记录仍与 Python 侧一致。"""
+    provider, seen, stop = _fake_fire_provider()
+    adapter = _fire_sim(provider)
+    try:
+        url = next(adapter) if mode == "fake_provider" else f"http://127.0.0.1:{_free_port()}/mcp"
+        env = {k: v for k, v in os.environ.items() if not k.startswith("RESCUE_MCP_")}
+        env["RESCUE_MCP_FIRE_SIM_URL"] = url
+        args = [
+            "node",
+            "tools/fire-assessment.ts",
+            str(SKILLS),
+            str(tmp_path / "records"),
+            str(tmp_path / "ws"),
+            sys.executable,
+            "1201",
+            sim_s4_60,
+        ]
+        out = subprocess.run(args, cwd=BUNDLE, env=env, capture_output=True, text=True, timeout=180)
+    finally:
+        adapter.close()
+        stop()
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    a, records = got["assessment"], got["records"]
+    assert [e["status"] for e in a["events"]].count("failed") == 0
+    assert {e["stage"]: e["status"] for e in a["events"]}["fire_sim_compare"] == "completed"
+    cmp_ = records[a["record_ids"]["fire_sim_compare"]]["content"]["result"]
+    sim = records[a["record_ids"]["fire_sim"]]
+    assert sim["kind"] == "evidence" and sim["parent_ids"] == [a["record_ids"]["fire_sim_request"]]
+    assert "火灾蔓延第二意见" in a["report_markdown"]
+    assert a["result"]["fire_sim_opinion"]["record_id"] == a["record_ids"]["fire_sim_compare"]
+    if mode == "fake_provider":
+        # 一次调用；11 条巷道拆成 22 段，火源在漏风通道后半段（位置 0.9 → 段内 0.8），压入式进风量 = 主井设计风量 9000 ÷ 60
+        (req,) = seen
+        assert (
+            len(req["branches"]) == 22
+            and req["fireSource"]["position"] == 0.8
+            and req["ventBoundary"] == {"mode": 1, "inletFlows": {"0": 150.0}, "outletPressures": {}}
+        )
+        assert cmp_["status"] == "ok" and [r["roadway_id"] for r in cmp_["roadways"] if r["reach_min"] is not None] == ["R-1201-GOAF"]
+        assert cmp_["comparison"]["sim_only"] == [] and len(cmp_["comparison"]["ours_only"]) == 4  # 漏风通道不参与比较
+    else:
+        assert seen == [] and cmp_["status"] == "unavailable"
+        assert "第二意见不可用：[fire_sim]" in a["report_markdown"]
+    assert _rerun_and_render(records) == (11, 4)  # 研判 8 个脚本 + fire_sim_request、fire_sim_compare + 检测 1 个；报告数不变
+    store = RecordStore(tmp_path / "records")
+    for rid in records:
+        store.get(rid)
+
+
 @NEED_NODE
 def test_ts_effect_flow_matches_python(sim_s4_60, tmp_path):
     """review_effect：在 s4 第 60 小时注氮并临时密闭，推进 24 小时后复评（模块级的模拟矿井放在最后改状态）。"""

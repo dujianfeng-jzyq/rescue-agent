@@ -1,0 +1,24 @@
+{
+ "algorithm_version": "fire_sim_compare/1.0.0",
+ "params": {
+  "co_reach_ppm": 24,
+  "co_danger_ppm": 400
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T02:00:00",
+  "experimental": true,
+  "method": "外部服务推演结果按巷道合并（两段取最早到达、最大浓度），按 CO 阈值判读后与我方受污染巷道比较（试验性）",
+  "computed": false,
+  "status": "not_needed",
+  "note": "预警等级未达到红色（危险），不请求火灾推演",
+  "horizon_min": null,
+  "roadways": [],
+  "comparison": null,
+  "groups": [],
+  "extra_people": [],
+  "counts": {},
+  "lines": []
+ }
+}

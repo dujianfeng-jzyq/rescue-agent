@@ -12,42 +12,12 @@ personnel 未计算或没有受威胁人员时 needed 为 false（不调用服�
 - 起点：人员所在巷道的中间节点；终点：网络里的地面出口和避难硐室。采空区漏风通道不作为可通行巷道。
 """
 
-import math
-
+from _layout import layout, mid_point, rnd
 from _route import mid_node
 from _skill import evidence, load_reference, main, record_result
 
 VERSION = "route_request/1.0.0"
 METHOD = "占位坐标（单位圆布局，按巷道长度加中间节点，z = 0）+ 占位断面 + 设计风量估算风速 + 受污染巷道取固定烟雾浓度（试验性）"
-DIGITS = 3  # 坐标保留到毫米，保证输出确定
-
-
-def rnd(v):
-    """保留 DIGITS 位；把 -0.0 换成 0.0（JSON 里 Python 写 -0.0、JS 写 0，记录哈希会对不上）。"""
-    return round(v, DIGITS) + 0.0
-
-
-def layout(node_ids, roadways):
-    """节点按编号排在单位圆上，整体缩放使每条巷道两端的直线距离 d ≤ 巷道长度 L。"""
-    ordered = sorted(node_ids)
-    n = len(ordered)
-    unit = {nid: (math.cos(2 * math.pi * k / n), math.sin(2 * math.pi * k / n)) for k, nid in enumerate(ordered)}
-    scale = min(
-        (r["length_m"] / math.dist(unit[r["from_node"]], unit[r["to_node"]]) for r in roadways if unit[r["from_node"]] != unit[r["to_node"]]),
-        default=1.0,
-    )
-    return {nid: (x * scale, y * scale) for nid, (x, y) in unit.items()}
-
-
-def mid_point(a, b, length):
-    """a、b 中垂线上的点 m，使 |am| + |mb| = length（在 a→b 方向的左侧）。"""
-    d = math.dist(a, b)
-    h = math.sqrt(max(0.0, (length / 2) ** 2 - (d / 2) ** 2))
-    mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
-    if d == 0:
-        return (mx, my + h)
-    nx_, ny_ = -(b[1] - a[1]) / d, (b[0] - a[0]) / d
-    return (mx + nx_ * h, my + ny_ * h)
 
 
 def wind_speed(r, section_m2, p_personnel, limit, notes):

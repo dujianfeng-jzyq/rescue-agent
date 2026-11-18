@@ -36,6 +36,7 @@ DEFAULT_PORTS = {
     "kb": 8105,
     "actions": 8106,
     "route_planner": 8107,   # 外部路径规划服务的适配（第六版）
+    "fire_sim": 8108,        # 外部火灾推演服务的适配（第七版）
 }
 
 

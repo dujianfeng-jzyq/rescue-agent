@@ -43,6 +43,11 @@ export interface Config {
   routePlannerToken?: string
   /** 调用 route_planner 一次（一组人员、全部终点）的超时（毫秒） */
   routePlannerTimeoutMs: number
+  /** fire_sim（外部火灾推演服务的适配，第七版）的地址；不设时研判不请求火灾蔓延第二意见 */
+  fireSimUrl?: string
+  fireSimToken?: string
+  /** 调用 fire_sim 一次的超时（毫秒）；适配服务自己对提供方的超时缺省 60 秒，这里要更长 */
+  fireSimTimeoutMs: number
 }
 
 const jsonOutput = {
@@ -76,11 +81,15 @@ export default class RescueEvidence extends Service {
     routePlannerUrl: Schema.string(),
     routePlannerToken: Schema.string(),
     routePlannerTimeoutMs: Schema.number().default(30_000),
+    fireSimUrl: Schema.string(),
+    fireSimToken: Schema.string(),
+    fireSimTimeoutMs: Schema.number().default(90_000),
   })
 
   readonly evidence: Evidence
   readonly mineData: McpClient
   readonly routePlanner: McpClient | undefined
+  readonly fireSim: McpClient | undefined
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'rescueEvidence')
@@ -89,6 +98,8 @@ export default class RescueEvidence extends Service {
       ? new McpClient({ server: 'route_planner', url: config.routePlannerUrl, token: config.routePlannerToken, timeoutMs: config.routePlannerTimeoutMs })
       : undefined
     const planner = this.routePlanner
+    this.fireSim = config.fireSimUrl ? new McpClient({ server: 'fire_sim', url: config.fireSimUrl, token: config.fireSimToken, timeoutMs: config.fireSimTimeoutMs }) : undefined
+    const fireSim = this.fireSim
     this.evidence = new Evidence({
       skillsDir: config.skillsDir,
       recordDir: config.recordDir,
@@ -96,6 +107,7 @@ export default class RescueEvidence extends Service {
       python: config.python,
       mineData: (tool, args) => this.mineData.call(tool, args),
       ...(planner ? { routePlanner: (tool: string, args: Record<string, unknown>, signal?: AbortSignal) => planner.call(tool, args, signal) } : {}),
+      ...(fireSim ? { fireSim: (tool: string, args: Record<string, unknown>, signal?: AbortSignal) => fireSim.call(tool, args, signal) } : {}),
     })
     const c = ctx as any
 

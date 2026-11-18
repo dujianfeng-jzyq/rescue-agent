@@ -36,3 +36,11 @@ scripts:
     file: scripts/route_compare.py
     description: 外部路径规划服务的结果与我方避灾路线的比较（情况、终点、重合比例、长度差）
     timeout_s: 20
+  fire_sim_request:
+    file: scripts/fire_sim_request.py
+    description: 外部火灾推演服务（火灾蔓延第二意见，试验性）的请求：红色预警时，占位坐标、断面、风阻和火源参数
+    timeout_s: 20
+  fire_sim_compare:
+    file: scripts/fire_sim_compare.py
+    description: 外部火灾推演结果的判读（CO 到达、危险时刻）与我方受污染巷道、受威胁人员、避灾路线的比较
+    timeout_s: 20

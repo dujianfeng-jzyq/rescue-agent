@@ -327,9 +327,10 @@ const PART_NAME: Record<string, string> = {
   explosion_triangle: '爆炸三角形', escalation: '升级建议', effect: '复评结果', skeleton: '方案骨架', compose: '方案', scope: '审核范围', review: '审核结论',
   unsealing_plan: '启封评估', brief: '要点', report: '报告', plan: '方案', assessment: '研判',
   route_request: '避灾路线第二意见请求', route_compare: '避灾路线第二意见',
+  fire_sim_request: '火灾蔓延第二意见请求', fire_sim_compare: '火灾蔓延第二意见',
 }
 
-const COLLECT_NAME: Record<string, string> = { assessment: '研判取数', check: '检测取数', effect: '复评取数', plan: '方案取数', unseal: '启封取数', routes: '外部路径规划服务调用' }
+const COLLECT_NAME: Record<string, string> = { assessment: '研判取数', check: '检测取数', effect: '复评取数', plan: '方案取数', unseal: '启封取数', routes: '外部路径规划服务调用', fire_sim: '外部火灾推演服务调用' }
 
 /** 记录的中文名：技能 + 脚本/模板/采集清单（如“效果复评 · 复评结果”“研判 · 要点”） */
 export function recordTitle(r: Record<string, any>): string {

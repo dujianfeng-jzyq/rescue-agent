@@ -1,0 +1,30 @@
+{
+ "algorithm_version": "fire_sim_request/1.0.0",
+ "params": {
+  "status": "placeholder",
+  "level_at_least": "red",
+  "fire_source_kind": "goaf",
+  "fire_position": 0.9,
+  "total_time_s": 3600,
+  "output_interval_s": 60,
+  "fuel_type": 0,
+  "burning_area_m2": 10,
+  "fuel_load_kg": 90,
+  "oxygen_pct": 21,
+  "default_resistance_ns2_m8": 0.05,
+  "goaf_section_m2": 2.0,
+  "co_reach_ppm": 24,
+  "co_danger_ppm": 400,
+  "default_section_m2": 12.0
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T02:00:00",
+  "experimental": true,
+  "method": "占位坐标（同路径规划第二意见，z = 0）+ 占位断面和风阻 + 设计风量作进风量 + 火源放在漏风通道上（试验性）",
+  "needed": false,
+  "note": "预警等级未达到红色（危险），不请求火灾推演",
+  "request": null
+ }
+}

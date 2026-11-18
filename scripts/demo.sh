@@ -8,7 +8,8 @@
 #
 # 令牌第一次启动时随机生成，存在 var/demo/tokens.env（只有本用户可读）；控制台登录用其中的 RESCUE_SIM_CONTROL_TOKEN。
 # DEEPSEEK_API_KEY、RAGFlow 的配置从 .env 读，只传给需要它的容器。
-# .env 里设了 RESCUE_ROUTE_SERVICE_URL（外部路径规划服务，第六版）时另起 route-planner 容器，研判附避灾路线第二意见。演示数据都在 var/demo/，不混进开发的 var/（CLAUDE.md 约定 9）。
+# .env 里设了 RESCUE_ROUTE_SERVICE_URL（外部路径规划服务，第六版）时另起 route-planner 容器，研判附避灾路线第二意见；
+# 设了 RESCUE_FIRE_SIM_URL（外部火灾推演服务，第七版）时另起 fire-sim 容器，红色预警的研判附火灾蔓延第二意见。演示数据都在 var/demo/，不混进开发的 var/（CLAUDE.md 约定 9）。
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -30,8 +31,8 @@ tokens() {
     } >"$DEMO/tokens.env"
     echo "  已生成令牌 var/demo/tokens.env"
   fi
-  # 后来新增的令牌：旧的 tokens.env 补一行，其他令牌不变（第三版的写入令牌、第六版的 route_planner 令牌）
-  for name in RESCUE_MCP_MINE_ACT_TOKEN RESCUE_MCP_ROUTE_PLANNER_TOKEN; do
+  # 后来新增的令牌：旧的 tokens.env 补一行，其他令牌不变（第三版的写入令牌、第六版的 route_planner 令牌、第七版的 fire_sim 令牌）
+  for name in RESCUE_MCP_MINE_ACT_TOKEN RESCUE_MCP_ROUTE_PLANNER_TOKEN RESCUE_MCP_FIRE_SIM_TOKEN; do
     if ! grep -q "^$name=" "$DEMO/tokens.env"; then
       echo "$name=$(openssl rand -hex 16)" >>"$DEMO/tokens.env"
       echo "  已向 var/demo/tokens.env 补充 $name"
@@ -41,19 +42,30 @@ tokens() {
   mkdir -p "$DEMO/records" "$DEMO/incidents" "$DEMO/duty" "$DEMO/runs" "$DEMO/ledger" "$DEMO/audit" "$DEMO/dsh-home" "$DEMO/documents"
 }
 
-# 外部路径规划服务：设了地址才启用 route 组（route-planner 容器）并把适配服务的地址给 DSH
+# 外部计算服务：设了提供方地址才启用对应的 compose 组（route-planner、fire-sim 容器）并把适配服务的地址给 DSH
 route_profile() {
+  local profiles=()
   if [ -n "${RESCUE_ROUTE_SERVICE_URL:-}" ]; then
-    export COMPOSE_PROFILES=route DEMO_ROUTE_PLANNER_URL=http://route-planner:8107/mcp RESCUE_ROUTE_SERVICE_URL RESCUE_ROUTE_SERVICE_TOKEN="${RESCUE_ROUTE_SERVICE_TOKEN:-}"
+    profiles+=(route)
+    export DEMO_ROUTE_PLANNER_URL=http://route-planner:8107/mcp RESCUE_ROUTE_SERVICE_URL RESCUE_ROUTE_SERVICE_TOKEN="${RESCUE_ROUTE_SERVICE_TOKEN:-}"
   else
     export DEMO_ROUTE_PLANNER_URL=
   fi
+  if [ -n "${RESCUE_FIRE_SIM_URL:-}" ]; then
+    profiles+=(fire)
+    export DEMO_FIRE_SIM_URL=http://fire-sim:8108/mcp RESCUE_FIRE_SIM_URL RESCUE_FIRE_SIM_TOKEN="${RESCUE_FIRE_SIM_TOKEN:-}"
+  else
+    export DEMO_FIRE_SIM_URL=
+  fi
+  export COMPOSE_PROFILES
+  COMPOSE_PROFILES="$(IFS=,; echo "${profiles[*]}")"
 }
 
 wait_healthy() {
   local deadline=$((SECONDS + 600))
   local svcs=(mine-sim actions sentinel dsh)
   [ -n "${DEMO_ROUTE_PLANNER_URL:-}" ] && svcs+=(route-planner)
+  [ -n "${DEMO_FIRE_SIM_URL:-}" ] && svcs+=(fire-sim)
   for svc in "${svcs[@]}"; do
     while :; do
       id="$("${COMPOSE[@]}" ps -q "$svc")"
@@ -80,15 +92,16 @@ up() {
   echo "网页端：${url:-http://127.0.0.1:${DEMO_WEB_PORT:-13080}/（带 token 的地址见 scripts/demo.sh logs）}"
   echo "控制台：http://127.0.0.1:${DEMO_CONSOLE_PORT:-13090}/console（控制令牌见 var/demo/tokens.env 的 RESCUE_SIM_CONTROL_TOKEN）"
   [ -n "${DEMO_ROUTE_PLANNER_URL:-}" ] && echo "避灾路线第二意见：外部路径规划服务 $RESCUE_ROUTE_SERVICE_URL（route-planner 容器）"
+  [ -n "${DEMO_FIRE_SIM_URL:-}" ] && echo "火灾蔓延第二意见：外部火灾推演服务 $RESCUE_FIRE_SIM_URL（fire-sim 容器）"
   return 0
 }
 
 case "${1:-}" in
   up) up ;;
-  down) [ -f "$DEMO/tokens.env" ] && COMPOSE_PROFILES=route "${COMPOSE[@]}" down || true ;;
+  down) [ -f "$DEMO/tokens.env" ] && COMPOSE_PROFILES=route,fire "${COMPOSE[@]}" down || true ;;
   logs) "${COMPOSE[@]}" logs -f --tail 100 ;;
   reset)
-    [ -f "$DEMO/tokens.env" ] && COMPOSE_PROFILES=route "${COMPOSE[@]}" down || true
+    [ -f "$DEMO/tokens.env" ] && COMPOSE_PROFILES=route,fire "${COMPOSE[@]}" down || true
     # 只清演示数据目录下这几项（不动令牌）；路径都在 $ROOT/var/demo 下
     for d in records incidents duty runs ledger audit dsh-home documents; do
       case "$DEMO/$d" in "$ROOT"/var/demo/*) rm -rf -- "${DEMO:?}/$d" ;; esac

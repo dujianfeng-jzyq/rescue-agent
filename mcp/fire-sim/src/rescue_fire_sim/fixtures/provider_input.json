@@ -1,0 +1,722 @@
+{
+ "fireSource": {
+  "branchId": 20,
+  "position": 0.969,
+  "totalTime": 3600,
+  "outputInterval": 60,
+  "fuelType": 0,
+  "burningArea": 100.0,
+  "fuelLoad": 90.0,
+  "oxygenConcentration": 21
+ },
+ "ventBoundary": {
+  "mode": 1,
+  "inletFlows": {
+   "0": 444.63,
+   "19": 150.78
+  },
+  "outletPressures": {}
+ },
+ "branches": [
+  {
+   "index": 0,
+   "from": 0,
+   "to": 1,
+   "resistance": 0.001551,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 1
+  },
+  {
+   "index": 1,
+   "from": 2,
+   "to": 3,
+   "resistance": 0.003823,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 2,
+   "from": 3,
+   "to": 4,
+   "resistance": 0.001564,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 3,
+   "from": 5,
+   "to": 6,
+   "resistance": 0.002019,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 4,
+   "from": 6,
+   "to": 7,
+   "resistance": 0.000718,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 5,
+   "from": 7,
+   "to": 8,
+   "resistance": 0.004243,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 6,
+   "from": 8,
+   "to": 9,
+   "resistance": 0.003156,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 7,
+   "from": 2,
+   "to": 10,
+   "resistance": 0.000694,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 8,
+   "from": 9,
+   "to": 11,
+   "resistance": 0.00576,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 9,
+   "from": 12,
+   "to": 1,
+   "resistance": 0.03856,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 10,
+   "from": 10,
+   "to": 13,
+   "resistance": 0.070088,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 11,
+   "from": 13,
+   "to": 14,
+   "resistance": 0.043898,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 12,
+   "from": 14,
+   "to": 15,
+   "resistance": 0.032534,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 13,
+   "from": 15,
+   "to": 16,
+   "resistance": 0.004892,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 25.0,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 14,
+   "from": 16,
+   "to": 17,
+   "resistance": 0.002985,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 25.0,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 15,
+   "from": 17,
+   "to": 18,
+   "resistance": 0.004465,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 25.0,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 16,
+   "from": 18,
+   "to": 6,
+   "resistance": 0.007205,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 25.0,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 17,
+   "from": 19,
+   "to": 12,
+   "resistance": 0.001527,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 1
+  },
+  {
+   "index": 18,
+   "from": 12,
+   "to": 20,
+   "resistance": 0.002843,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 19,
+   "from": 20,
+   "to": 5,
+   "resistance": 0.024735,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 20,
+   "from": 20,
+   "to": 21,
+   "resistance": 0.0086,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 21,
+   "from": 21,
+   "to": 22,
+   "resistance": 0.033136,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 22,
+   "from": 22,
+   "to": 14,
+   "resistance": 0.085464,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 23,
+   "from": 15,
+   "to": 23,
+   "resistance": 0.014904,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 24,
+   "from": 24,
+   "to": 25,
+   "resistance": 0.042834,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 25,
+   "from": 26,
+   "to": 27,
+   "resistance": 0.003274,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 25.0,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 26,
+   "from": 27,
+   "to": 28,
+   "resistance": 0.01247,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 25.0,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 27,
+   "from": 28,
+   "to": 29,
+   "resistance": 0.023578,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 28,
+   "from": 30,
+   "to": 8,
+   "resistance": 0.004444,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 29,
+   "from": 23,
+   "to": 30,
+   "resistance": 0.050153,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 30,
+   "from": 29,
+   "to": 31,
+   "resistance": 0.042726,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 31,
+   "from": 4,
+   "to": 32,
+   "resistance": 0.002526,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 32,
+   "from": 33,
+   "to": 34,
+   "resistance": 0.046811,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 33,
+   "from": 1,
+   "to": 2,
+   "resistance": 0.000708,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 34,
+   "from": 10,
+   "to": 35,
+   "resistance": 0.007221,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 35,
+   "from": 35,
+   "to": 9,
+   "resistance": 0.001442,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 36,
+   "from": 11,
+   "to": 32,
+   "resistance": 0.000825,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 37,
+   "from": 32,
+   "to": 36,
+   "resistance": 0.003578,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 2
+  },
+  {
+   "index": 38,
+   "from": 4,
+   "to": 5,
+   "resistance": 0.001364,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 32.137,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 39,
+   "from": 23,
+   "to": 37,
+   "resistance": 0.01398,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 40,
+   "from": 37,
+   "to": 24,
+   "resistance": 0.00739,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 41,
+   "from": 25,
+   "to": 33,
+   "resistance": 0.045384,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 42,
+   "from": 33,
+   "to": 26,
+   "resistance": 0.029495,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 43,
+   "from": 34,
+   "to": 30,
+   "resistance": 0.002865,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 44,
+   "from": 31,
+   "to": 34,
+   "resistance": 0.004205,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 45,
+   "from": 25,
+   "to": 31,
+   "resistance": 0.007061,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  },
+  {
+   "index": 46,
+   "from": 24,
+   "to": 29,
+   "resistance": 0.007197,
+   "fixedFlow": 0.0,
+   "closed": false,
+   "area": 11.598,
+   "boundaryMarker": 0
+  }
+ ],
+ "nodes": [
+  {
+   "index": 0,
+   "x": -53.717,
+   "y": 0.0,
+   "z": 672.359
+  },
+  {
+   "index": 1,
+   "x": 85.357,
+   "y": 0.0,
+   "z": 672.359
+  },
+  {
+   "index": 2,
+   "x": 148.847,
+   "y": 0.0,
+   "z": 672.359
+  },
+  {
+   "index": 3,
+   "x": 477.97,
+   "y": 17.397,
+   "z": 766.55
+  },
+  {
+   "index": 4,
+   "x": 477.793,
+   "y": 5.243,
+   "z": 626.841
+  },
+  {
+   "index": 5,
+   "x": 477.635,
+   "y": 0.0,
+   "z": 504.686
+  },
+  {
+   "index": 6,
+   "x": 477.631,
+   "y": 0.0,
+   "z": 323.64
+  },
+  {
+   "index": 7,
+   "x": 478.115,
+   "y": 0.0,
+   "z": 259.291
+  },
+  {
+   "index": 8,
+   "x": 858.509,
+   "y": 0.0,
+   "z": 259.291
+  },
+  {
+   "index": 9,
+   "x": 858.51,
+   "y": 5.0,
+   "z": 542.19
+  },
+  {
+   "index": 10,
+   "x": 211.083,
+   "y": 0.0,
+   "z": 672.359
+  },
+  {
+   "index": 11,
+   "x": 342.09,
+   "y": 5.0,
+   "z": 541.38
+  },
+  {
+   "index": 12,
+   "x": 83.16,
+   "y": 26.587,
+   "z": 406.98
+  },
+  {
+   "index": 13,
+   "x": 212.529,
+   "y": 0.0,
+   "z": 187.56
+  },
+  {
+   "index": 14,
+   "x": 516.01,
+   "y": 10.0,
+   "z": 187.56
+  },
+  {
+   "index": 15,
+   "x": 513.433,
+   "y": 0.0,
+   "z": -37.24
+  },
+  {
+   "index": 16,
+   "x": 202.96,
+   "y": 10.0,
+   "z": 32.97
+  },
+  {
+   "index": 17,
+   "x": 8.65,
+   "y": 10.0,
+   "z": 32.97
+  },
+  {
+   "index": 18,
+   "x": 8.65,
+   "y": 10.0,
+   "z": 323.64
+  },
+  {
+   "index": 19,
+   "x": -53.66,
+   "y": 30.207,
+   "z": 408.14
+  },
+  {
+   "index": 20,
+   "x": 337.48,
+   "y": 10.0,
+   "z": 407.07
+  },
+  {
+   "index": 21,
+   "x": 1106.16,
+   "y": 70.802,
+   "z": 406.16
+  },
+  {
+   "index": 22,
+   "x": 1107.14,
+   "y": 5.0,
+   "z": 186.61
+  },
+  {
+   "index": 23,
+   "x": 513.433,
+   "y": 0.0,
+   "z": -140.333
+  },
+  {
+   "index": 24,
+   "x": 564.55,
+   "y": 5.0,
+   "z": -236.9
+  },
+  {
+   "index": 25,
+   "x": 860.788,
+   "y": 0.0,
+   "z": -236.897
+  },
+  {
+   "index": 26,
+   "x": 1378.726,
+   "y": 0.0,
+   "z": -236.897
+  },
+  {
+   "index": 27,
+   "x": 1378.73,
+   "y": 15.0,
+   "z": -24.28
+  },
+  {
+   "index": 28,
+   "x": 566.91,
+   "y": 15.0,
+   "z": -24.28
+  },
+  {
+   "index": 29,
+   "x": 565.11,
+   "y": 7.0,
+   "z": -187.16
+  },
+  {
+   "index": 30,
+   "x": 860.339,
+   "y": 0.0,
+   "z": -139.157
+  },
+  {
+   "index": 31,
+   "x": 860.564,
+   "y": 0.0,
+   "z": -188.054
+  },
+  {
+   "index": 32,
+   "x": 268.14,
+   "y": 5.0,
+   "z": 541.26
+  },
+  {
+   "index": 33,
+   "x": 1174.708,
+   "y": 0.0,
+   "z": -236.897
+  },
+  {
+   "index": 34,
+   "x": 860.43,
+   "y": 0.0,
+   "z": -158.971
+  },
+  {
+   "index": 35,
+   "x": 858.509,
+   "y": 0.0,
+   "z": 671.389
+  },
+  {
+   "index": 36,
+   "x": -52.65,
+   "y": 5.0,
+   "z": 540.75
+  },
+  {
+   "index": 37,
+   "x": 513.43,
+   "y": 5.0,
+   "z": -236.9
+  }
+ ]
+}

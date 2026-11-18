@@ -3,7 +3,7 @@
 FROM python:3.12-slim-bookworm
 COPY --from=ghcr.io/astral-sh/uv:0.8.17 /uv /usr/local/bin/uv
 WORKDIR /app
-# 只装运行的服务（模拟矿井、guard、监听器、外部路径规划服务的适配 route_planner）及其依赖（按 uv.lock 锁定版本）。
+# 只装运行的服务（模拟矿井、guard、监听器、外部路径规划服务的适配 route_planner、外部火灾推演服务的适配 fire_sim）及其依赖（按 uv.lock 锁定版本）。
 #   依赖和代码分两层：先只复制工作区和各成员的 pyproject.toml、uv.lock，装第三方包（--no-install-workspace）；
 #   再复制源码装工作区的包。只改代码时第三方包那层复用；uv 缓存挂在构建缓存里（不进镜像），构建后端不用每次重新下载。
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy
@@ -14,17 +14,20 @@ COPY mcp/mine-data-sim/pyproject.toml mine-data-sim/
 COPY mcp/actions/pyproject.toml actions/
 COPY mcp/sentinel/pyproject.toml sentinel/
 COPY mcp/route-planner/pyproject.toml route-planner/
+COPY mcp/fire-sim/pyproject.toml fire-sim/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-workspace --package rescue-mine-data-sim \
     && uv sync --frozen --no-dev --no-install-workspace --inexact --package rescue-actions \
     && uv sync --frozen --no-dev --no-install-workspace --inexact --package rescue-sentinel \
-    && uv sync --frozen --no-dev --no-install-workspace --inexact --package rescue-route-planner
+    && uv sync --frozen --no-dev --no-install-workspace --inexact --package rescue-route-planner \
+    && uv sync --frozen --no-dev --no-install-workspace --inexact --package rescue-fire-sim
 COPY mcp ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --inexact --package rescue-mine-data-sim \
     && uv sync --frozen --no-dev --no-editable --inexact --package rescue-actions \
     && uv sync --frozen --no-dev --no-editable --inexact --package rescue-sentinel \
-    && uv sync --frozen --no-dev --no-editable --inexact --package rescue-route-planner
+    && uv sync --frozen --no-dev --no-editable --inexact --package rescue-route-planner \
+    && uv sync --frozen --no-dev --no-editable --inexact --package rescue-fire-sim
 WORKDIR /app
 COPY scenarios /app/scenarios
 ENV PATH=/opt/venv/bin:$PATH \

@@ -29,6 +29,11 @@ export interface EvidenceConfig {
    * 只由本插件按请求记录调用，智能体不挂载该服务（docs/design-v6-route-service.md 附录 A.1）。
    */
   routePlanner?: ((tool: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<any>) | undefined
+  /**
+   * fire_sim（外部火灾推演服务的适配，第七版）的工具调用；没有配置时不给，研判跳过“火灾蔓延第二意见”。
+   * 只由本插件按请求记录调用，智能体不挂载该服务（docs/design-v7-fire-sim.md 附录 A.1）。
+   */
+  fireSim?: ((tool: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<any>) | undefined
 }
 
 /** 技能脚本没有得到合格的结果：把运行状态原样带出，调用方按 4.5 第 3 条报告 */
@@ -140,6 +145,45 @@ export class Evidence {
         origin: opts.origin,
         source: { skill: skill.name, skill_version: skill.version, collect_kind: 'routes', from: opts.request, service: 'route_planner' },
         content: { kind: 'routes', panel: req.panel, as_of: req.as_of, request_record_id: opts.request, results, error: null },
+        parentIds: [opts.request],
+      }),
+    )
+  }
+
+  /** 是否配置了外部火灾推演服务（第七版：火灾蔓延第二意见） */
+  get fireSimConfigured(): boolean {
+    return Boolean(this.cfg.fireSim)
+  }
+
+  /**
+   * 按 fire-assessment/fire_sim_request 的结果记录调用 fire_sim，把输入（请求记录编号）和适配服务的返回存成证据记录（复盘依据）。
+   * 调用失败（服务不可用、超时、输入被拒）不抛错，记在 error 里，由 fire_sim_compare 报“第二意见不可用”。工作面、时刻取请求记录的。
+   */
+  async collectFireSim(opts: { request: string; origin: Origin; signal?: AbortSignal }): Promise<RescueRecord> {
+    const call = this.cfg.fireSim
+    if (!call) throw new Error('没有配置外部火灾推演服务（fire_sim）')
+    const req = await this.store.get(opts.request)
+    const src = req.source as any
+    if (req.kind !== 'result' || src?.skill !== 'fire-assessment' || src?.script !== 'fire_sim_request') throw new Error(`记录 ${opts.request} 不是 fire-assessment/fire_sim_request 的结果`)
+    const r = (req.content as any).result
+    if (!r.needed || !r.request) throw new Error(`记录 ${opts.request} 不需要火灾推演（${r.note ?? '没有请求'}）`)
+    let result: unknown = null
+    let error: string | null = null
+    try {
+      result = await call('simulate_fire', r.request, opts.signal)
+    } catch (err) {
+      if (opts.signal?.aborted) throw err
+      error = (err as Error).message
+    }
+    const skill = await loadSkill(this.cfg.skillsDir, 'fire-assessment')
+    return this.store.put(
+      buildRecord({
+        kind: 'evidence',
+        panel: req.panel,
+        asOf: req.as_of,
+        origin: opts.origin,
+        source: { skill: skill.name, skill_version: skill.version, collect_kind: 'fire_sim', from: opts.request, service: 'fire_sim' },
+        content: { kind: 'fire_sim', panel: req.panel, as_of: req.as_of, request_record_id: opts.request, result, error },
         parentIds: [opts.request],
       }),
     )

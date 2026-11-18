@@ -226,3 +226,15 @@
 - **Docker**：`.env` 里设了 `RESCUE_ROUTE_SERVICE_URL` 时 `make demo-up` 启用 compose 的 `route` 组（`route-planner` 容器）。**只验证了 `docker compose config`，没有实际起演示环境跑过；地图上的参考路线也只有单元测试，没在浏览器里看过。**
 - **踩到的坑**：占位坐标里出现 `-0.0`，Python 的 JSON 写 `-0.0`、JS 写 `0`，跨语言的记录哈希会对不上（TS 测试发现），脚本里统一换成 `0.0`。
 - **遗留**：R5（按提供方答复改多终点、长度/高差、空结果原因、鉴权）、R6（矿方数据替换占位值）、R7（按比较结果改进我方算法）；`make_skill_cases.py` 不生成第二意见的样例（输入里有提供方服务的返回），personnel 样例重新生成后要手工同步 `route_request`、`route_compare` 的输入。
+
+## 第七版进度（2026-11-17）：外部火灾推演服务作火灾蔓延第二意见
+
+设计：`docs/design-v7-fire-sim.md`（第一部分是发给提供方的对接方案，附录是我方实现）。提供方服务在内网 192.168.0.200:5079（`POST /FireSimulation/GetMineFireSimulationResult`，接口说明 `/swagger/v1/swagger.json`；没有健康检查、鉴权和版本号）。
+
+- **试用结论**（设计文档第 5 节）：服务是确定性的（示例输入的结果与提供方示例 `result.json` 逐字节相同），1 小时推演约 1 秒；CO 按约 2 m 网格、vol% 保留 3 位（分辨率 10 ppm）；巷道长度只按坐标算。**疑点**（已写进对接方案第 6 节第 1–5 条）：大火时风速几乎不变、没有风流反转；燃料 10–500 kg 结果相同、5000 kg 时 CO 反而骤降；47 条巷道中 9 条作火源时报 500；只能模拟巷道明火，不是采空区阴燃。
+- **F1 适配服务**：`mcp/fire-sim`（包 `rescue_fire_sim`，服务名 `fire_sim`，端口 8108）。工具 `simulate_fire`（我方编号进出；校验输入，帧数上限 721；校验返回并压缩成每条巷道每帧的风速和最大 CO（ppm）、首次出现 CO 的时刻、峰值、反转、停风；原始返回只带 SHA-256 和字节数，因为服务是确定性的，复盘时用存档的 `provider_request` 重算核对）和 `fire_sim_status`（取接口说明代替健康检查）。不做判读。`python -m rescue_fire_sim.check <URL>`：2026-11-17 对提供方服务 11/11 通过或为提示。`check_patches.py` 检查任何预设都不挂 fire_sim；`make up` 在设了 `RESCUE_FIRE_SIM_URL` 时才启动它。
+- **F2 技能脚本**：`fire-assessment` 新增 `fire_sim_request`、`fire_sim_compare`（参数 `references/fire_sim.yaml`，全部占位）；第六版的占位坐标移到共用的 `scripts/_layout.py`（`route_request` 输出不变）。对 s4 红色第 60 小时实测：CO 第 1 分钟出现在漏风通道，第 3、9、16 分钟依次达到 24 ppm 到回风巷、总回风巷、回风井，峰值 340 ppm（回风巷），除漏风通道外没有巷道达到 400 ppm；工作面在推演中没有 CO（火源放在漏风通道靠上隅角一端，CO 直接进回风巷），与我方“工作面受污染”不同，报告首句写明两边的源头。待专家审定清单新增第十节 54–61 项。
+- **F3 接入研判流程**：`run_fire_assessment` 在避灾路线第二意见之后加 `fire_sim_request` → `fire_sim`（证据记录，`collect_kind: fire_sim`）→ `fire_sim_compare`，失败不中断；研判报告加“火灾蔓延第二意见”一节（模板 `fire_sim_opinion`，没有时为 null，原有报告不变）；流程结果多 `fire_sim_opinion`。证据插件配置 `fireSimUrl`、`fireSimToken`、`fireSimTimeoutMs`（`RESCUE_MCP_FIRE_SIM_URL`、`..._TOKEN`）。
+- **Docker**：`.env` 里设了 `RESCUE_FIRE_SIM_URL` 时 `make demo-up` 启用 compose 的 `fire` 组（`fire-sim` 容器），可与第六版的 `route` 组同时启用（`demo.sh` 的 `COMPOSE_PROFILES` 改为按设置拼接）。**只验证了 `docker compose config`，没有实际起演示环境跑过。**
+- **踩到的坑**：在仓库根目录对 `skills/`、`scripts/` 下的文件跑 `ruff format` 会用缺省行宽 88（配置在 `mcp/pyproject.toml`），要在 `mcp/` 目录里运行；仓库本来也没有整体按 `ruff format` 排版，不要对已有文件跑。
+- **遗留**：F4（地图上按 CO 到达时刻着色、按时间回放）、F5（按提供方答复调整；推演结果作为路径规划服务的烟雾输入）、F6（矿方数据替换占位值）。

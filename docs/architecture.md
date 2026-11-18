@@ -1,6 +1,6 @@
 # 架构说明
 
-本文说明现行结构（第二至第六版累计）：各部分怎么连接、为什么这样分。设计取舍见 `docs/decisions/`（ADR 0007、0008、0009），各版本的完整设计见 `docs/design-v2.md`、`design-v3.md`、`design-v4-*.md`、`design-v5-demo-flow.md`，各阶段的实施记录见 `docs/progress-log.md`。
+本文说明现行结构（第二至第七版累计）：各部分怎么连接、为什么这样分。设计取舍见 `docs/decisions/`（ADR 0007、0008、0009），各版本的完整设计见 `docs/design-v2.md`、`design-v3.md`、`design-v4-*.md`、`design-v5-demo-flow.md`，各阶段的实施记录见 `docs/progress-log.md`。
 
 ## 1. 分层
 
@@ -10,7 +10,7 @@
 | 智能体 | DSH 预设 `rescue-commander`（`dsh-bundle/presets/`） | 人设、挂载的工具和插件 | 业务计算 |
 | 证据与固定流程 | DSH 插件（`dsh-bundle/src/`） | 采集证据、运行技能脚本、记录、风险检测（一次性、持续）；典型场景的固定步骤；知识库检索和查条 | 领域判据（在技能里） |
 | 横切控制 | DSH 插件（`dsh-bundle/src/approval`、`audit`） | 红线预检 + 人工确认、审计 | 业务逻辑 |
-| 外部服务 | MCP（Python，`mcp/`）和常驻进程 | 矿井数据（模拟矿井 / 真实矿井适配器）、指令出口 actions（guard）、常驻监听器 sentinel、外部路径规划服务的适配 route_planner（第六版，只由证据插件调用） | 对话、提示词 |
+| 外部服务 | MCP（Python，`mcp/`）和常驻进程 | 矿井数据（模拟矿井 / 真实矿井适配器）、指令出口 actions（guard）、常驻监听器 sentinel、外部路径规划服务的适配 route_planner（第六版）、外部火灾推演服务的适配 fire_sim（第七版，只由证据插件调用） | 对话、提示词 |
 | 契约 | Python 包 `rescue_contract` | 数据模型（含记录）、红线引擎、方案校验、记录核对 | 任何具体矿井的数据 |
 
 原则：**会算错的东西放在技能脚本里并有自检样例，会说错的东西交给固定流程和模板，会做错的东西放在插件和 actions 里拦住。**
@@ -44,7 +44,7 @@
 | `kb_search`、`kb_get_articles`、`kb_list_datasets` | 知识库插件 `rescue-knowledge` |
 | 加密监测（`start_monitoring`）、发布预警、升级、撤人通知、下发封闭方案（`issue_sealing_plan`）、下发防灭火方案（`issue_firefighting_plan`）、启封审批（`approve_unsealing`）、调度单；`precheck_plan`、`query_last_issued` | actions MCP（guard，唯一挂 actions 的预设） |
 
-不挂：mine_data（读数经证据插件，留有记录）、route_planner（外部路径规划服务只由证据插件按请求记录调用，`scripts/check_patches.py` 检查）、delegate、联网、知识库写入、DSH 自带的 workflow 工具（模型现写脚本）。
+不挂：mine_data（读数经证据插件，留有记录）、route_planner 和 fire_sim（外部路径规划、火灾推演服务只由证据插件按请求记录调用，`scripts/check_patches.py` 检查）、delegate、联网、知识库写入、DSH 自带的 workflow 工具（模型现写脚本）。
 
 固定流程的步骤由代码决定：采集证据 → 运行技能脚本 → 渲染报告 →（需要时）模型阶段 → 交付。模型阶段由插件用 `ctx.workflowEngine.start` 运行插件里固定的脚本，只能在给定清单里选择，说明文字里的数值必须能在本次记录里找到；用 `tools.guard` 限制阶段子 Agent 只能提交结构化结果。缺人工输入时：封闭方案的 5 项现场条件由代码给出的卡片（`get_field_conditions`）问操作员，答案经 `draft_sealing_plan` 的 `field_choices` 交回、由代码换成数值（换不了就报错重问）；防灭火方案的可选步骤由橙色处置选项卡片的答案（`selected_options`）强制决定，模型不能增减。红线预检不通过又缺输入时，流程返回结构化问题（`HumanInputRequest`）。
 
@@ -84,6 +84,10 @@
 ### 避灾路线第二意见（第六版）
 
 提供方的路径规划服务（`mine-route-api`）作为“第二意见”接入（`docs/design-v6-route-service.md`）：研判在 `personnel` 之后，`route_request.py` 把我方网络和受污染巷道换成服务输入（占位坐标、断面、烟雾浓度，试验性）→ 证据插件经适配服务 `route_planner`（`mcp/route-planner`，编号↔下标、校验、超时、逐终点调用）调用服务，原始输入输出存成证据 → `route_compare.py` 与我方路线比较。报告和地图上两条路线并列，不一致时都显示，由人判断；这一段失败不中断研判。没配置 route_planner 时整段跳过。
+
+### 火灾蔓延第二意见（第七版）
+
+提供方的火灾推演服务（`MineFireSimulation`）作为“第二意见”接入（`docs/design-v7-fire-sim.md`）：预警等级达到红色时，研判在避灾路线第二意见之后，`fire_sim_request.py` 把我方网络换成服务输入（与第六版相同的占位坐标、占位断面和风阻、火源放在漏风通道上，试验性）→ 证据插件经适配服务 `fire_sim`（`mcp/fire-sim`，编号↔下标、校验、超时、把按 2 m 网格的结果压缩成每条巷道每帧的风速和最大 CO）调用服务，存成证据 → `fire_sim_compare.py` 按 CO 阈值判读到达和危险时刻，与我方受污染巷道、受威胁人员和避灾路线比较。报告里并列，不一致时都显示，由人判断；这一段失败不中断研判。没配置 fire_sim 时整段跳过。
 
 ## 6. 知识库
 

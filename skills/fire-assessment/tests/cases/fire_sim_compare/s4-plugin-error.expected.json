@@ -1,0 +1,26 @@
+{
+ "algorithm_version": "fire_sim_compare/1.0.0",
+ "params": {
+  "co_reach_ppm": 24,
+  "co_danger_ppm": 400
+ },
+ "warnings": [],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "experimental": true,
+  "method": "外部服务推演结果按巷道合并（两段取最早到达、最大浓度），按 CO 阈值判读后与我方受污染巷道比较（试验性）",
+  "computed": true,
+  "status": "unavailable",
+  "note": "fire_sim 调用失败：连接被拒绝",
+  "horizon_min": null,
+  "roadways": [],
+  "comparison": null,
+  "groups": [],
+  "extra_people": [],
+  "counts": {},
+  "lines": [
+   "第二意见不可用：fire_sim 调用失败：连接被拒绝"
+  ]
+ }
+}

@@ -5,6 +5,8 @@
  *   → alarms、warning → stage → trend → explosion_triangle（逐个束管测点）→ personnel（脚本按等级决定是否计算）
  *   → 避灾路线第二意见（第六版，配置了外部路径规划服务且 personnel 已计算时）：route_request → route_service（证据插件调用
  *     route_planner，原始输入输出存成证据）→ route_compare；这一段失败不中断研判，报告写“第二意见不可用”
+ *   → 火灾蔓延第二意见（第七版，配置了外部火灾推演服务、personnel 已计算、预警等级达到 fire_sim.yaml 的 level_at_least 时）：
+ *     fire_sim_request（脚本按等级决定是否需要）→ fire_sim（证据插件调用 fire_sim）→ fire_sim_compare；失败同样不中断研判
  *   → escalation（emergency-escalation）
  *   → 研判报告（fire-assessment/templates/report.md，含风险图）+ 升级建议（emergency-escalation/templates/report.md）
  *
@@ -130,6 +132,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
   await step('explosion', () => script('explosion-triangle', 'explosion_triangle', { evidence: E }))
   await step('personnel', () => script(FA, 'personnel', { evidence: E, warning: ids.warning! }, { include_personnel: Boolean(opts.includePersonnel) }))
   const routeOpinion = await secondOpinion()
+  const fireSimOpinion = await fireSpreadOpinion()
   await step('escalation', () => script('emergency-escalation', 'escalation', { warning: ids.warning!, stage: ids.stage!, alarms: ids.alarms! }))
 
   /**
@@ -162,6 +165,37 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
     }
   }
 
+  /**
+   * 火灾蔓延第二意见（docs/design-v7-fire-sim.md）：外部服务推演巷道明火的 CO 蔓延，与我方受污染巷道估算并列，不替代。
+   * 没配置服务、没算受威胁人员、等级不够时跳过（不产生比较记录，报告不出现这一节）；任何一步失败只记 failed，研判照常完成。
+   */
+  async function fireSpreadOpinion(): Promise<{ lines: string[]; basis: string; ok: boolean } | null> {
+    if (!ev.fireSimConfigured) {
+      emit('fire_sim', 'skipped', [], '未配置外部火灾推演服务')
+      return null
+    }
+    if (!content(rec.personnel!).computed) {
+      emit('fire_sim', 'skipped', [], '未计算受威胁人员')
+      return null
+    }
+    try {
+      const rq = await step('fire_sim_request', () => script(FA, 'fire_sim_request', { evidence: E, warning: ids.warning! }))
+      if (!content(rq).needed) {
+        emit('fire_sim', 'skipped', [], content(rq).note)
+        return null
+      }
+      const sim = await step('fire_sim', () => ev.collectFireSim({ request: rq.record_id, origin, ...sig }))
+      const cmp = await step('fire_sim_compare', () =>
+        script(FA, 'fire_sim_compare', { evidence: E, personnel: ids.personnel!, fire_sim_request: rq.record_id, fire_sim: sim.record_id }),
+      )
+      const c = content(cmp)
+      return { lines: c.lines, basis: `记录 ${cmp.record_id}（判读和比较）、${sim.record_id}（服务调用）`, ok: c.status === 'ok' }
+    } catch (err) {
+      if (opts.signal?.aborted) throw err
+      return { lines: [`第二意见不可用：${(err as Error).message}`], basis: '无', ok: false }
+    }
+  }
+
   const x = content(rec.explosion!)
   let chartMarkdown: string | null = null
   if (opts.chartPath && rec.explosion!.files.length) {
@@ -174,7 +208,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
       skill: FA,
       template: 'report',
       inputs: Object.fromEntries(['evidence', 'warning', 'stage', 'alarms', 'trend', 'explosion', 'personnel'].map((k) => [k, ids[k]!])),
-      extra: { chart_markdown: chartMarkdown, route_opinion: routeOpinion },
+      extra: { chart_markdown: chartMarkdown, route_opinion: routeOpinion, fire_sim_opinion: fireSimOpinion },
       origin,
     }),
   )
@@ -261,6 +295,7 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
   if (w.notes.length) warnings.push(...w.notes)
   if (explanationNote) warnings.push(explanationNote)
   if (routeOpinion && !routeOpinion.ok) warnings.push(routeOpinion.lines[0]!)
+  if (fireSimOpinion && !fireSimOpinion.ok) warnings.push(`火灾蔓延${fireSimOpinion.lines[0]!}`)
   const missingArticles = articles.filter((a) => a.source !== 'index')
   if (missingArticles.length) warnings.push(`条文索引里没有：${missingArticles.map((a) => `${a.document}${a.article}`).join('、')}`)
   const nextActions = [
@@ -294,6 +329,9 @@ export async function runFireAssessment(ev: Evidence, opts: AssessmentOptions): 
         chart_markdown: chartMarkdown,
       },
       personnel: pe.computed ? { computed: true, total_threatened: pe.total_threatened, total_underground: pe.total_underground } : { computed: false, note: pe.note },
+      ...(ids.fire_sim_compare
+        ? { fire_sim_opinion: { record_id: ids.fire_sim_compare, status: content(rec.fire_sim_compare!).status, counts: content(rec.fire_sim_compare!).counts } }
+        : {}),
       ...(ids.route_compare ? { route_opinion: { record_id: ids.route_compare, status: content(rec.route_compare!).status, counts: content(rec.route_compare!).counts } } : {}),
       escalation: { recommend: es.recommend, articles: es.articles.map((a: any) => ({ document: a.document, article: a.article })) },
       explanation: explanationMd ? { generated: true, record_id: ids.explanation } : { generated: false, note: explanationNote },

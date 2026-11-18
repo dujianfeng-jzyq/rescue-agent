@@ -1,0 +1,189 @@
+{
+ "algorithm_version": "fire_sim_compare/1.0.0",
+ "params": {
+  "co_reach_ppm": 24,
+  "co_danger_ppm": 400
+ },
+ "warnings": [
+  "外部服务推演的是巷道内明火、输入含占位值，结果是试验性的第二意见，不替代我方研判；两者不一致时都显示，由人判断"
+ ],
+ "result": {
+  "panel": "1201",
+  "as_of": "2026-11-04T20:00:00",
+  "experimental": true,
+  "method": "外部服务推演结果按巷道合并（两段取最早到达、最大浓度），按 CO 阈值判读后与我方受污染巷道比较（试验性）",
+  "computed": true,
+  "status": "ok",
+  "note": null,
+  "horizon_min": 60.0,
+  "roadways": [
+   {
+    "roadway_id": "R-1201-GOAF",
+    "name": "1201采空区漏风通道",
+    "reach_min": 1.0,
+    "danger_min": 3.0,
+    "peak_ppm": 3700.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-1201-RET",
+    "name": "1201回风巷",
+    "reach_min": 3.0,
+    "danger_min": null,
+    "peak_ppm": 340.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-RET-MAIN",
+    "name": "总回风巷",
+    "reach_min": 9.0,
+    "danger_min": null,
+    "peak_ppm": 340.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-RET-SHAFT",
+    "name": "回风井",
+    "reach_min": 16.0,
+    "danger_min": null,
+    "peak_ppm": 130.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-1201-FACE",
+    "name": "1201工作面",
+    "reach_min": null,
+    "danger_min": null,
+    "peak_ppm": 0.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-1201-IN",
+    "name": "1201运输巷",
+    "reach_min": null,
+    "danger_min": null,
+    "peak_ppm": 0.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-1202-IN",
+    "name": "1202掘进巷进风",
+    "reach_min": null,
+    "danger_min": null,
+    "peak_ppm": 0.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-1202-RET",
+    "name": "1202回风联络巷",
+    "reach_min": null,
+    "danger_min": null,
+    "peak_ppm": 0.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-MAIN-IN",
+    "name": "主运输大巷",
+    "reach_min": null,
+    "danger_min": null,
+    "peak_ppm": 0.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-MAIN-SHAFT",
+    "name": "主井",
+    "reach_min": null,
+    "danger_min": null,
+    "peak_ppm": 0.0,
+    "air_reversed": false,
+    "air_stopped": false
+   },
+   {
+    "roadway_id": "R-REFUGE",
+    "name": "避难硐室联络巷",
+    "reach_min": null,
+    "danger_min": null,
+    "peak_ppm": 0.0,
+    "air_reversed": false,
+    "air_stopped": false
+   }
+  ],
+  "comparison": {
+   "both": [
+    {
+     "roadway_id": "R-1201-RET",
+     "ours_min": 1.6,
+     "sim_min": 3.0,
+     "diff_min": 1.4
+    },
+    {
+     "roadway_id": "R-RET-MAIN",
+     "ours_min": 13.6,
+     "sim_min": 9.0,
+     "diff_min": -4.6
+    },
+    {
+     "roadway_id": "R-RET-SHAFT",
+     "ours_min": 16.3,
+     "sim_min": 16.0,
+     "diff_min": -0.3
+    }
+   ],
+   "sim_only": [],
+   "ours_only": [
+    {
+     "roadway_id": "R-1201-FACE",
+     "ours_min": 0.0
+    }
+   ]
+  },
+  "groups": [
+   {
+    "roadway_id": "R-1201-FACE",
+    "count": 9,
+    "ours_arrival_min": 0.0,
+    "sim_reach_min": null,
+    "sim_danger_min": null,
+    "sim_peak_ppm": 0.0,
+    "route_reachable": true,
+    "route_danger_roadways": []
+   },
+   {
+    "roadway_id": "R-1201-RET",
+    "count": 2,
+    "ours_arrival_min": 1.6,
+    "sim_reach_min": 3.0,
+    "sim_danger_min": null,
+    "sim_peak_ppm": 340.0,
+    "route_reachable": false,
+    "route_danger_roadways": []
+   }
+  ],
+  "extra_people": [],
+  "counts": {
+   "sim_reached": 4,
+   "sim_danger": 1,
+   "both": 3,
+   "sim_only": 0,
+   "ours_only": 1,
+   "extra_people": 0,
+   "route_danger_groups": 0
+  },
+  "lines": [
+   "推演火源：1201采空区漏风通道（R-1201-GOAF，位置 0.9）；我方估算源头：R-1201-FACE。推演 60 分钟内 CO 达到 24 ppm 的巷道 4 条：R-1201-GOAF（第 1 分钟，峰值 3700 ppm）、R-1201-RET（第 3 分钟，峰值 340 ppm）、R-RET-MAIN（第 9 分钟，峰值 340 ppm）、R-RET-SHAFT（第 16 分钟，峰值 130 ppm）",
+   "推演中没有巷道风流反转或停风",
+   "我方列为受污染、推演 60 分钟内 CO 未达到 24 ppm 的巷道：R-1201-FACE",
+   "R-1201-FACE（9 人）：推演 60 分钟内 CO 未达到 24 ppm",
+   "R-1201-RET（2 人）：CO 第 3 分钟达到 24 ppm，60 分钟内未达到 400 ppm"
+  ]
+ }
+}
