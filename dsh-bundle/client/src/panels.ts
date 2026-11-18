@@ -43,7 +43,58 @@ export interface PanelsHandle {
   dispose(): void
 }
 
-export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: string) => void): PanelsHandle {
+export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: string) => void, onFireTime: (t: number | null) => void = () => {}): PanelsHandle {
+  // 火灾推演回放（第七版）：左栏每次拿到新状态都整块重画，回放控件要跨重画复用（拖动、播放时不能被打断）；换了记录就重置
+  let replay: { recordId: string; horizon: number; el: HTMLElement; stop: () => void } | null = null
+  const dropReplay = (): void => {
+    if (!replay) return
+    replay.stop()
+    replay = null
+    onFireTime(null)
+  }
+  const replayControl = (recordId: string, horizon: number): HTMLElement => {
+    if (replay && replay.recordId === recordId && replay.horizon === horizon) return replay.el
+    dropReplay()
+    const range = h('input', { type: 'range', min: '0', max: String(horizon), step: '1', value: String(horizon), 'aria-label': '推演回放时刻（分钟）' })
+    const out = h('output', null, `共 ${horizon} 分钟`)
+    const play = h('button', { type: 'button' }, '播放')
+    const all = h('button', { type: 'button', title: '显示推演的全部结果' }, '全部')
+    let t: number | null = null
+    let timer = 0
+    const set = (v: number | null): void => {
+      t = v
+      range.value = String(v ?? horizon)
+      out.textContent = v === null ? `共 ${horizon} 分钟` : `第 ${v} 分钟`
+      onFireTime(v)
+    }
+    const stop = (): void => {
+      if (timer) window.clearInterval(timer)
+      timer = 0
+      play.textContent = '播放'
+    }
+    range.addEventListener('input', () => {
+      stop()
+      set(Number(range.value))
+    })
+    play.addEventListener('click', () => {
+      if (timer) return stop()
+      let k = t === null || t >= horizon ? 0 : t
+      set(k)
+      play.textContent = '暂停'
+      timer = window.setInterval(() => {
+        k += 1
+        set(Math.min(k, horizon))
+        if (k >= horizon) stop()
+      }, 250)
+    })
+    all.addEventListener('click', () => {
+      stop()
+      set(null)
+    })
+    replay = { recordId, horizon, el: h('div', { class: 'rm-fire-replay' }, play, range, out, all), stop }
+    return replay.el
+  }
+
   // ── 顶栏 ────────────────────────────────────────────────────────
   const logo = h('div', { class: 'rm-logo', 'aria-hidden': 'true' })
   logo.innerHTML =
@@ -215,6 +266,35 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
         )
       : null
 
+    // 火灾蔓延第二意见（外部火灾推演服务，试验性）：文字照抄记录里的整句；图上一层可按时间回放
+    const fs = ev?.computed ? (ev.fireSpread ?? null) : null
+    if (!fs || fs.status !== 'ok') dropReplay()
+    const notDrawn = fs ? fs.roadways.filter((r) => !r.drawn).map((r) => r.name) : []
+    const fireSec = fs
+      ? section(
+          '火灾蔓延第二意见（推演，试验性）',
+          h('p', { class: 'rm-note' }, `依据记录 ${fs.recordId}：外部火灾推演服务模拟巷道内明火，火源和参数是占位值，只作对照；与上面的污染巷道不一致时由人判断，撤人按预案执行。`),
+          fs.status !== 'ok'
+            ? empty(`第二意见不可用：${fs.note ?? '原因不明'}`)
+            : h(
+                'div',
+                { class: 'rm-fire-sim' },
+                fs.horizonMin !== null && fs.roadways.some((r) => r.drawn) && replayControl(fs.recordId, fs.horizonMin),
+                fs.reachPpm !== null &&
+                  h(
+                    'div',
+                    { class: 'rm-note' },
+                    h('span', { class: 'rm-fire-swatch', style: 'background:#a78bfa' }),
+                    `CO 达到 ${fs.reachPpm} ppm`,
+                    fs.dangerPpm !== null && h('span', { class: 'rm-fire-swatch', style: 'background:#f052e6;margin-left:10px' }),
+                    fs.dangerPpm !== null && `达到 ${fs.dangerPpm} ppm`,
+                  ),
+                h('ul', null, ...fs.lines.map((l) => h('li', null, l))),
+                notDrawn.length > 0 && h('p', { class: 'rm-note' }, `图上未画出（没有映射）：${notDrawn.join('、')}`),
+              ),
+        )
+      : null
+
     const tl = section(
       '事件时间线',
       inc && inc.timeline.length
@@ -237,7 +317,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
         ? h('ul', { class: 'rm-list' }, ...inc.followups.map((f) => h('li', null, h('time', null, hm(f.dueAt)), h('span', null, f.expect || '复评'), f.state === 'due' && h('em', null, '已到点'))))
         : empty('暂无'),
     )
-    left.replaceChildren(...(banner ? [banner] : []), sit, readings, alarms, ...(evac ? [evac] : []), tl, fu)
+    left.replaceChildren(...(banner ? [banner] : []), sit, readings, alarms, ...(evac ? [evac] : []), ...(fireSec ? [fireSec] : []), tl, fu)
   }
 
   const STATE_TONE: Record<string, 'ok' | 'warn' | 'bad' | 'dim'> = { idle: 'dim', working: 'ok', waiting_approval: 'warn', waiting_question: 'warn', alert_pending: 'warn', degraded: 'bad' }
@@ -323,6 +403,7 @@ export function mountPanels(root: HTMLElement, title: string, onFocus: (anchor: 
     },
     dispose() {
       window.clearInterval(timer)
+      replay?.stop()
       root.replaceChildren()
     },
   }

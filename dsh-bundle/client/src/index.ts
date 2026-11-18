@@ -62,6 +62,7 @@ function mount(ctx: ClientContext): () => void {
         title: () => geo.title,
         layoutChanged: () => view?.layoutChanged(),
         focus: (name) => view?.focus(name, 4),
+        fireSpreadTime: (t) => view?.setFireSpreadTime(t),
         tilt: () => view!.tiltDeg,
         setTilt: (d) => view!.setTilt(d),
         reset: () => view!.reset(),

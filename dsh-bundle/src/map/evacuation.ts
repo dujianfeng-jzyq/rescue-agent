@@ -12,6 +12,10 @@
  *
  * 避灾路线第二意见（第六版，docs/design-v6-route-service.md）：同一次研判的 route_compare 记录（输入的 personnel 就是这份记录）
  * 里外部服务给出的路线，另画一条不同样式的“参考路线（外部服务，试验性）”。与我方路线不一致时两条都画，不选。
+ *
+ * 火灾蔓延第二意见（第七版，docs/design-v7-fire-sim.md）：同一次研判的 fire_sim_compare 记录（输入的 personnel 就是这份记录）
+ * 里推演中 CO 达到“到达”浓度的巷道，另画一层（紫色细线），带到达和危险时刻（记录原值），前端据此按时间回放。
+ * 与我方污染巷道不一致时两层都画，不选；浓度阈值也取记录里的参数。
  */
 
 import { readdir, readFile, stat } from 'node:fs/promises'
@@ -83,6 +87,25 @@ export interface GroupView {
   reference: ReferenceView | null
 }
 
+/** 火灾蔓延第二意见（外部火灾推演服务，试验性）：数值全部照抄 fire_sim_compare 记录 */
+export interface FireSpreadView {
+  recordId: string
+  /** ok：有推演结果；unavailable：第二意见不可用（note 写原因） */
+  status: 'ok' | 'unavailable'
+  note: string | null
+  /** 推演时长（分钟） */
+  horizonMin: number | null
+  /** 判读用的 CO 浓度（ppm，记录的参数）：到达、危险 */
+  reachPpm: number | null
+  dangerPpm: number | null
+  /** 推演中 CO 达到“到达”浓度的巷道（按到达先后），漏风通道也在内 */
+  roadways: { roadwayId: string; name: string; reachMin: number; dangerMin: number | null; peakPpm: number; reversed: boolean; drawn: boolean }[]
+  /** 风流反转或停风的巷道 */
+  flowChanged: string[]
+  /** 记录里的整句说明（报告里的那几行） */
+  lines: string[]
+}
+
 export interface EvacuationView {
   recordId: string
   asOf: string
@@ -106,6 +129,8 @@ export interface EvacuationView {
   noticeActionId?: string | null
   /** 第二意见的 route_compare 记录编号；没有为 null */
   referenceRecordId: string | null
+  /** 火灾蔓延第二意见；没有 fire_sim_compare 记录为 null */
+  fireSpread: FireSpreadView | null
 }
 
 type Json = Record<string, any>
@@ -185,6 +210,7 @@ export function evacuationView(
   map: MineMap,
   mineNow: string | null,
   compare: (RecordLike & { as_of?: string }) | null = null,
+  fireCompare: (RecordLike & { as_of?: string }) | null = null,
 ): EvacuationView {
   const res: Json = record.content?.result ?? {}
   const asOf = String(record.as_of ?? res.as_of ?? '')
@@ -200,6 +226,7 @@ export function evacuationView(
     freshness,
     schematic: isSchematic(map),
     referenceRecordId: null as string | null,
+    fireSpread: null as FireSpreadView | null,
   }
   if (!res.computed) {
     return { ...base, computed: false, totalThreatened: null, totalUnderground: null, contaminated: [], groups: [], figures: [] }
@@ -282,8 +309,11 @@ export function evacuationView(
     return { roadwayId: rid, roadwayName: nameOf(rid), anchor: map.roadways[rid] ?? null, count: Number(g.count), arrivalMin: Number(g.arrival_min), route, reference }
   })
 
+  const fireSpread = fireCompare && (fireCompare.source as Json | undefined)?.inputs?.personnel === record.record_id ? fireSpreadView(fireCompare, roads, map, show, stale, figures) : null
+
   return {
     ...base,
+    fireSpread,
     computed: true,
     totalThreatened: typeof res.total_threatened === 'number' ? res.total_threatened : null,
     totalUnderground: typeof res.total_underground === 'number' ? res.total_underground : null,
@@ -295,11 +325,50 @@ export function evacuationView(
 }
 
 /**
+ * 火灾蔓延第二意见：fire_sim_compare 记录 → 左栏的文字和图上的一层（每条推演中 CO 到达的巷道一条线）。
+ * 线上带到达时刻（value）和危险时刻（danger），都是记录原值；巷道没有映射时不画，列表里照常列出。
+ */
+function fireSpreadView(rec: RecordLike, roads: Map<string, NetworkRoadway>, map: MineMap, show: boolean, stale: boolean, figures: MapFigure[]): FireSpreadView {
+  const content: Json = (rec.content as Json | undefined) ?? {}
+  const r: Json = content.result ?? {}
+  const params: Json = content.params ?? {}
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+  const view: FireSpreadView = {
+    recordId: rec.record_id,
+    status: r.status === 'ok' ? 'ok' : 'unavailable',
+    note: typeof r.note === 'string' ? r.note : null,
+    horizonMin: num(r.horizon_min),
+    reachPpm: num(params.co_reach_ppm),
+    dangerPpm: num(params.co_danger_ppm),
+    roadways: [],
+    flowChanged: [],
+    lines: Array.isArray(r.lines) ? r.lines.map(String) : [],
+  }
+  if (view.status !== 'ok') return view
+  for (const x of (r.roadways ?? []) as Json[]) {
+    const rid = String(x.roadway_id)
+    if (x.air_reversed || x.air_stopped) view.flowChanged.push(rid)
+    const reach = num(x.reach_min)
+    if (reach === null) continue
+    const danger = num(x.danger_min)
+    const road = roads.get(rid)
+    const path = road ? roadwayPath(road, map) : null
+    const drawn = !!path && 'pts' in path
+    if (drawn && show) {
+      const pts = (path as { pts: Pt[] }).pts
+      figures.push({ id: `auto:fire:${rid}`, type: 'line', kind: 'fire_spread', points: pts, at: pointAlong(pts, 0.6), value: reach, danger, text: `推演 ${reach} 分钟`, stale })
+    }
+    view.roadways.push({ roadwayId: rid, name: road?.name ?? String(x.name ?? rid), reachMin: reach, dangerMin: danger, peakPpm: num(x.peak_ppm) ?? 0, reversed: !!(x.air_reversed || x.air_stopped), drawn })
+  }
+  return view
+}
+
+/**
  * 该工作面最近一份 personnel 记录（按记录里的 as_of，不看文件时间；没有计算的也算：等级回落后最新的是“未计算”，
  * 不能退回去显示更早的“已计算”）。记录目录按修改时间只读最近的几十份，目录没变就用缓存。
  */
 type PRec = RecordLike & { as_of?: string }
-let cache: { dir: string; mtime: number; panel: string; recs: PRec[]; compares: PRec[] } | null = null
+let cache: { dir: string; mtime: number; panel: string; recs: PRec[]; compares: PRec[]; fires: PRec[] } | null = null
 const SCAN_LIMIT = 40
 
 /**
@@ -317,13 +386,14 @@ export async function personnelRecordById(dir: string, id: string, panel: string
   }
 }
 
-/** 读记录目录里最近的几十份结果记录，留下该工作面的 personnel 和 route_compare 记录；目录没变就用缓存。 */
+/** 读记录目录里最近的几十份结果记录，留下该工作面的 personnel、route_compare、fire_sim_compare 记录；目录没变就用缓存。 */
 async function scan(dir: string, panel: string, mtime: number): Promise<NonNullable<typeof cache>> {
   if (cache && cache.dir === dir && cache.mtime === mtime && cache.panel === panel) return cache
   const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => /^RS-\d{8}T\d{6}-[a-z0-9]{6}\.json$/.test(n))
   const withTime = await Promise.all(names.map(async (n) => ({ n, t: await stat(join(dir, n)).then((s) => s.mtimeMs, () => 0) })))
   const recs: PRec[] = []
   const compares: PRec[] = []
+  const fires: PRec[] = []
   for (const { n } of withTime.sort((a, b) => b.t - a.t).slice(0, SCAN_LIMIT)) {
     try {
       const r = JSON.parse(await readFile(join(dir, n), 'utf8')) as PRec
@@ -331,11 +401,12 @@ async function scan(dir: string, panel: string, mtime: number): Promise<NonNulla
       if ((r.content?.result as Json | undefined)?.panel !== panel && r.panel !== panel) continue
       if (r.source?.script === 'personnel') recs.push(r)
       else if (r.source?.script === 'route_compare') compares.push(r)
+      else if (r.source?.script === 'fire_sim_compare') fires.push(r)
     } catch {
       /* 坏文件跳过 */
     }
   }
-  cache = { dir, mtime, panel, recs, compares }
+  cache = { dir, mtime, panel, recs, compares, fires }
   return cache
 }
 
@@ -351,6 +422,18 @@ export async function routeCompareFor(dir: string, personnelId: string, panel: s
   }
   const c = await scan(dir, panel, mtime)
   return c.compares.find((r) => (r.source as Json | undefined)?.inputs?.personnel === personnelId) ?? null
+}
+
+/** 某份 personnel 记录对应的火灾蔓延第二意见（fire_sim_compare 记录，输入的 personnel 就是它）；找不到返回 null。 */
+export async function fireSimCompareFor(dir: string, personnelId: string, panel: string): Promise<PRec | null> {
+  let mtime = 0
+  try {
+    mtime = (await stat(dir)).mtimeMs
+  } catch {
+    return null
+  }
+  const c = await scan(dir, panel, mtime)
+  return c.fires.find((r) => (r.source as Json | undefined)?.inputs?.personnel === personnelId) ?? null
 }
 
 /**

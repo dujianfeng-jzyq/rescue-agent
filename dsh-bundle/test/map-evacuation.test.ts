@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
 
-import { ageHours, CONTAMINATION_LABEL_FRAC, evacuationView, freshnessOf, latestPersonnelRecord, pointAlong, routeCompareFor } from '../src/map/evacuation.ts'
+import { ageHours, CONTAMINATION_LABEL_FRAC, evacuationView, fireSimCompareFor, freshnessOf, latestPersonnelRecord, pointAlong, routeCompareFor } from '../src/map/evacuation.ts'
 import type { Network } from '../src/map/evacuation.ts'
 import { EMPTY_MAP } from '../src/map/mapping.ts'
 import type { MineMap } from '../src/map/mapping.ts'
@@ -276,5 +276,83 @@ describe('参考路线（外部服务，第二意见）', () => {
     assert.equal((await routeCompareFor(d, P, '1201'))?.record_id, 'RS-20261104T200000-cmp001')
     assert.equal(await routeCompareFor(d, 'RS-20261104T180000-nonexx', '1201'), null)
     assert.equal((await latestPersonnelRecord(d, '1201'))?.record_id, P)
+  })
+})
+
+// 第七版：火灾蔓延第二意见。判读比较结果用 fire_sim_compare 的自检样例（实测返回、人为改写的倒灌、提供方 500）
+const FIRE_CASES = new URL('../../skills/fire-assessment/tests/cases/fire_sim_compare/', import.meta.url)
+const fireCase = (name: string) => JSON.parse(readFileSync(new URL(`${name}.expected.json`, FIRE_CASES), 'utf8'))
+const fireRecord = (personnelId: string, content = fireCase('s4-escalation-60h-red-service'), id = 'RS-20261104T200000-fire01') => ({
+  record_id: id,
+  kind: 'result',
+  panel: '1201',
+  as_of: '2026-11-04T20:00:00',
+  source: { skill: 'fire-assessment', script: 'fire_sim_compare', inputs: { personnel: personnelId } },
+  content,
+})
+
+describe('火灾蔓延第二意见（外部火灾推演服务）', () => {
+  const MAP_ALL: MineMap = { ...MAP, roadways: {} }
+  const P = 'RS-20261104T200000-aaaaaa'
+
+  it('同一次研判的记录：推演中 CO 到达的巷道各画一条 fire_spread 线，带到达和危险时刻（记录原值）', () => {
+    const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, null, fireRecord(P))
+    const fs = v.fireSpread!
+    assert.equal(fs.recordId, 'RS-20261104T200000-fire01')
+    assert.equal(fs.status, 'ok')
+    assert.equal(fs.horizonMin, 60)
+    assert.deepEqual([fs.reachPpm, fs.dangerPpm], [24, 400])
+    assert.deepEqual(fs.lines, fireCase('s4-escalation-60h-red-service').result.lines)
+    assert.deepEqual(fs.roadways.map((r) => [r.roadwayId, r.reachMin, r.dangerMin, r.peakPpm]), [
+      ['R-1201-GOAF', 1, 3, 3700],
+      ['R-1201-RET', 3, null, 340],
+      ['R-RET-MAIN', 9, null, 340],
+      ['R-RET-SHAFT', 16, null, 130],
+    ])
+    const lines = v.figures.filter((f) => f.kind === 'fire_spread')
+    assert.deepEqual(lines.map((f) => [f.id, f.value, f.danger, f.text]), [
+      ['auto:fire:R-1201-GOAF', 1, 3, '推演 1 分钟'],
+      ['auto:fire:R-1201-RET', 3, null, '推演 3 分钟'],
+      ['auto:fire:R-RET-MAIN', 9, null, '推演 9 分钟'],
+      ['auto:fire:R-RET-SHAFT', 16, null, '推演 16 分钟'],
+    ])
+    assert.deepEqual(lines[1]!.points, [POS.N4, POS.N5])
+    // 我方污染巷道照常画，两层并列
+    assert.equal(v.figures.filter((f) => f.kind === 'contaminated').length, 4)
+  })
+
+  it('风流反转写进 flowChanged；没有映射的巷道列出但不画', () => {
+    const map: MineMap = { ...MAP_ALL, nodes: Object.fromEntries(Object.entries(POS).filter(([k]) => k !== 'N7')) }
+    const v = evacuationView(record(RESULT, P), NETWORK, map, NOW_FRESH, null, fireRecord(P, fireCase('s4-synthetic-backflow')))
+    const fs = v.fireSpread!
+    assert.deepEqual(fs.flowChanged, ['R-1201-IN'])
+    const shaft = fs.roadways.find((r) => r.roadwayId === 'R-RET-SHAFT')!
+    assert.equal(shaft.drawn, false)
+    assert.equal(v.figures.find((f) => f.id === 'auto:fire:R-RET-SHAFT'), undefined)
+    assert.equal(fs.roadways.find((r) => r.roadwayId === 'R-1201-IN')!.reversed, true)
+  })
+
+  it('第二意见不可用：只有原因，不画线；记录不是这份 personnel 的：不用', () => {
+    const down = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, null, fireRecord(P, fireCase('s4-provider-500')))
+    assert.equal(down.fireSpread?.status, 'unavailable')
+    assert.match(down.fireSpread!.note!, /服务返回 500/)
+    assert.equal(down.figures.filter((f) => f.kind === 'fire_spread').length, 0)
+    const other = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, NOW_FRESH, null, fireRecord('RS-20261104T190000-zzzzzz'))
+    assert.equal(other.fireSpread, null)
+  })
+
+  it('记录过期太久：文字保留，图上不画', () => {
+    const v = evacuationView(record(RESULT, P), NETWORK, MAP_ALL, '2026-11-05T09:00:00', null, fireRecord(P))
+    assert.equal(v.fireSpread?.roadways.length, 4)
+    assert.equal(v.figures.filter((f) => f.kind === 'fire_spread').length, 0)
+  })
+
+  it('fireSimCompareFor 按输入的 personnel 编号找记录', async () => {
+    const d = await mkdtemp(join(tmpdir(), 'evac-fire-'))
+    await writeFile(join(d, `${P}.json`), JSON.stringify(record(RESULT, P)))
+    await writeFile(join(d, 'RS-20261104T200000-fire01.json'), JSON.stringify(fireRecord(P)))
+    await writeFile(join(d, 'RS-20261104T190000-fire02.json'), JSON.stringify(fireRecord('RS-20261104T190000-other0', undefined, 'RS-20261104T190000-fire02')))
+    assert.equal((await fireSimCompareFor(d, P, '1201'))?.record_id, 'RS-20261104T200000-fire01')
+    assert.equal(await fireSimCompareFor(d, 'RS-nope', '1201'), null)
   })
 })

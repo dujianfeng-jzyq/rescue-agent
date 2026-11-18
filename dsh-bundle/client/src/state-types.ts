@@ -71,6 +71,18 @@ export interface StateData {
       reference: null | { status: 'route' | 'no_route' | 'unavailable'; caseText: string; text: string; drawn: boolean; missing: string[] }
     }[]
     referenceRecordId: string | null
+    /** 火灾蔓延第二意见（外部火灾推演服务，试验性，第七版）；没有为 null */
+    fireSpread?: null | {
+      recordId: string
+      status: 'ok' | 'unavailable'
+      note: string | null
+      horizonMin: number | null
+      reachPpm: number | null
+      dangerPpm: number | null
+      roadways: { roadwayId: string; name: string; reachMin: number; dangerMin: number | null; peakPpm: number; reversed: boolean; drawn: boolean }[]
+      flowChanged: string[]
+      lines: string[]
+    }
   }
   readings: { panel: string | null; rows: ReadingRow[]; error?: string }
   alarms: { items: { id: string; sensorId: string | null; sensor: string; measurand: string | null; level: string; value: number | null; threshold: number | null; unit: string; message: string; raisedAt: string; anchor: string | null }[]; error?: string }

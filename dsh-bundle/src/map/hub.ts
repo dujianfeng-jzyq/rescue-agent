@@ -33,7 +33,7 @@ export interface MapFigure {
   id: string
   /** line：折线（污染巷道、撤人路线）；group：一组受威胁人员（人数）；target：撤离终点（出口、避难硐室） */
   type: 'line' | 'group' | 'target'
-  /** line：contaminated | route | reference（外部服务的参考路线，第六版）；group：threatened | blocked；target：exit | refuge */
+  /** line：contaminated | route | reference（外部服务的参考路线，第六版）| fire_spread（火灾推演中 CO 到达的巷道，第七版）；group：threatened | blocked；target：exit | refuge */
   kind: string
   points?: [number, number][]
   /** group/target：位置；line：标签位置（可选，没有时按长度取中点） */
@@ -42,6 +42,8 @@ export interface MapFigure {
   text?: string
   /** 数值：污染巷道的到达时间（分钟，用于着色）、一组的人数；记录原值 */
   value?: number | null
+  /** fire_spread：推演中达到危险浓度的时刻（分钟，记录原值）；没达到为 null。value 是到达时刻 */
+  danger?: number | null
   /** 记录已过期：画成灰色 */
   stale?: boolean
 }
@@ -126,6 +128,7 @@ export class MapHub {
       if (f.at !== undefined && !pt(f.at)) throw new Error('折线的 at（标签位置）要是 [x, y]')
     } else if (!pt(f.at)) throw new Error(`${f.type} 图元需要 at：[x, y]`)
     if (f.value !== undefined && f.value !== null && !num(f.value)) throw new Error('value 要是数字')
+    if (f.danger !== undefined && f.danger !== null && !num(f.danger)) throw new Error('danger 要是数字')
     return { ...f, ...(f.text === undefined ? {} : { text: f.text.slice(0, 60) }) }
   }
 

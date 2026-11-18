@@ -45,6 +45,8 @@ export interface MapFigure {
   points?: [number, number][]
   at?: [number, number]
   value?: number | null
+  /** fire_spread：推演中达到危险浓度的时刻（分钟）；value 是到达时刻 */
+  danger?: number | null
   text?: string
   stale?: boolean
 }

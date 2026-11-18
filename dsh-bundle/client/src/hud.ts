@@ -273,6 +273,17 @@ html.rm-hide-left .rm-left, html.rm-hide-right .rm-right { display: none; }
 .rm-evac-ref small { opacity: .85; }
 .rm-evac-ref[data-status="unavailable"] { opacity: .7; }
 .rm-fig-contaminated { background: rgba(216,58,61,.85); }
+.rm-fig-fire_spread { background: rgba(124,92,214,.88); font-size: 10px; }
+.rm-fire-sim { font-size: 12px; }
+.rm-fire-sim ul { margin: 4px 0; padding-left: 16px; }
+.rm-fire-sim li { margin: 2px 0; }
+.rm-fire-sim li[data-danger="1"] b { color: #f052e6; }
+.rm-fire-sim li b { color: #b9a4ff; font-weight: 600; }
+.rm-fire-swatch { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin: 0 4px 0 0; border-radius: 2px; }
+.rm-fire-replay { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.rm-fire-replay input[type="range"] { flex: 1; accent-color: #a78bfa; }
+.rm-fire-replay button { font-size: 11px; padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.06); color: inherit; cursor: pointer; }
+.rm-fire-replay output { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; opacity: .9; }
 .rm-fig-target { background: #1f6f9d; }
 .rm-fig-stale { opacity: .55; filter: grayscale(1); }
 .rm-mark {
@@ -312,6 +323,8 @@ export interface HudHandlers {
   /** 面板显示/隐藏之后调用，让地图重新适配 */
   layoutChanged(): void
   focus(name: string): void
+  /** 火灾推演层的回放时刻（分钟）；null 显示全部 */
+  fireSpreadTime(t: number | null): void
   tilt(): number
   setTilt(deg: number): void
   reset(): void
@@ -373,7 +386,7 @@ export function mountHud(hd: HudHandlers): Hud {
   hud.id = HUD_ID
   // 放在 #root 前面：DSH 的抽屉和弹窗（#root 里）要盖在自绘面板上面
   document.body.insertBefore(hud, document.getElementById('root'))
-  const panels: PanelsHandle = mountPanels(hud, hd.title(), (name) => hd.focus(name))
+  const panels: PanelsHandle = mountPanels(hud, hd.title(), (name) => hd.focus(name), (t) => hd.fireSpreadTime(t))
   const tools = hud.querySelector('.rm-tools') as HTMLElement
   // 智能体卡片的高度决定聊天区从哪里开始（CSS 变量 --rm-agent-h）
   const agentCard = hud.querySelector('.rm-right') as HTMLElement

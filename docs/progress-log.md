@@ -237,4 +237,5 @@
 - **F3 接入研判流程**：`run_fire_assessment` 在避灾路线第二意见之后加 `fire_sim_request` → `fire_sim`（证据记录，`collect_kind: fire_sim`）→ `fire_sim_compare`，失败不中断；研判报告加“火灾蔓延第二意见”一节（模板 `fire_sim_opinion`，没有时为 null，原有报告不变）；流程结果多 `fire_sim_opinion`。证据插件配置 `fireSimUrl`、`fireSimToken`、`fireSimTimeoutMs`（`RESCUE_MCP_FIRE_SIM_URL`、`..._TOKEN`）。
 - **Docker**：`.env` 里设了 `RESCUE_FIRE_SIM_URL` 时 `make demo-up` 启用 compose 的 `fire` 组（`fire-sim` 容器），可与第六版的 `route` 组同时启用（`demo.sh` 的 `COMPOSE_PROFILES` 改为按设置拼接）。**只验证了 `docker compose config`，没有实际起演示环境跑过。**
 - **踩到的坑**：在仓库根目录对 `skills/`、`scripts/` 下的文件跑 `ruff format` 会用缺省行宽 88（配置在 `mcp/pyproject.toml`），要在 `mcp/` 目录里运行；仓库本来也没有整体按 `ruff format` 排版，不要对已有文件跑。
-- **遗留**：F4（地图上按 CO 到达时刻着色、按时间回放）、F5（按提供方答复调整；推演结果作为路径规划服务的烟雾输入）、F6（矿方数据替换占位值）。
+- **F4 地图**（设计文档附录 A.7）：推演中 CO 到达的巷道画成紫色细线（已达危险浓度为品红），与我方污染巷道并列；左栏“火灾蔓延第二意见”一节带回放滑块和“播放”，按记录里的到达、危险时刻逐分钟显示，回放时我方污染巷道调淡。只认同一次研判的 `fire_sim_compare` 记录。用临时测试架（真实地图包 + 自检样例记录，Playwright 截图）看过 s4 实测和人为倒灌两组：第一版的细线压在污染巷道上看不清，改为加粗并在回放时调淡污染巷道。**没有在 DSH 网页端、Docker 演示里看过。**
+- **遗留**：F5（按提供方答复调整；推演结果作为路径规划服务的烟雾输入）、F6（矿方数据替换占位值）。

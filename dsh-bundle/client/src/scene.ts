@@ -89,6 +89,10 @@ function lengthMidpoint(pts: [number, number][]): [number, number] {
   }
   return pts[0]!
 }
+/** 火灾推演层（第二意见）：CO 已到达为紫色，已达危险浓度为品红；和我方污染巷道（红到橙）、路线（绿、蓝）区分开 */
+const FIRE_REACH = '#a78bfa'
+const FIRE_DANGER = '#f052e6'
+
 /** 污染巷道的颜色：到达越早越红（按本批污染巷道的相对到达时间，只是显示，数值以文字为准） */
 function contaminationColor(rel: number): string {
   const r = Math.min(Math.max(rel, 0), 1)
@@ -563,20 +567,25 @@ export class MapView {
       const contaminated = d.kind === 'contaminated'
       // 参考路线（外部服务，第二意见）：蓝色细虚线、不流动，和我方路线（绿色流动虚线）区分开；略高一层，重合时两条都看得见
       const reference = d.kind === 'reference'
-      const color = stale ? FIG_GREY : contaminated ? contaminationColor(0) : reference ? '#4d8ff0' : '#35c46a'
+      // 火灾推演层（第二意见）：细实线，压在污染巷道（粗、半透明）上面，两层都看得见；颜色按回放时间设（applyFireTime）
+      const fire = d.kind === 'fire_spread'
+      const solid = contaminated || fire
+      const color = stale ? FIG_GREY : contaminated ? contaminationColor(0) : reference ? '#4d8ff0' : fire ? FIRE_REACH : '#35c46a'
       const geom = new LineGeometry()
-      geom.setPositions(d.points.flatMap(([x, y]) => [x, y, contaminated ? 1 : reference ? 1.8 : 1.5]))
-      const mat = new LineMaterial({ color: new Color(color).getHex(), linewidth: contaminated ? 7 : reference ? 2.5 : 4, transparent: true, opacity: stale ? 0.45 : contaminated ? 0.6 : 0.95, dashed: !contaminated, dashSize: reference ? 6 : 14, gapSize: reference ? 6 : 9, worldUnits: false, depthWrite: false })
+      geom.setPositions(d.points.flatMap(([x, y]) => [x, y, contaminated ? 1 : reference ? 1.8 : fire ? 1.2 : 1.5]))
+      const mat = new LineMaterial({ color: new Color(color).getHex(), linewidth: contaminated ? 7 : reference ? 2.5 : fire ? 4 : 4, transparent: true, opacity: stale ? 0.45 : contaminated ? (this.fireT === null ? 0.6 : 0.2) : 0.95, dashed: !solid, dashSize: reference ? 6 : 14, gapSize: reference ? 6 : 9, worldUnits: false, depthWrite: false })
       mat.resolution.set(this.host.clientWidth || window.innerWidth, this.host.clientHeight || window.innerHeight)
       const line = new Line2(geom, mat)
-      if (!contaminated) line.computeLineDistances()
-      line.renderOrder = contaminated ? 1 : reference ? 3 : 2
+      if (!solid) line.computeLineDistances()
+      line.renderOrder = contaminated ? 1 : reference ? 3 : fire ? 1.5 : 2
       this.scene.add(line)
       // 标签位置：服务端给的 at（污染巷道在入口一端），没有就按长度取中点
       const at = d.at ?? lengthMidpoint(d.points)
       const el = d.text ? this.figLabel(d, `rm-fig rm-fig-${d.kind}`) : undefined
-      this.figs.set(d.id, { data: d, line, el, x: at[0], y: at[1] })
+      const fig: Fig = { data: d, line, el, x: at[0], y: at[1] }
+      this.figs.set(d.id, fig)
       if (contaminated) this.recolorContaminated()
+      if (fire) this.applyFireTime(fig)
     } else if ((d.type === 'group' || d.type === 'target') && d.at) {
       const el = this.figLabel(d, `rm-fig rm-fig-${d.type} rm-fig-${d.kind}`)
       this.figs.set(d.id, { data: d, el, x: d.at[0], y: d.at[1] })
@@ -600,6 +609,35 @@ export class MapView {
       ;(f.line!.material as LineMaterial).color.set(contaminationColor(rel))
     }
     this.dirty = true
+  }
+
+  /** 火灾推演的回放时刻（分钟）；null 表示显示推演的全部结果 */
+  private fireT: number | null = null
+
+  /**
+   * 按回放时刻显示火灾推演层：到达时刻不晚于 t 的巷道才显示，危险时刻不晚于 t 的画成品红。
+   * 时刻都是记录原值（图元的 value、danger），这里只比较、不计算。
+   */
+  setFireSpreadTime(t: number | null): void {
+    this.fireT = t
+    for (const f of this.figs.values()) {
+      if (f.data.kind === 'fire_spread') this.applyFireTime(f)
+      // 回放时把我方污染巷道（粗线）调淡，推演的蔓延看得清；回到“全部”恢复
+      else if (f.data.kind === 'contaminated' && f.line) (f.line.material as LineMaterial).opacity = f.data.stale ? 0.45 : t === null ? 0.6 : 0.2
+    }
+    this.dirty = true
+  }
+
+  private applyFireTime(f: Fig): void {
+    const t = this.fireT
+    const reach = typeof f.data.value === 'number' ? f.data.value : 0
+    const danger = typeof f.data.danger === 'number' ? f.data.danger : null
+    const visible = t === null || reach <= t
+    if (f.line) {
+      f.line.visible = visible
+      if (!f.data.stale) (f.line.material as LineMaterial).color.set(danger !== null && (t === null || danger <= t) ? FIRE_DANGER : FIRE_REACH)
+    }
+    if (f.el) f.el.style.display = visible ? '' : 'none'
   }
 
   private figLabel(d: MapFigure, cls: string): HTMLDivElement {
@@ -715,7 +753,7 @@ export class MapView {
       placed.push([px - 4, py - 30, m.tag.offsetWidth || 120, m.tag.offsetHeight || 22])
     }
     for (const f of this.figs.values()) {
-      if (!f.el) continue
+      if (!f.el || f.el.style.display === 'none') continue
       v.set(f.x, f.y, 3).project(this.camera)
       const px = (v.x * 0.5 + 0.5) * w
       const py = (-v.y * 0.5 + 0.5) * h

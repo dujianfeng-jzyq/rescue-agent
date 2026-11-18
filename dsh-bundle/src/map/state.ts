@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { IncidentStore } from '../incident/store.ts'
 import type { Entry, IncidentView } from '../incident/store.ts'
 import type { ActivitySnapshot } from './activity.ts'
-import { ageHours, evacuationView, HIDE_H, latestPersonnelRecord, personnelRecordById, routeCompareFor } from './evacuation.ts'
+import { ageHours, evacuationView, fireSimCompareFor, HIDE_H, latestPersonnelRecord, personnelRecordById, routeCompareFor } from './evacuation.ts'
 import type { EvacuationView, Network } from './evacuation.ts'
 import { anchorForPanel, anchorForSensor, EMPTY_MAP } from './mapping.ts'
 import type { MineMap } from './mapping.ts'
@@ -550,7 +550,8 @@ export async function buildState(deps: StateDeps): Promise<MapState> {
         const computed = !!(rec.content?.result as { computed?: boolean } | undefined)?.computed
         const net = computed && deps.network ? await deps.network().catch(() => null) : null
         const cmp = computed ? await routeCompareFor(deps.recordDir, rec.record_id, incident.panel).catch(() => null) : null
-        evacuation = { ...evacuationView(rec, net, map, mine.now, cmp), noticeActionId: fromNotice ? notice!.actionId : null }
+        const fire = computed ? await fireSimCompareFor(deps.recordDir, rec.record_id, incident.panel).catch(() => null) : null
+        evacuation = { ...evacuationView(rec, net, map, mine.now, cmp, fire), noticeActionId: fromNotice ? notice!.actionId : null }
       }
     } catch {
       evacuation = null // 记录读不了：不显示，不影响其他部分

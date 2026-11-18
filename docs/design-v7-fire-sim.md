@@ -1,6 +1,6 @@
 # 第七版设计：接入外部火灾推演服务（火灾蔓延第二意见）
 
-状态：**F1–F3 已实施**（2026-11-17，见 `docs/progress-log.md` 第七版进度）；F4（地图）待做，F5、F6 等提供方答复和矿方数据。
+状态：**F1–F4 已实施**（2026-11-17，见 `docs/progress-log.md` 第七版进度）；F5、F6 等提供方答复和矿方数据。
 
 本文分两部分：
 
@@ -172,7 +172,7 @@ F1–F4 只依赖当前已有的服务，可以先做；F5、F6 随对方答复�
 | 请求生成脚本 | `skills/fire-assessment/scripts/fire_sim_request.py` | 输入：证据（网络）+ `warning` 记录。输出：适配服务的参数、火源巷道和位置 |
 | 判读比较脚本 | `skills/fire-assessment/scripts/fire_sim_compare.py` | 输入：证据 + `personnel` + 请求 + 服务调用的证据。输出：按我方巷道（两段合并）的到达时刻（≥ `co_reach_ppm`）、危险时刻（≥ `co_danger_ppm`）、峰值、风流反转；与我方受污染巷道比较（两者都有及时间差、只有推演有、只有我方有；漏风通道不参与）；每组受威胁人员的推演到达和危险时刻、我方避灾路线经过的危险巷道；我方判为不受威胁、推演中 CO 会到达的人员（`extra_people`）；报告整句 `lines` |
 | 编排 | `dsh-bundle/src/fire-loop/assessment.ts` 在避灾路线第二意见之后加 `fire_sim_request` → `fire_sim`（**证据**记录，`collect_kind: fire_sim`，内容是适配服务的返回或错误，`parent_ids` 是请求记录）→ `fire_sim_compare`；证据插件新增 `collectFireSim(请求记录)` | 没配置（`RESCUE_MCP_FIRE_SIM_URL` 为空）、没算受威胁人员或等级不够时跳过，不产生比较记录，报告没有这一节；任何一步失败只记 `failed`，研判照常完成，报告写“第二意见不可用” |
-| 显示 | 研判报告“受威胁人员”后、避灾路线第二意见之后的“火灾蔓延第二意见”一节（模板 `fire_sim_opinion`）；流程结果多 `fire_sim_opinion`（记录编号、状态、计数）；推演不可用时卡片警告 | 地图（F4）待做 |
+| 显示 | 研判报告“受威胁人员”后、避灾路线第二意见之后的“火灾蔓延第二意见”一节（模板 `fire_sim_opinion`）；流程结果多 `fire_sim_opinion`（记录编号、状态、计数）；推演不可用时卡片警告 | 地图见 A.7 |
 
 ### A.4 两种方法的差别（比较时要注意）
 
@@ -193,6 +193,14 @@ F1–F4 只依赖当前已有的服务，可以先做；F5、F6 随对方答复�
 - 本地开发：`RESCUE_FIRE_SIM_URL=http://192.168.0.200:5079 make up` 另外启动 `fire_sim`（端口 8108）；DSH 侧设 `RESCUE_MCP_FIRE_SIM_URL=http://127.0.0.1:8108/mcp` 才会请求（不设时研判里该步骤记为“未配置”并跳过）。
 - 接口一致性检查：`cd mcp && uv run python -m rescue_fire_sim.check http://192.168.0.200:5079`（2026-11-17 11/11 通过或为提示）。
 - Docker 演示：在 `.env` 里设 `RESCUE_FIRE_SIM_URL`，`make demo-up` 就启用 compose 的 `fire` 组（`fire-sim` 容器）并把地址给 DSH；与第六版的 `route` 组可以同时启用。fire_sim 的令牌 `RESCUE_MCP_FIRE_SIM_TOKEN` 随其他令牌生成在 `var/demo/tokens.env`。
+
+### A.7 地图（F4）
+
+- **取哪份记录**：与第六版参考路线相同，只认同一次研判的 `fire_sim_compare` 记录（输入的 `personnel` 就是地图正在显示的那份 personnel 记录，`src/map/evacuation.ts` 的 `fireSimCompareFor`）；记录过期太久时文字保留、图上不画。
+- **图上**：推演中 CO 达到“到达”浓度的每条巷道一条线（图元 `kind: fire_spread`，`value` 是到达时刻、`danger` 是危险时刻，都是记录原值），标签“推演 N 分钟”。紫色细实线，已达危险浓度的为品红；压在我方污染巷道（红到橙的粗线）上面，两层并列、不选。没有映射的巷道不画，左栏列出。
+- **左栏**：“火灾蔓延第二意见（推演，试验性）”一节：依据记录和说明、回放控件、两种颜色对应的浓度（取记录里的参数）、记录里的整句（与报告相同）。
+- **回放**：拖动滑块或点“播放”（每 0.25 秒推进 1 分钟），只显示到达时刻不晚于当前时刻的巷道，危险时刻已过的变品红；回放时我方污染巷道调淡，“全部”恢复。前端只比较记录里的时刻，不计算。左栏每 3 秒整块重画，回放控件跨重画复用，换了记录才重置。
+- **测试**：`test/map-evacuation.test.ts`（图元和数值照抄记录、反转、没有映射、不可用、别的研判的记录、过期）；浏览器端用临时测试架（真实地图包 + 自检样例记录 + Playwright 截图）看过 s4 实测和人为倒灌两组，没有在 DSH 网页端里看过。
 
 ## 附录 B. 待专家审定的新增项（已加进 `docs/expert-review.md` 第十节）
 
