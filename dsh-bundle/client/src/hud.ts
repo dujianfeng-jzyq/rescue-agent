@@ -84,7 +84,7 @@ ${ON} ${CENTER} > * { background: transparent !important; }
 ${ON}.rm-hide-chat ${CENTER} { right: calc(-1 * var(--rm-chat-w) - 24px); visibility: hidden; pointer-events: none;
   transition: right var(--rm-slide-t) var(--rm-ease), bottom var(--rm-slide-t) var(--rm-ease), top var(--rm-slide-t) var(--rm-ease), visibility 0s linear var(--rm-slide-t); }
 /* 人工确认卡片和提问卡片（处置选项、现场条件）放到画面下方、左右栏之间的区域，底边对齐面板（2026-11-10 演示复看：右下角不醒目，
-   窄栏里显示不全，先移到正中；2026-11-17：正中会挡住地图，改到下方）。宽度不超过左右栏之间的空隙，高度最多半屏，超出在卡片里滚动。
+   窄栏里显示不全，先移到正中；2026-11-17：正中会挡住地图，改到下方）。宽度不超过左右栏之间的空隙，高度按内容（2026-11-19：去掉半屏上限，矮屏上要滚动才能点到按钮），只在超过整屏时在卡片里滚动。
    卡片仍是 DSH 会话组件里的原件，只改位置：会话列的 backdrop-filter 会让 fixed 定位相对它而不是视口，有卡片时去掉；
    对话区被收起时也要显示卡片（列保留布局但不可见，只有卡片可见）。
    外层（DSH 的 root/frame）只当定位容器：不加底色、边框和压暗（第八次复看：外面多一层背景），里面的卡片拉满宽度 */
@@ -95,14 +95,14 @@ ${ON} ${CENTER} :is([data-approval-key], [data-question-key]) {
   background: transparent !important; border: 0 !important; box-shadow: none !important;
 }
 ${ON} ${CENTER} :is([data-approval-key], [data-question-key]) > * {
-  width: 100% !important; max-width: none !important; max-height: 50vh !important; overflow: auto; box-sizing: border-box; margin: 0 !important;
+  width: 100% !important; max-width: none !important; max-height: calc(100vh - 32px) !important; overflow: auto; box-sizing: border-box; margin: 0 !important;
   background: rgb(12, 28, 52) !important; box-shadow: 0 16px 60px rgba(0, 0, 0, 0.65) !important;
   animation: rm-card-in var(--rm-slide-t) var(--rm-ease);
 }
 /* 卡片被 DSH 移除后留一个克隆往下滑出（hud.ts watchCards），样式照上面的卡片 */
 .rm-ghost { position: fixed; left: calc((var(--rm-l) + 100vw - var(--rm-r)) / 2); bottom: 16px; transform: translateX(-50%); z-index: 100; pointer-events: none; ${NAVY} }
 .rm-ghost > * { margin: 0 !important; }
-.rm-ghost > * > * { width: 100% !important; max-width: none !important; max-height: 50vh !important; overflow: hidden; box-sizing: border-box; margin: 0 !important;
+.rm-ghost > * > * { width: 100% !important; max-width: none !important; max-height: calc(100vh - 32px) !important; overflow: hidden; box-sizing: border-box; margin: 0 !important;
   background: rgb(12, 28, 52) !important; box-shadow: 0 16px 60px rgba(0, 0, 0, 0.65) !important; animation: rm-card-out 0.3s ease-in forwards; }
 .rm-ghost [data-approval-key] > * { border: 1px solid rgba(245, 197, 24, 0.7) !important; }
 .rm-ghost [data-question-key] > * { border: 1px solid rgba(90, 160, 255, 0.6) !important; }
