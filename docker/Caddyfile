@@ -1,10 +1,13 @@
 # 对外入口（compose 的 proxy 服务，docs/deploy.md）。站点地址、登录口令由 scripts/demo.sh 按 .env 算好经环境变量传入：
 #   DEMO_SITE       https://demo.example.com（域名：自动申请证书，要能从公网访问 80 或 443）
 #                   https://1.2.3.4（IP：Caddy 自签证书，浏览器会提示不安全，点继续）
+#                   https://demo.example.com:8443 + DEMO_TLS=internal（域名但申请不到正式证书，如经 frp 转发非标准端口：自签证书）
 #                   http://10.0.0.5:8080（不加密，只在可信内网用）
 #   DEMO_AUTH_USER / DEMO_AUTH_HASH   网页端的登录口令（浏览器弹窗），网页端另有网址里的 token；控制台只靠控制令牌
 {
 	admin off
+	# DEMO_TLS=internal 时为 local_certs：所有站点用 Caddy 自己的 CA 签发（自签证书）；空：域名申请正式证书、IP 自动自签
+	{$DEMO_CADDY_TLS}
 	# 用 IP 访问时浏览器不发送 SNI，没有它 Caddy 选不出证书（TLS 握手失败）
 	default_sni {$DEMO_HOST}
 }

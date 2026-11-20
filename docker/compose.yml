@@ -195,6 +195,7 @@ services:
     environment:
       DEMO_SITE: ${DEMO_SITE:-}                   # Caddy 的站点地址（如 https://demo.example.com、https://1.2.3.4、http://10.0.0.5:8080）
       DEMO_HOST: ${DEMO_HOST:-}                   # 站点的主机名或 IP（没有 SNI 时用哪张证书）
+      DEMO_CADDY_TLS: ${DEMO_CADDY_TLS:-}         # local_certs：自签证书（demo.sh 按 .env 的 DEMO_TLS=internal 设）
       DEMO_AUTH_USER: ${DEMO_AUTH_USER:-demo}
       DEMO_AUTH_HASH: ${DEMO_AUTH_HASH:-}         # 登录口令的 bcrypt 散列（demo.sh 由 .env 的 DEMO_AUTH_PASSWORD 算）
     volumes:

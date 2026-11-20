@@ -97,7 +97,7 @@ public_config() {
   PROFILES=()
   rm -f "$DEMO/proxy-ports.yml"
   if [ -z "${DEMO_PUBLIC_URL:-}" ]; then
-    export DEMO_PUBLIC_URL= DEMO_TRUSTED_HOSTS= DEMO_SITE= DEMO_HOST=
+    export DEMO_PUBLIC_URL= DEMO_TRUSTED_HOSTS= DEMO_SITE= DEMO_HOST= DEMO_CADDY_TLS=
     return 0
   fi
   : "${DEMO_AUTH_PASSWORD:?对外访问要在 $ENV_FILE 里设 DEMO_AUTH_PASSWORD（浏览器登录口令）}"
@@ -107,6 +107,20 @@ public_config() {
   [ "$rest" = "$hostport" ] || die "DEMO_PUBLIC_URL 不支持子路径（只能是 https://主机[:端口]/）：$DEMO_PUBLIC_URL"
   if [[ "$hostport" == *:* ]]; then host="${hostport%:*}"; port="${hostport##*:}"; else host="$hostport"; port=$([ "$scheme" = https ] && echo 443 || echo 80); fi
   export DEMO_SITE="$scheme://$hostport" DEMO_HOST="$host" DEMO_PUBLIC_URL="$url/" DEMO_TRUSTED_HOSTS="$host:$port $host"
+  # 证书：auto（缺省）= 域名申请正式证书（公网要能访问 80 或 443）、IP 自动自签；internal = 一律自签
+  export DEMO_CADDY_TLS=
+  case "${DEMO_TLS:-auto}" in
+    auto)
+      if [ "$scheme" = https ] && [ "$port" != 443 ] && ! [[ "$host" =~ ^[0-9.]+$ ]]; then
+        echo "  ! $DEMO_PUBLIC_URL 是域名加非标准端口，多半申请不到正式证书（要求公网能访问本机 80 或 443）；打不开时在 $ENV_FILE 里设 DEMO_TLS=internal 改用自签证书" >&2
+      fi
+      ;;
+    internal)
+      [ "$scheme" = https ] || die "DEMO_TLS=internal 要求 DEMO_PUBLIC_URL 用 https://（现在是 $DEMO_PUBLIC_URL）"
+      DEMO_CADDY_TLS=local_certs
+      ;;
+    *) die "DEMO_TLS 只能是 auto 或 internal：$DEMO_TLS" ;;
+  esac
   local bind="${DEMO_BIND:-0.0.0.0}"
   {
     echo "# demo.sh 按 DEMO_PUBLIC_URL 生成，不要手改"
