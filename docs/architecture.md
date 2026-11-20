@@ -129,4 +129,5 @@
 | `var/map/` | 人工放置（地图包，git 忽略） | 通风图几何和映射表；真实矿井图不进仓库 |
 | `var/log/*.log`、`var/run/*.pid` | 启动脚本 | 服务日志与进程 |
 | `var/eval/` | 评测、验证 | 评测用的台账、记录、事件库、审计和验证日志 |
-| `var/demo/` | Docker 演示环境 | 演示数据卷（记录、事件库、台账、审计、DSH 会话），不混进开发的 `var/`；`make demo-reset` 清空 |
+| `var/demo/` | Docker 演示环境 | 演示数据卷（记录、事件库、台账、审计、DSH 会话），不混进开发的 `var/`；新一轮演示（控制台按钮或 `make demo-reset`）把上一轮移到 `var/demo/archive/`；控制目录 `var/demo/control/`（docs/deploy.md） |
+| `var/dist/` | `make demo-pack` | 服务器部署的发布包 |

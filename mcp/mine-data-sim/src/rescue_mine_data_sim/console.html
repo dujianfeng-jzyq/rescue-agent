@@ -35,6 +35,12 @@
 </header>
 <main>
   <div>
+    <section id="roundBox" style="display:none">
+      <h2>演示轮次 <span id="roundState" class="tag"></span></h2>
+      <div class="row"><button class="primary" id="roundBtn" onclick="newRound()">新一轮演示</button></div>
+      <div id="roundMsg" class="muted">停止智能体和监听器，把上一轮的记录、事件、会话、台账移到归档，模拟矿井回到常态，再重新启动（约半分钟）。已经打开的大屏会自动刷新，不用重新登录。</div>
+      <div id="roundLogin" class="muted" style="margin-top:6px;word-break:break-all"></div>
+    </section>
     <section id="directorBox" style="display:none">
       <h2>演示导演 <span id="dirState" class="tag"></span></h2>
       <div class="row"><button class="primary" id="dirStart" onclick="dirStart()">开始演示</button></div>
@@ -194,7 +200,35 @@ function renderDirector(d) {
   $('dirLog').innerHTML = d.log.slice().reverse().map((l) => `<li>${esc(l.at.replace('T', ' '))} ${esc(l.text)}</li>`).join('')
 }
 
+const ROUND_BUSY = ['stopping', 'archiving', 'resetting_mine']
+const ROUND_HELP = $('roundMsg').textContent.trim()
+let roundJob = ''
+async function refreshRound() {
+  let r
+  try { r = await api('/sim/demo/round') } catch (e) { r = { available: true, error: e.message } }
+  const box = $('roundBox')
+  if (!r || r.available === false) { box.style.display = 'none'; return }
+  box.style.display = ''
+  const job = r.job || {}, busy = ROUND_BUSY.includes(job.state)
+  $('roundState').textContent = r.error ? '归档服务不可用' : busy ? '重置中' : `第 ${r.round} 轮`
+  $('roundState').className = `tag ${r.error || job.state === 'failed' ? 'bad' : busy ? 'warn' : ''}`
+  $('roundBtn').disabled = busy || !!r.error
+  if (r.error) $('roundMsg').innerHTML = `<span class="bad">${esc(r.error)}</span>`
+  else if (job.state && job.state !== 'idle') $('roundMsg').innerHTML = `<span class="${job.state === 'failed' ? 'bad' : busy ? 'warn' : 'ok'}">${esc(job.message || '')}</span>`
+  else $('roundMsg').textContent = ROUND_HELP
+  $('roundLogin').innerHTML = r.login_url
+    ? `新电脑打开网页端用这个链接（智能体每次重启都会换，只在首次登录时用）：<br><a href="${esc(r.login_url)}" target="_blank" rel="noopener">${esc(r.login_url)}</a>`
+    : busy ? '' : '网页端登录链接：智能体启动后显示'
+  if (roundJob && ROUND_BUSY.includes(roundJob) && job.state === 'done') load()  // 刚完成：重新取场景和测点
+  roundJob = job.state || ''
+}
+function newRound() {
+  if (!confirm('开始新一轮演示？\n\n当前的智能体会话、记录、事件、台账会移到归档（不删除），模拟矿井回到常态。正在进行的演示会中断。')) return
+  act(async () => { await api('/sim/demo/round', {}); roundJob = 'stopping' }, '已开始新一轮演示，约半分钟后就绪')
+}
+
 async function refresh() {
+  refreshRound()
   try { state = await api('/sim/state') } catch (e) { say(`读不到状态：${e.message}（检查控制令牌）`, 'bad'); return }
   const phase = state.mode !== 'demo' ? `场景 ${state.scenario.id}` : state.injected.length ? `已注入 ${state.injected.map((i) => `${i.name}（${i.at.replace('T', ' ')}）`).join('；')}` : '常态'
   kv($('status'), [['矿井时间', state.now.slice(0, 19).replace('T', ' ')], ['阶段', esc(phase)], ['倍速', `${state.speed}（1 真实秒 = ${(state.speed / 60).toFixed(1)} 矿井分钟）`],

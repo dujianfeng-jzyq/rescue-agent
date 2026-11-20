@@ -11,6 +11,7 @@
  *   POST /rescue-map/emit           调试用（config.debug），发一条地图指令
  */
 
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
@@ -179,6 +180,8 @@ export function apply(ctx: Context, config: Config): void {
         return { state: String(j.state ?? ''), outcome: String(j.outcome ?? ''), endedAt: j.ended_at ? String(j.ended_at) : null }
       }
     : undefined
+  // 本进程的启动编号：DSH 重启（如“新一轮演示”）后变化，大屏据此刷新页面，免得停在已不存在的旧会话上
+  const boot = randomUUID()
   let cache: { at: number; value: Promise<MapState> } | null = null
   const getState = (): Promise<MapState> => {
     if (!cache || Date.now() - cache.at > 2000) {
@@ -188,7 +191,7 @@ export function apply(ctx: Context, config: Config): void {
         lastWarnings = joined
         for (const w of warnings) ctx.logger.warn(`rescue-map: mine_map.yaml：${w}`)
       }
-      cache = { at: Date.now(), value: buildState({ incidentDir: config.incidentDir, recordDir: config.recordDir, mine, panel: config.panel, map, activity: getActivity().snapshot(), network: getNetwork, demoStatus }).then((s) => ({ ...s, mapWarnings: warnings })) }
+      cache = { at: Date.now(), value: buildState({ incidentDir: config.incidentDir, recordDir: config.recordDir, mine, panel: config.panel, map, activity: getActivity().snapshot(), network: getNetwork, demoStatus }).then((s) => ({ ...s, boot, mapWarnings: warnings })) }
     }
     return cache.value
   }

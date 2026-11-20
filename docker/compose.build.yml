@@ -1,0 +1,14 @@
+# 本机构建（scripts/demo.sh 在仓库里运行时与 compose.yml 一起用；服务器上的包里没有这个文件，只用打包好的镜像）。
+# 构建上下文是仓库根目录。
+x-python-build: &python-build
+  build: {context: .., dockerfile: docker/python.Dockerfile}
+
+services:
+  mine-sim: *python-build
+  actions: *python-build
+  sentinel: *python-build
+  housekeeper: *python-build
+  route-planner: *python-build
+  fire-sim: *python-build
+  dsh:
+    build: {context: .., dockerfile: docker/dsh.Dockerfile}

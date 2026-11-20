@@ -16,6 +16,7 @@
 | 发给外部服务提供方的文档（只写测试、问题和需要对方配合的事项，不写我方设计和集成细节） | `docs/route-service-integration-plan.md`、`docs/fire-sim-service-integration-plan.md` |
 | 待专家审定的阈值、判据和参数（集中清单） | `docs/expert-review.md` |
 | 接真实矿井（演示、只读接入、试运行）要准备什么 | `docs/real-mine-integration.md` |
+| 演示环境部署到服务器、新一轮演示怎么实现 | `docs/deploy.md` |
 | rescue-mine 接口（代码生成，`make interface-doc`） | `docs/rescue-mine-interface.md` |
 | 真实 DSH 上的验证记录与已知问题（#1–#42） | `docs/validation-checklist.md` |
 | 智能体一致性检测（期望决策与实际比较） | `docs/eval-consistency.md`；评测用法见 `eval/README.md` |
@@ -45,7 +46,8 @@ make skills-check             # 技能自检（结构、import、样例）
 make interface-doc            # 重新生成 rescue-mine 接口说明（工具或模型改动后；测试会检查它是最新的）
 python3 scripts/sim.py state|reset <场景>|advance <小时>|apply <处置>   # 模拟控制台（Docker 用 RESCUE_SIM_CONTROL_URL=http://127.0.0.1:13090/sim 和控制令牌）
 make dev                      # MCP 服务 + DSH 网页端（需要 DEEPSEEK_API_KEY）
-make demo-up / demo-down / demo-reset   # 演示环境（Docker，4 个容器）：网页端 13080、控制台 13090/console，数据在 var/demo/，令牌在 var/demo/tokens.env；工作面名缺省 211016（与地图对应），DEMO_PANEL=1201 换回原名
+make demo-up / demo-down / demo-reset   # 演示环境（Docker）：网页端 13080、控制台 13090/console，数据在 var/demo/，令牌在 var/demo/tokens.env；工作面名缺省 211016（与地图对应），DEMO_PANEL=1201 换回原名；demo-reset = 控制台“新一轮演示”（上一轮移到 var/demo/archive/）
+make demo-pack                # 服务器部署的发布包（镜像 + compose + 地图包，var/dist/）；.env 设 DEMO_PUBLIC_URL、DEMO_AUTH_PASSWORD 启用对外入口（Caddy），见 docs/deploy.md
 make dev-story / make story   # 演示故事线（按等级脚本推进，14 项检查）；Docker 里直接跑 eval/agent/story.py，环境变量见其文件头
 python -m rescue_contract.conformance <URL> [--with-actions]   # 接口一致性检查；--with-actions 会真的执行通知/调度/处置，只对模拟矿井加
 python -m rescue_contract.collect <collect.yaml> <kind> <panel>   # 按采集清单取一次证据（Python 采集小工具）
@@ -88,6 +90,6 @@ python -m rescue_fire_sim.check http://192.168.0.200:5079        # 外部火灾�
 - **DSH / 插件**：提供 cordis 服务的插件必须放进带 `isolate` 的 `cordis:group`，固定流程插件放同一组才能注入 `rescueEvidence`；DSH 结构化输出的 schema 只支持 type/oneOf/properties/required/additionalProperties/items/enum/const 和注解（`minItems` 会让子 Agent 启动失败，有测试检查）；不要用 `concludeTurn`（rc.4 网页端看不到报告）；provider 重试要把 `STREAM_CLOSED` 加进 `retryPolicy.retryableCodes`；消息来源 `kind` 不能是 `plugin`（用 `rescue-sentinel`）；`createUserMessage` 等 DSH 类型只在 `src/adapter/dsh.ts` 引用。
 - **人工确认自动放行**：只返回 `allowed-once` 网页端的确认卡片不会消失，要把 `req.signal` 换成“原信号 + 插件自己的信号”并到点中止（验证清单 #37；依赖请求对象可写，升级 DSH 要重核）。多选提问卡片没选任何项时 Submit 是灰的，只能点 Skip。
 - **技能脚本**：由插件起的子进程不在沙箱里、默认继承 DSH 进程的密钥，`runScript` 必须按白名单传环境变量、设超时；用 `python -E -s -B -X utf8` 运行，不用 `-I`；辅助模块不要与标准库内建模块同名（`_io` 会被遮住）；模板是 Markdown 子集（相邻普通行会并成一段，0 是真值，按“有没有”显示要用布尔字段）；`make_skill_cases.py` 全量重新生成会改写大量无关样例，提交前要看 diff。
-- **演示环境**：容器间按服务名访问要用 `RESCUE_MCP_ALLOWED_HOSTS` 加白名单（否则 421）；证据插件的脚本运行目录在容器里单独给 `RESCUE_RUN_DIR`；DSH 镜像要装字体（否则 Word 预览显示 “Office previews are unavailable”）；演示中出现提权确认一律拒绝；矿井时钟倒退（模拟矿井重置）时监听器会清掉旧基线；想重来用 `make demo-reset`（比控制台“重置为常态”干净，后者不清旧事件和旧值班会话）。
+- **演示环境**：容器间按服务名访问要用 `RESCUE_MCP_ALLOWED_HOSTS` 加白名单（否则 421）；证据插件的脚本运行目录在容器里单独给 `RESCUE_RUN_DIR`；DSH 镜像要装字体（否则 Word 预览显示 “Office previews are unavailable”）；演示中出现提权确认一律拒绝；矿井时钟倒退（模拟矿井重置）时监听器会清掉旧基线；想重来用控制台“新一轮演示”或 `make demo-reset`（比“重置为常态”干净，后者不清旧事件和旧值班会话）；有状态的容器由 `rescue_contract.rounds` 守护，改它们的启动命令时保留这一层（docs/deploy.md 第 7 节）。
 - **验证界面 / 评测**：不要让本地 DSH 带着密钥跑（DSH 启动会读当前目录的 `.env`，要从别的目录启动，否则值班唤醒插件会真实调用模型）；没有模型密钥的 DSH 会一直弹 “Get started” 遮住所有点击；`pkill -f <脚本名>` 会连执行它的 shell 一起杀，按精确 PID 杀；`ruff --fix` 会删必要的 `# noqa`；评测运行器偶发“没有找到评测会话”（重跑即可）；`make dev-eval` 和 Docker 演示不要同时跑（评测环境没有监听器，Docker 里有）。
 - **评测**：用例的 `operator_cards: true` 才会替智能体回答代码给出的卡片，否则运行停在卡片处（status `asked_user`）；`wake: true` 的用例提示词由生成器生成，不要手抄；每个用例大多只跑过 1 次，稳定性没统计。

@@ -35,6 +35,16 @@ function disabled(): boolean {
   }
 }
 
+/** 本标签页上次见到的 DSH 启动编号（传参时写入） */
+function seenBoot(value?: string): string {
+  try {
+    if (value !== undefined) sessionStorage.setItem('rescue-map:boot', value)
+    return sessionStorage.getItem('rescue-map:boot') ?? ''
+  } catch {
+    return value ?? ''
+  }
+}
+
 interface ClientContext {
   effect?: (fn: () => () => void, name?: string) => unknown
   get?: (name: string) => unknown
@@ -129,6 +139,13 @@ function mount(ctx: ClientContext): () => void {
         try {
           last = await fetchState()
           lastOk = Date.now()
+          // DSH 重启过（新一轮演示）：页面上的会话已经不存在，刷新页面。DSH 重连后会重新挂载本插件，
+          // 所以上次见到的启动编号存在 sessionStorage 里（只在本标签页），不能放在闭包里
+          if (last.boot && last.boot !== seenBoot()) {
+            const before = seenBoot()
+            seenBoot(last.boot)
+            if (before) return location.reload()
+          }
           hud?.setState(last, 0, false)
           watchAlert(last)
           followDuty(last)

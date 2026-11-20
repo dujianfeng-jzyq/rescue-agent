@@ -28,7 +28,7 @@ RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/contract
 COPY dsh-bundle ./
 RUN pnpm build
 WORKDIR /app
-# 技能（运行时只读挂载覆盖这里的副本；镜像构建时跑一遍自检）
+# 技能随镜像发布（属主 root，容器用户只读；镜像构建时跑一遍自检）
 COPY skills /app/skills
 RUN PYTHONDONTWRITEBYTECODE=1 python -m rescue_contract.skills check /app/skills
 COPY docker/dsh-entrypoint.sh docker/dsh-health.sh docker/container.patch.yml /app/docker/

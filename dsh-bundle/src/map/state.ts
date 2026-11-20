@@ -93,6 +93,8 @@ export interface MapState {
   wall: string
   /** 演示进度（演示环境）；不是演示或取不到为 null */
   demo?: DemoStatus | null
+  /** DSH 进程的启动编号（index.ts 填）：变化说明 DSH 重启过，大屏刷新页面 */
+  boot?: string
   /** 映射表里被丢弃的条目（名称不在地图上等）；没有问题时为空 */
   mapWarnings?: string[]
   mine: { now: string | null; ok: boolean; error?: string }

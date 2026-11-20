@@ -19,6 +19,8 @@ export interface ReadingRow {
 
 export interface StateData {
   wall: string
+  /** DSH 进程的启动编号：变化说明 DSH 重启过（如“新一轮演示”），刷新页面 */
+  boot?: string
   /** 演示进度（演示环境）：state 为 finished 时显示“演示已结束” */
   demo?: { state: string; outcome: string; endedAt: string | null } | null
   mapWarnings?: string[]

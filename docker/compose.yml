@@ -1,12 +1,17 @@
-# 演示部署（docs/design-v2.md 7.2；第三版加监听器）。用 make demo-up 启动：它生成令牌（var/demo/tokens.env）、建好数据目录，再调 docker compose。
-# 宿主机只映射两个端口：13080 网页端、13090 演示控制台（模拟矿井的 /console；它的 MCP 和 /sim/ 接口都要令牌）。
+# 演示部署（docs/design-v2.md 7.2；第三版加监听器；服务器部署见 docs/deploy.md）。
+# 用 scripts/demo.sh（make demo-up）启动：它生成令牌（<数据目录>/tokens.env）、建好数据目录，再调 docker compose。
+# 本文件只引用镜像，不含构建：本机构建另加 compose.build.yml；服务器上用打包好的镜像（make demo-pack），这个文件原样随包发布。
+# 路径变量由 demo.sh 给：DEMO_DATA 数据目录（本机 var/demo）、DEMO_MAP_DIR 地图包（本机 var/map）。
+# 宿主机只在 127.0.0.1 映射两个端口：13080 网页端、13090 演示控制台（模拟矿井的 /console；它的 MCP 和 /sim/ 接口都要令牌）。
+# 对外访问（公网或内网）走 public 组的 proxy（Caddy）：HTTPS + 登录口令，端口由 demo.sh 生成的 proxy-ports.yml 决定。
 # 令牌按服务分开：DSH 只拿 mine_data 只读令牌和 actions 令牌，不拿 /sim 控制令牌（设计 7.1）。
+# 有状态的服务（dsh、actions、sentinel）由轮次守护进程 rescue_contract.rounds 起：控制台“新一轮演示”时停下、等归档、再启动（housekeeper）。
 name: rescue-demo
 
 x-python: &python
-  build: {context: .., dockerfile: docker/python.Dockerfile}
-  image: rescue-demo-python
+  image: rescue-demo-python:${DEMO_TAG:-latest}
   restart: unless-stopped
+  init: true
   networks: [rescue]
 
 services:
@@ -23,9 +28,10 @@ services:
       RESCUE_SIM_CONTROL_TOKEN: ${RESCUE_SIM_CONTROL_TOKEN:?}
       RESCUE_RECORD_DIR: /data/records            # 只读：看到异常检测记录就自动暂停（只为演示）
       RESCUE_INCIDENT_DIR: /data/incidents        # 只读：监听器的告警自动暂停；控制台显示事件和监听器心跳
+      RESCUE_DEMO_ROUNDS_URL: http://housekeeper:8109   # 控制台“新一轮演示”转给归档服务
     volumes:
-      - ../var/demo/records:/data/records:ro
-      - ../var/demo/incidents:/data/incidents:ro
+      - ${DEMO_DATA:?}/records:/data/records:ro
+      - ${DEMO_DATA:?}/incidents:/data/incidents:ro
     ports: ["127.0.0.1:${DEMO_CONSOLE_PORT:-13090}:8101"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8101/healthz', timeout=3)"]
@@ -34,8 +40,9 @@ services:
 
   actions:
     <<: *python
-    command: ["python", "-m", "rescue_actions"]
+    command: ["python", "-m", "rescue_contract.rounds", "actions", "--", "python", "-m", "rescue_actions"]
     environment:
+      RESCUE_DEMO_CONTROL_DIR: /data/control
       RESCUE_MCP_ACTIONS_TOKEN: ${RESCUE_MCP_ACTIONS_TOKEN:?}
       RESCUE_MCP_ALLOWED_HOSTS: "actions:*"
       RESCUE_MCP_MINE_DATA_TOKEN: ${RESCUE_MCP_MINE_DATA_TOKEN:?}   # 读矿井（时钟、人员、物资台账、回执）
@@ -45,9 +52,10 @@ services:
       RESCUE_ACTIONS_LEDGER: /data/ledger/actions-ledger.jsonl
       RESCUE_INCIDENT_DIR: /data/incidents        # 对外动作的结果记进事件时间线
     volumes:
-      - ../var/demo/records:/data/records:ro
-      - ../var/demo/incidents:/data/incidents
-      - ../var/demo/ledger:/data/ledger
+      - ${DEMO_DATA:?}/records:/data/records:ro
+      - ${DEMO_DATA:?}/incidents:/data/incidents
+      - ${DEMO_DATA:?}/ledger:/data/ledger
+      - ${DEMO_DATA:?}/control:/data/control
     depends_on:
       mine-sim: {condition: service_healthy}
     healthcheck:
@@ -57,21 +65,40 @@ services:
 
   sentinel:                                       # 常驻监听器（第三版 P3）：不经模型，按矿井时钟检测、去重、写事件库
     <<: *python
-    command: ["python", "-m", "rescue_sentinel"]
+    command: ["python", "-m", "rescue_contract.rounds", "sentinel", "--", "python", "-m", "rescue_sentinel"]
     environment:
+      RESCUE_DEMO_CONTROL_DIR: /data/control
       RESCUE_MCP_MINE_DATA_TOKEN: ${RESCUE_MCP_MINE_DATA_TOKEN:?}   # 只读令牌
       RESCUE_MCP_MINE_DATA_URL: http://mine-sim:8101/mcp
       RESCUE_INCIDENT_DIR: /data/incidents
       RESCUE_SKILLS_DIR: /app/skills
       RESCUE_WATCH_PANELS: ${DEMO_PANEL:-211016}     # 监视的工作面，要和 mine-sim 的 RESCUE_SIM_PANEL 一致
     volumes:
-      - ../skills:/app/skills:ro
-      - ../var/demo/incidents:/data/incidents
+      - ${DEMO_DATA:?}/incidents:/data/incidents
+      - ${DEMO_DATA:?}/control:/data/control
     healthcheck:   # 心跳文件（真实时间）新鲜且没有错误，才算监听器在正常监听
       test: ["CMD", "python", "-c", "import json,time; h=json.load(open('/data/incidents/sentinel/heartbeat.json')); assert time.time()-h['wall']<60 and not h.get('error'), h"]
       interval: 10s
       retries: 12
       start_period: 15s
+    depends_on:
+      mine-sim: {condition: service_healthy}
+
+  housekeeper:                                    # 演示轮次的归档服务：控制台“新一轮演示”时等各服务停下、把上一轮数据移到 archive/、矿井回到常态
+    <<: *python
+    command: ["python", "-m", "rescue_mine_data_sim.housekeeper"]
+    environment:
+      RESCUE_DEMO_DATA: /data/demo                # 整个数据目录（同一个挂载点里才能改名移动）
+      RESCUE_DEMO_CONTROL_DIR: /data/demo/control
+      RESCUE_DEMO_SERVICES: dsh,actions,sentinel  # 要等停下的服务（由 rescue_contract.rounds 起的）
+      RESCUE_SIM_CONTROL_URL: http://mine-sim:8101/sim
+      RESCUE_SIM_CONTROL_TOKEN: ${RESCUE_SIM_CONTROL_TOKEN:?}   # 校验控制台转来的请求，并让模拟矿井回到常态
+    volumes:
+      - ${DEMO_DATA:?}:/data/demo
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8109/healthz', timeout=3)"]
+      interval: 5s
+      retries: 20
     depends_on:
       mine-sim: {condition: service_healthy}
 
@@ -106,11 +133,13 @@ services:
       retries: 20
 
   dsh:
-    build: {context: .., dockerfile: docker/dsh.Dockerfile}
-    image: rescue-demo-dsh
+    image: rescue-demo-dsh:${DEMO_TAG:-latest}
     restart: unless-stopped
+    init: true
     networks: [rescue]
+    entrypoint: ["python3", "-m", "rescue_contract.rounds", "dsh", "--", "/app/docker/dsh-entrypoint.sh"]
     environment:
+      RESCUE_DEMO_CONTROL_DIR: /data/control
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?在 .env 里填写 DEEPSEEK_API_KEY}
       RESCUE_MCP_MINE_DATA_TOKEN: ${RESCUE_MCP_MINE_DATA_TOKEN:?}
       RESCUE_MCP_ACTIONS_TOKEN: ${RESCUE_MCP_ACTIONS_TOKEN:?}
@@ -130,21 +159,23 @@ services:
       RESCUE_MAP_DIR: /data/map                   # 地图包（geometry.json），真实矿井图不进仓库
       RESCUE_AUDIT_LOG: /data/audit/tool-actions.jsonl
       DSH_PUBLIC_PORT: ${DEMO_WEB_PORT:-13080}
+      DSH_PUBLIC_URL: ${DEMO_PUBLIC_URL:-}           # 对外地址（经 proxy 访问时，如 https://demo.example.com/）；空：只有本机 127.0.0.1
+      DSH_TRUSTED_HOSTS: ${DEMO_TRUSTED_HOSTS:-}     # 对外地址的 host[:port]，空格分隔（demo.sh 按 DEMO_PUBLIC_URL 算）
       RAGFLOW_BASE_URL: ${RAGFLOW_BASE_URL:-}
       RAGFLOW_API_KEY: ${RAGFLOW_API_KEY:-}
       KB_DATASETS_REGULATIONS: ${KB_DATASETS_REGULATIONS:-}
       KB_DATASETS_PLANS: ${KB_DATASETS_PLANS:-}
       KB_DATASETS_CASES: ${KB_DATASETS_CASES:-}
-    volumes:
-      - ../skills:/app/skills:ro                  # 技能目录只读（子进程不在沙箱里，设计 7.1）
-      - ../var/demo/records:/data/records
-      - ../var/demo/incidents:/data/incidents
-      - ../var/demo/duty:/data/duty
-      - ../var/demo/runs:/data/runs
-      - ../var/demo/audit:/data/audit
-      - ../var/demo/dsh-home:/home/node/.dsh-home
-      - ../var/demo/documents:/home/node/Documents
-      - ../var/map:/data/map:ro                   # 地图包只读；没有 geometry.json 时网页端是 DSH 原界面
+    volumes:                                      # 技能在镜像里（/app/skills，属主 root，容器用户只读；子进程不在沙箱里，设计 7.1）
+      - ${DEMO_DATA:?}/records:/data/records
+      - ${DEMO_DATA:?}/incidents:/data/incidents
+      - ${DEMO_DATA:?}/duty:/data/duty
+      - ${DEMO_DATA:?}/runs:/data/runs
+      - ${DEMO_DATA:?}/audit:/data/audit
+      - ${DEMO_DATA:?}/dsh-home:/home/node/.dsh-home
+      - ${DEMO_DATA:?}/documents:/home/node/Documents
+      - ${DEMO_DATA:?}/control:/data/control
+      - ${DEMO_MAP_DIR:?}:/data/map:ro                   # 地图包只读；没有 geometry.json 时网页端是 DSH 原界面
     ports: ["127.0.0.1:${DEMO_WEB_PORT:-13080}:3080"]
     depends_on:
       mine-sim: {condition: service_healthy}
@@ -155,6 +186,21 @@ services:
       interval: 10s
       retries: 30
       start_period: 20s
+
+  proxy:                                          # 对外入口（public 组，demo.sh 设了 DEMO_PUBLIC_URL 时启用）：HTTPS + 登录口令，/console 和 /sim/ 转模拟矿井，其余转网页端
+    image: caddy:${DEMO_CADDY_VERSION:-2.8.4}-alpine
+    profiles: [public]
+    restart: unless-stopped
+    networks: [rescue]
+    environment:
+      DEMO_SITE: ${DEMO_SITE:-}                   # Caddy 的站点地址（如 https://demo.example.com、https://1.2.3.4、http://10.0.0.5:8080）
+      DEMO_HOST: ${DEMO_HOST:-}                   # 站点的主机名或 IP（没有 SNI 时用哪张证书）
+      DEMO_AUTH_USER: ${DEMO_AUTH_USER:-demo}
+      DEMO_AUTH_HASH: ${DEMO_AUTH_HASH:-}         # 登录口令的 bcrypt 散列（demo.sh 由 .env 的 DEMO_AUTH_PASSWORD 算）
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${DEMO_DATA:?}/caddy/data:/data           # 证书（不随新一轮演示归档）
+      - ${DEMO_DATA:?}/caddy/config:/config
 
 networks:
   rescue: {}

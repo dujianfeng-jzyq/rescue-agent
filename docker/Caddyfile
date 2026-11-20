@@ -1,0 +1,31 @@
+# 对外入口（compose 的 proxy 服务，docs/deploy.md）。站点地址、登录口令由 scripts/demo.sh 按 .env 算好经环境变量传入：
+#   DEMO_SITE       https://demo.example.com（域名：自动申请证书，要能从公网访问 80 或 443）
+#                   https://1.2.3.4（IP：Caddy 自签证书，浏览器会提示不安全，点继续）
+#                   http://10.0.0.5:8080（不加密，只在可信内网用）
+#   DEMO_AUTH_USER / DEMO_AUTH_HASH   网页端的登录口令（浏览器弹窗），网页端另有网址里的 token；控制台只靠控制令牌
+{
+	admin off
+	# 用 IP 访问时浏览器不发送 SNI，没有它 Caddy 选不出证书（TLS 握手失败）
+	default_sni {$DEMO_HOST}
+}
+
+{$DEMO_SITE} {
+	encode gzip
+
+	# 演示控制台和它调用的 /sim/ 接口：靠控制令牌（Authorization: Bearer），不再套登录口令——
+	# 两者都用 Authorization 请求头，套了口令控制台的请求就过不去。模拟矿井的其他接口（MCP 等）不对外
+	@console path /console /console/* /sim/*
+	handle @console {
+		reverse_proxy mine-sim:8101 {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	# 网页端（智能体、大屏）：登录口令 + 网址里的 token
+	handle {
+		basic_auth {
+			{$DEMO_AUTH_USER} {$DEMO_AUTH_HASH}
+		}
+		reverse_proxy dsh:3080
+	}
+}

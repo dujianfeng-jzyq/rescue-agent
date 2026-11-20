@@ -1,6 +1,7 @@
 #!/bin/sh
 # DSH 容器入口：第一次启动时在数据卷里建 rescue 配置档并装入 bundle，然后启动网页端。
-# DSH 不接受通配地址，绑定本容器的地址；浏览器经宿主机端口访问，所以对外地址写宿主机的 127.0.0.1:端口。
+# DSH 不接受通配地址，绑定本容器的地址。浏览器经宿主机的 127.0.0.1:端口访问；设了 DSH_PUBLIC_URL（经 proxy 对外访问，docs/deploy.md）时
+# 打印的网址用对外地址，DSH_TRUSTED_HOSTS 里的 host[:port] 也放进 /api 的来源白名单。
 set -eu
 PORT="${DSH_PORT:-3080}"
 PUBLIC_PORT="${DSH_PUBLIC_PORT:-13080}"
@@ -31,5 +32,7 @@ if [ ! -d "$PROFILE" ]; then
 YAML
 fi
 IP="$(hostname -i | awk '{print $1}')"
-exec dsh rescue --patch /app/docker/container.patch.yml --no-open --host "$IP" --port "$PORT" \
-  --public-url "http://127.0.0.1:$PUBLIC_PORT/" --trusted-host "127.0.0.1:$PUBLIC_PORT" --trusted-host "localhost:$PUBLIC_PORT"
+PUBLIC_URL="${DSH_PUBLIC_URL:-http://127.0.0.1:$PUBLIC_PORT/}"
+set -- --trusted-host "127.0.0.1:$PUBLIC_PORT" --trusted-host "localhost:$PUBLIC_PORT"
+for h in ${DSH_TRUSTED_HOSTS:-}; do set -- "$@" --trusted-host "$h"; done
+exec dsh rescue --patch /app/docker/container.patch.yml --no-open --host "$IP" --port "$PORT" --public-url "$PUBLIC_URL" "$@"

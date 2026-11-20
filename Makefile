@@ -1,5 +1,5 @@
 # 常用命令入口。具体说明见 README.md。
-.PHONY: dev-story story interface-doc setup setup-py dev dev-eval up down smoke test test-py test-ts lint check skills-check eval eval-agent schema sim-state clean demo-up demo-down demo-reset demo-logs
+.PHONY: dev-story story interface-doc setup setup-py dev dev-eval up down smoke test test-py test-ts lint check skills-check eval eval-agent schema sim-state clean demo-up demo-down demo-reset demo-logs demo-pack
 
 UV := uv run --project mcp
 
@@ -24,8 +24,10 @@ demo-up:          ## 演示环境（Docker）：构建、启动、等健康检�
 	scripts/demo.sh up
 demo-down:
 	scripts/demo.sh down
-demo-reset:       ## 清空 var/demo 的演示数据并重新启动（模拟矿井回到常态）
+demo-reset:       ## 新一轮演示：把 var/demo 的上一轮数据移到 var/demo/archive/ 并重新启动（模拟矿井回到常态；与控制台按钮相同）
 	scripts/demo.sh reset
+demo-pack:        ## 打服务器部署的发布包（镜像 + compose + 地图包），输出 var/dist/，见 docs/deploy.md
+	scripts/demo.sh pack
 demo-logs:
 	scripts/demo.sh logs
 smoke:            ## 对已启动的服务做冒烟测试

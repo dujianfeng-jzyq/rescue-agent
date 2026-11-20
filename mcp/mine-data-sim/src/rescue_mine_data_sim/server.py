@@ -15,10 +15,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -53,6 +56,7 @@ from rescue_contract.models import (
     StepType,
     TreatmentRequest,
 )
+from rescue_contract.serving import sim_control_headers
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 
@@ -686,6 +690,27 @@ def build_server(holder: SimHolder | None = None) -> MCPServer:
     @server.custom_route("/sim/sensors", methods=["GET"])
     async def sim_sensors(_req: Request) -> JSONResponse:
         return JSONResponse([{"id": x.id, "name": x.name, "source": x.source.value, "measurands": [m.value for m in x.measurands]} for x in SENSORS])
+
+    rounds_url = (os.environ.get("RESCUE_DEMO_ROUNDS_URL") or "").rstrip("/")
+
+    def rounds_call(method: str) -> tuple[int, dict]:
+        """转给归档服务（housekeeper.py）：新一轮演示。控制令牌已由中间件按 /sim/ 校验过，转发时带同一个令牌。"""
+        req = urllib.request.Request(f"{rounds_url}/round", data=b"{}" if method == "POST" else None, method=method, headers={"Content-Type": "application/json", **sim_control_headers()})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, json.loads(r.read() or b"{}")
+        except urllib.error.HTTPError as exc:
+            return exc.code, json.loads(exc.read() or b"{}")
+        except OSError as exc:
+            return 502, {"error": f"归档服务不可用：{exc}"}
+
+    @server.custom_route("/sim/demo/round", methods=["GET", "POST"])
+    async def demo_round(req: Request) -> JSONResponse:
+        """演示轮次（只在演示环境配置了 RESCUE_DEMO_ROUNDS_URL 时可用）：GET 状态，POST 开始新一轮（停服务、归档上一轮、矿井回到常态）。"""
+        if not rounds_url:
+            return JSONResponse({"available": False})
+        code, body = await asyncio.to_thread(rounds_call, req.method)
+        return JSONResponse(body, status_code=code)
 
     @server.custom_route("/console", methods=["GET"])
     async def console(_req: Request) -> HTMLResponse:
